@@ -1,0 +1,986 @@
+capability: engineering-foundation
+slice_specs:
+  - name: locked-python-project-skeleton-spec
+    title: Locked Python Project Skeleton Specification
+    status: approved
+    format: full
+    capability: engineering-foundation
+    feature: reproducible-python-foundation
+    slice: 1
+    source_story_ids:
+      - engineering-foundation/story/bootstrap-reproducible-python-project
+    purpose: Create the reproducible Python packaging and dependency foundation that
+      every later slice imports, tests, and builds from.
+    layer_assignment:
+      - component: pyproject.toml
+        layer: data
+        responsibility: Declare Python compatibility, hatchling src packaging,
+          runtime/dev groups, and centralized tool configuration.
+      - component: uv.lock
+        layer: data
+        responsibility: Pin the full transitive dependency graph as a committed release input.
+      - component: tkr_cloud_video package
+        layer: domain
+        responsibility: Provide a typed importable namespace without provider initialization.
+      - component: repository scaffold
+        layer: integration
+        responsibility: Create live parent directories for later foundation slices.
+    interfaces:
+      - name: ProjectContractVerifier
+        kind: Protocol
+        signature: "verify(root: Path) -> ProjectVerificationResult"
+        ownership: Pure verification with injected filesystem/interpreter readers.
+      - name: FrozenEnvironmentCommand
+        kind: command_contract
+        signature: uv sync --frozen --all-groups
+        ownership: Developer and CI environment contract; must not rewrite uv.lock.
+    data_models:
+      - name: ProjectVerificationResult
+        shape: frozen dataclass
+        fields:
+          - python_compatible
+          - lock_current
+          - package_importable
+          - typed_marker_present
+          - checked_paths
+        validation: All flags true for success; paths normalized and repository-relative.
+      - name: ProjectMetadata
+        shape: immutable model
+        fields:
+          - project_name
+          - requires_python
+          - build_backend
+          - dependency_groups
+          - package_root
+        validation: project_name=tkr-cloud-video; package_root=src/tkr_cloud_video;
+          unknown groups rejected.
+    behavior:
+      - given: a clean checkout on supported Python 3.11+
+        when: uv sync --frozen --all-groups and import smoke run
+        then: the locked environment is created and tkr_cloud_video imports from the src
+          layout without provider effects
+      - given: dependency metadata differs from uv.lock
+        when: frozen synchronization runs
+        then: it exits non-zero without rewriting the lock
+      - given: an unsupported interpreter or broken package layout
+        when: verification runs
+        then: a typed safe diagnostic names the violated rule
+    error_handling:
+      - condition: unsupported_python
+        error: PythonCompatibilityError
+        recovery: Select a supported interpreter; never relax metadata implicitly.
+        retryable: false
+      - condition: lock_drift
+        error: DependencyLockError
+        recovery: Regenerate and review uv.lock in an intentional dependency change.
+        retryable: false
+      - condition: package_discovery_failure
+        error: PackageLayoutError
+        recovery: Correct hatchling src mapping or package files.
+        retryable: false
+      - condition: dependency_source_unavailable
+        error: EnvironmentSyncError
+        recovery: Retry frozen sync without changing versions.
+        retryable: true
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python 3.11+
+        - uv
+        - hatchling
+        - pydantic
+        - structlog
+        - pytest
+        - pytest-cov
+        - pytest-asyncio
+        - ruff
+        - mypy
+      inversion_of_control: Verification receives filesystem and interpreter metadata
+        instead of reading mutable globals in domain logic.
+    integration_points:
+      consumes:
+        - Git checkout
+        - Python interpreter
+        - uv resolver/cache
+      provides:
+        - Importable typed package
+        - Committed dependency lock
+        - Live package/test directories
+      forbidden:
+        - Cloud credentials
+        - Provider clients
+        - Runtime dependency mutation
+    configuration:
+      - name: requires-python
+        location: pyproject.toml
+        default: ">=3.11"
+        validation: Includes deployment baseline and is exercised by CI.
+      - name: build-backend
+        location: pyproject.toml
+        default: hatchling.build
+        validation: Packages only src/tkr_cloud_video.
+    observability:
+      events:
+        - engineering.project.verify.started
+        - engineering.project.verify.succeeded
+        - engineering.project.verify.failed
+      required_fields:
+        - event
+        - correlation_id
+        - python_version
+        - duration_ms
+        - outcome
+        - error_code?
+      forbidden_fields:
+        - environment values
+        - credentials
+        - authorization
+        - tokens
+        - absolute home paths
+    security_constraints:
+      - No secret in project metadata, lock, documentation examples, or import
+        effects.
+      - Package import and verification perform no provider or network
+        initialization.
+      - Repository paths are canonicalized and contained under the injected root.
+    test_scenarios:
+      - id: EF-S1-T01
+        level: integration
+        given: matching metadata and lock
+        when: the verifier runs
+        then: all contract flags pass
+      - id: EF-S1-T02
+        level: unit
+        given: lock drift
+        when: consistency is checked
+        then: DependencyLockError occurs without mutation
+      - id: EF-S1-T03
+        level: integration
+        given: the installed project
+        when: import runs outside the checkout directory
+        then: the src package resolves without provider I/O
+      - id: EF-S1-TF
+        level: failure_injection
+        given: the package source is unavailable
+        when: frozen sync runs
+        then: failure is retryable and metadata remains unchanged
+    definition_of_done:
+      - Project metadata, lock, README, ignores, typed marker, package
+        namespace, and required directories are committed.
+      - Frozen sync succeeds without modifying uv.lock and external-directory
+        import passes.
+      - Every behavior and error condition has a discriminating test.
+      - No placeholder dependency, mutable Git reference, secret, TODO, or
+        import side effect remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Versioned metadata and uv.lock persist with Git. Virtual environments,
+        build output, caches, coverage, and downloads are ignored and
+        disposable; no credential is stored.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, explicit return types,
+        immutable models, constructor injection.
+      logging: structlog JSON with allowlisted fields and structural redaction.
+      bash: Bash 3.2, set -euo pipefail, quoted expansions, no GNU-only shell
+        features.
+      testing: pytest parametrization and deterministic Protocol fakes.
+      dependencies: uv owns frozen synchronization and the committed lockfile.
+  - name: shared-runtime-contracts-spec
+    title: Shared Runtime Contracts Specification
+    status: approved
+    format: full
+    capability: engineering-foundation
+    feature: reproducible-python-foundation
+    slice: 2
+    source_story_ids:
+      - engineering-foundation/story/consume-shared-runtime-contracts
+    frontmatter:
+      type: cross-cutting
+      used_by:
+        - security-foundation
+        - artifact-foundation
+        - worker-runtime
+        - job-execution
+        - durable-delivery
+        - operations-and-scale
+    purpose: Define provider-neutral context, configuration, time, error, and
+      structured-event contracts reused by every capability.
+    layer_assignment:
+      - component: OperationContext
+        layer: domain
+        responsibility: Carry normalized release, worker, correlation, deadline, and
+          optional job/attempt identity.
+      - component: AppError
+        layer: domain
+        responsibility: Carry safe code/message, retryability, allowlisted context, and
+          a non-serialized wrapped cause.
+      - component: Clock and SettingsSource
+        layer: domain
+        responsibility: Abstract time and external configuration through injected Protocols.
+      - component: structlog boundary
+        layer: integration
+        responsibility: Bind context, allowlist/redact, render JSON, and emit to the
+          injected sink.
+    interfaces:
+      - name: Clock
+        kind: Protocol
+        signature: now() -> datetime; monotonic() -> float
+        ownership: Injected wherever deadlines or durations are evaluated.
+      - name: SettingsSource
+        kind: Protocol
+        signature: load() -> Mapping[str, str]
+        ownership: Adapters read environment or secret references; typed models validate.
+      - name: EventSink
+        kind: Protocol
+        signature: "emit(event: StructuredEvent) -> None"
+        ownership: Receives only validated redacted events.
+      - name: configure_logging
+        kind: function
+        signature: "configure_logging(sink: EventSink, level: LogLevel) -> BoundLogger"
+        ownership: Called by the composition root; no module singleton.
+    data_models:
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - deadline
+          - job_id?
+          - attempt_id?
+        validation: Safe identifiers and timezone-aware deadline only.
+      - name: AppError
+        shape: typed exception
+        fields:
+          - code
+          - safe_message
+          - retryable
+          - context
+          - cause
+        validation: Context keys allowlisted; cause never serialized.
+      - name: StructuredEvent
+        shape: immutable mapping model
+        fields:
+          - event
+          - timestamp
+          - level
+          - correlation_id
+          - duration_ms?
+          - outcome?
+          - error_code?
+          - safe_context
+        validation: Unknown/forbidden keys rejected before sink.
+      - name: CoreSettings
+        shape: Pydantic model
+        fields:
+          - log_level
+          - schema_version
+          - environment
+        validation: forbid unknown fields; contains no raw cloud secret.
+    behavior:
+      - given: fake Clock, SettingsSource, and EventSink
+        when: runtime context is composed
+        then: services observe deterministic typed values without global reads or
+          provider I/O
+      - given: an unsafe identifier, naive deadline, unknown setting, or forbidden event
+          key
+        when: its model is constructed
+        then: validation fails before domain behavior or sink emission
+      - given: an error cause includes a synthetic secret
+        when: failure is emitted
+        then: only safe code, retryability, correlation, and allowlisted context are
+          serialized
+    error_handling:
+      - condition: invalid_context
+        error: ContextValidationError
+        recovery: Reject at the boundary with a safe field violation.
+        retryable: false
+      - condition: invalid_settings
+        error: SettingsValidationError
+        recovery: Keep readiness false until corrected.
+        retryable: false
+      - condition: event_schema_violation
+        error: EventValidationError
+        recovery: Reject the unsafe event before sink delivery.
+        retryable: false
+      - condition: event_sink_unavailable
+        error: TelemetryDeliveryError
+        recovery: Apply injected sink policy without printing payloads or changing
+          business outcome.
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - engineering-foundation/slice/1
+      external:
+        - pydantic
+        - structlog
+        - Python datetime/typing
+      inversion_of_control: All time, settings, and event effects are injected Protocols.
+    integration_points:
+      consumes:
+        - Locked Python package
+        - Injected environment adapter
+        - Injected event sink
+      provides:
+        - OperationContext
+        - AppError
+        - Clock
+        - SettingsSource
+        - StructuredEvent
+        - logging configuration
+      forbidden:
+        - Global SDK clients
+        - Direct os.environ reads in domain services
+        - Unredacted payload logging
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        validation: Supported positive version only
+      - name: ENVIRONMENT
+        type: safe identifier
+        default: development
+        validation: Lowercase safe identifier
+    observability:
+      events:
+        - engineering.core.compose.started
+        - engineering.core.compose.succeeded
+        - engineering.core.compose.failed
+        - engineering.event.rejected
+      required_fields:
+        - event
+        - timestamp
+        - level
+        - correlation_id
+        - outcome
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization
+        - signed URL tokens
+        - full prompts
+        - user filenames
+        - raw exception repr
+    security_constraints:
+      - No ambient global provider client, clock, settings source, event sink,
+        or credential.
+      - Validate at the external boundary and pass typed immutable values inward.
+      - Never serialize raw exception representations, environment dumps,
+        credentials, authorization, signed URLs, prompts, or user filenames.
+    test_scenarios:
+      - id: EF-S2-T01
+        level: unit
+        given: valid values and fake ports
+        when: OperationContext is built
+        then: immutable values and deadline are stable
+      - id: EF-S2-T02
+        level: unit
+        given: every forbidden event field
+        when: event validation runs
+        then: the sink observes nothing
+      - id: EF-S2-T03
+        level: unit
+        given: a nested synthetic secret
+        when: AppError renders
+        then: safe context remains and the secret is absent
+      - id: EF-S2-T04
+        level: contract
+        given: production and fake Protocol implementations
+        when: contract tests run
+        then: observable behavior matches
+      - id: EF-S2-TF
+        level: failure_injection
+        given: the event sink fails
+        when: a state event emits
+        then: failure is classified without unsafe fallback output
+    definition_of_done:
+      - Exported contracts are typed, documented, immutable where practical, and
+        provider-neutral.
+      - structlog emits JSON through tested allowlist/redaction processors.
+      - Downstream capabilities import contracts without provider adapters.
+      - Every behavior, forbidden field, and recovery is tested; no global
+        dependency, print logging, raw secret setting, or TODO remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Operation context is memory-scoped and core persists nothing. Injected
+        sinks own bounded retention; forbidden values are rejected before
+        reaching a log store.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, explicit exported return types,
+        immutable models where practical, and constructor injection for every
+        effect.
+      logging: structlog JSON only, with allowlisted fields and structural redaction
+        before serialization.
+      bash: Bash 3.2; set -euo pipefail; quote expansions; no GNU-only shell features;
+        delegate policy to Python or declared tools.
+      testing: pytest parametrization with deterministic fakes implementing production
+        Protocols.
+      dependencies: uv owns frozen synchronization and the committed lockfile; runtime
+        code never mutates dependency versions.
+  - name: deterministic-quality-gates-spec
+    title: Deterministic Quality Gates Specification
+    status: approved
+    format: full
+    capability: engineering-foundation
+    feature: reproducible-python-foundation
+    slice: 3
+    source_story_ids:
+      - engineering-foundation/story/run-identical-local-and-ci-gates
+    purpose: Make one checked-in Bash 3.2 command the authoritative formatting,
+      linting, typing, test, coverage, lock, and package-smoke contract locally
+      and in CI.
+    layer_assignment:
+      - component: pyproject tool sections
+        layer: data
+        responsibility: Centralize Ruff, mypy, pytest, and coverage configuration.
+      - component: scripts/check.sh
+        layer: integration
+        responsibility: Run gates in a fixed fail-fast order with contextual stage output.
+      - component: GitHub Actions
+        layer: integration
+        responsibility: Perform frozen sync and invoke scripts/check.sh without
+          duplicating policy.
+      - component: contract fixtures
+        layer: integration
+        responsibility: Provide deterministic settings, clocks, event sinks,
+          filesystems, and synthetic secrets.
+    interfaces:
+      - name: scripts/check.sh
+        kind: command
+        signature: scripts/check.sh [--ci]
+        ownership: Single supported quality entrypoint.
+      - name: QualityGate
+        kind: enum_contract
+        signature: format_check|lint|type_check|unit_test|coverage|lock_check|package_smoke
+        ownership: Stable diagnostic gate names and order.
+      - name: CI workflow
+        kind: workflow_contract
+        signature: pull_request,push(main) -> frozen sync -> scripts/check.sh --ci
+        ownership: Invokes repository policy with read-only permissions.
+    data_models:
+      - name: GateResult
+        shape: immutable record
+        fields:
+          - gate
+          - outcome
+          - duration_ms
+          - safe_summary
+        validation: Summary contains no environment values or payload secrets.
+      - name: QualityRunResult
+        shape: immutable record
+        fields:
+          - commit_sha
+          - python_version
+          - lock_digest
+          - gates
+        validation: Success requires every gate exactly once in order.
+    behavior:
+      - given: the same checkout locally and in CI
+        when: scripts/check.sh runs
+        then: both execute identical gates and pyproject configuration
+      - given: any gate fails
+        when: the script evaluates exit status
+        then: execution stops non-zero at that gate and later gates cannot mask it
+      - given: metadata/lock drift
+        when: the lock gate runs
+        then: frozen verification fails without rewriting uv.lock
+      - given: an untrusted pull request
+        when: CI runs
+        then: no production secret or write permission is supplied
+    error_handling:
+      - condition: format_lint_or_type_failure
+        error: QualityGateFailure
+        recovery: Report the named gate; check mode never mutates source.
+        retryable: false
+      - condition: test_or_coverage_failure
+        error: TestGateFailure
+        recovery: Preserve bounded diagnostics and fix the test or implementation.
+        retryable: false
+      - condition: lock_drift
+        error: DependencyLockError
+        recovery: Update lock intentionally and review the diff.
+        retryable: false
+      - condition: dependency_source_unavailable
+        error: CiInfrastructureFailure
+        recovery: Retry the immutable workflow without relaxing versions.
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - engineering-foundation/slice/1
+        - engineering-foundation/slice/2
+      external:
+        - uv
+        - ruff
+        - mypy
+        - pytest
+        - pytest-cov
+        - pytest-asyncio
+        - GitHub Actions
+      inversion_of_control: Tests construct application dependencies with fakes;
+        shell/CI only orchestrate declared tools.
+    integration_points:
+      consumes:
+        - pyproject.toml
+        - uv.lock
+        - src package
+        - tests
+      provides:
+        - scripts/check.sh
+        - CI status
+        - bounded diagnostic artifacts
+      forbidden:
+        - Duplicated CI policy
+        - Production secrets
+        - Automatic mutation in check mode
+    configuration:
+      - name: minimum_coverage
+        location: pyproject.toml
+        default: 90
+        validation: 0..100; decreases require explicit review
+      - name: python_matrix
+        location: .github/workflows/ci.yml
+        default:
+          - "3.11"
+        validation: Includes deployment baseline
+      - name: mypy_mode
+        location: pyproject.toml
+        default: strict
+        validation: Exceptions require inline rationale
+    observability:
+      events:
+        - engineering.quality.run.started
+        - engineering.quality.gate.succeeded
+        - engineering.quality.gate.failed
+        - engineering.quality.run.succeeded
+      required_fields:
+        - event
+        - gate
+        - python_version
+        - lock_digest
+        - duration_ms
+        - outcome
+        - error_code?
+      forbidden_fields:
+        - environment dump
+        - credentials
+        - tokens
+        - authorization
+        - signed URLs
+        - prompts
+        - user filenames
+    security_constraints:
+      - Pull-request CI has read-only repository permission and no production
+        secret.
+      - Tool installation uses reviewed immutable versions or digests.
+      - Check mode never rewrites source, lock, or configuration.
+      - Captured tool output never dumps the environment.
+    test_scenarios:
+      - id: EF-S3-T01
+        level: contract
+        given: a passing fixture
+        when: the quality command runs
+        then: all gates execute once in order
+      - id: EF-S3-T02
+        level: contract
+        given: a deliberate mypy failure
+        when: quality runs
+        then: it stops at type_check non-zero
+      - id: EF-S3-T03
+        level: contract
+        given: lock drift
+        when: the lock gate runs
+        then: it fails without changing uv.lock
+      - id: EF-S3-T04
+        level: static
+        given: the CI workflow
+        when: permissions/steps are inspected
+        then: permissions are read-only and scripts/check.sh owns policy
+      - id: EF-S3-TF
+        level: failure_injection
+        given: package source unavailable
+        when: CI frozen sync runs
+        then: failure is retryable without version relaxation
+    definition_of_done:
+      - scripts/check.sh runs on Bash 3.2 and is the only local/CI quality
+        entrypoint.
+      - Ruff, strict mypy, pytest, coverage, lock, and package smoke checks pass.
+      - CI uses frozen sync, immutable tool selection, read-only permissions,
+        and no production secrets.
+      - Failure order/no-mutation are tested; no duplicate configuration, hidden
+        baseline, TODO, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: CI logs, coverage, and dependency caches have bounded retention. Cache
+        content is lock-keyed and disposable; tests use synthetic non-secret
+        data.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, explicit exported return types,
+        immutable models where practical, and constructor injection for every
+        effect.
+      logging: structlog JSON only, with allowlisted fields and structural redaction
+        before serialization.
+      bash: Bash 3.2; set -euo pipefail; quote expansions; no GNU-only shell features;
+        delegate policy to Python or declared tools.
+      testing: pytest parametrization with deterministic fakes implementing production
+        Protocols.
+      dependencies: uv owns frozen synchronization and the committed lockfile; runtime
+        code never mutates dependency versions.
+  - name: wire-reproducible-python-foundation-spec
+    title: Wire Reproducible Python Foundation Specification
+    status: approved
+    format: abbreviated
+    capability: engineering-foundation
+    feature: reproducible-python-foundation
+    slice: 4
+    source_story_ids:
+      - engineering-foundation/story/bootstrap-reproducible-python-project
+      - engineering-foundation/story/consume-shared-runtime-contracts
+      - engineering-foundation/story/run-identical-local-and-ci-gates
+    purpose: Compose shared runtime contracts and expose a safe offline doctor
+      command proving package wiring without provider access.
+    layer_assignment:
+      - component: RuntimeBootstrap
+        layer: integration
+        responsibility: Construct settings, clock, event sink, logger, and context from
+          injected adapters.
+      - component: doctor command
+        layer: api
+        responsibility: Validate package, core wiring, lock identity, and downstream
+          parent directories.
+      - component: package exports
+        layer: integration
+        responsibility: Expose stable core contracts and bootstrap entrypoints.
+    interfaces:
+      - name: build_runtime
+        kind: function
+        signature: "build_runtime(settings_source: SettingsSource, clock: Clock,
+          event_sink: EventSink) -> RuntimeServices"
+        ownership: Composition root; never a singleton.
+      - name: doctor
+        kind: command
+        signature: python -m tkr_cloud_video doctor [--json] -> int
+        ownership: Read-only offline diagnostic with no provider imports/network.
+    data_models:
+      - name: RuntimeServices
+        shape: frozen dataclass
+        fields:
+          - settings
+          - clock
+          - event_sink
+          - logger
+        validation: All dependencies supplied; no ambient fallback.
+      - name: DoctorResult
+        shape: immutable model
+        fields:
+          - package
+          - python
+          - lock_digest
+          - core_contracts
+          - boundary_directories
+          - outcome
+          - errors
+        validation: Safe codes/messages and repository-relative paths only.
+    behavior:
+      - given: valid fake adapters
+        when: build_runtime runs
+        then: a complete immutable bundle returns without provider imports
+      - given: no cloud credential and network denied
+        when: doctor runs
+        then: package/core/boundary checks complete safely
+      - given: invalid settings or missing directory
+        when: doctor runs
+        then: it exits non-zero with typed diagnostics and no state
+    error_handling:
+      - condition: missing_dependency
+        error: BootstrapError
+        recovery: Require the caller to inject the missing Protocol.
+        retryable: false
+      - condition: doctor_contract_failure
+        error: DoctorCheckError
+        recovery: Report independent safe local failures deterministically.
+        retryable: false
+      - condition: unsafe_output
+        error: EventValidationError
+        recovery: Reject output rather than serialize it.
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - engineering-foundation/slice/1
+        - engineering-foundation/slice/2
+        - engineering-foundation/slice/3
+      external:
+        - Python standard-library CLI parsing
+        - pydantic
+        - structlog
+      inversion_of_control: Every service is built from injected Protocol
+        implementations; doctor uses local deterministic adapters.
+    integration_points:
+      consumes:
+        - Project verifier
+        - Core contracts
+        - Local filesystem metadata
+      provides:
+        - RuntimeServices
+        - Offline doctor
+        - Stable exports
+      forbidden:
+        - Provider imports
+        - Network access
+        - Cloud secret lookup
+    configuration:
+      - name: --json
+        type: flag
+        default: false
+        validation: Same safe result schema; no environment values
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        validation: CoreSettings validation
+    observability:
+      events:
+        - engineering.bootstrap.started
+        - engineering.bootstrap.succeeded
+        - engineering.bootstrap.failed
+        - engineering.doctor.completed
+      required_fields:
+        - event
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+      forbidden_fields:
+        - environment dump
+        - credentials
+        - tokens
+        - absolute home path
+        - raw exception repr
+    security_constraints:
+      - No ambient global provider client, clock, settings source, event sink,
+        or credential.
+      - Validate at the external boundary and pass typed immutable values inward.
+      - Never serialize raw exception representations, environment dumps,
+        credentials, authorization, signed URLs, prompts, or user filenames.
+      - Doctor is offline and imports no provider adapter.
+    test_scenarios:
+      - id: EF-S4-T01
+        level: integration
+        given: fake core adapters
+        when: build_runtime runs
+        then: the complete bundle is deterministic
+      - id: EF-S4-T02
+        level: integration
+        given: network denied and no credentials
+        when: doctor runs
+        then: it succeeds for a valid scaffold
+      - id: EF-S4-T03
+        level: integration
+        given: a missing boundary directory
+        when: doctor runs
+        then: it fails safely with the relative path
+    definition_of_done:
+      - Entrypoint/bootstrap use injected dependencies only.
+      - Doctor validates all local contracts offline in human/JSON modes.
+      - Stable exports are typed/documented and all failures tested.
+      - No provider import, TODO, secret read, or global singleton remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Doctor/bootstrap are read-only. Results are ephemeral output and
+        injected events; no store is created.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, explicit exported return types,
+        immutable models where practical, and constructor injection for every
+        effect.
+      logging: structlog JSON only, with allowlisted fields and structural redaction
+        before serialization.
+      bash: Bash 3.2; set -euo pipefail; quote expansions; no GNU-only shell features;
+        delegate policy to Python or declared tools.
+      testing: pytest parametrization with deterministic fakes implementing production
+        Protocols.
+      dependencies: uv owns frozen synchronization and the committed lockfile; runtime
+        code never mutates dependency versions.
+  - name: test-reproducible-python-foundation-spec
+    title: Test Reproducible Python Foundation Specification
+    status: approved
+    format: abbreviated
+    capability: engineering-foundation
+    feature: reproducible-python-foundation
+    slice: 5
+    source_story_ids:
+      - engineering-foundation/story/bootstrap-reproducible-python-project
+      - engineering-foundation/story/consume-shared-runtime-contracts
+      - engineering-foundation/story/run-identical-local-and-ci-gates
+    purpose: Prove the project can be reproduced, composed, checked, and handed to
+      downstream capabilities without hidden environment or path assumptions.
+    layer_assignment:
+      - component: runtime contract suite
+        layer: integration
+        responsibility: Exercise models, Protocols, redaction, and recovery.
+      - component: clean-checkout suite
+        layer: integration
+        responsibility: Verify frozen sync, external import, quality command, and
+          offline doctor.
+      - component: boundary readiness suite
+        layer: integration
+        responsibility: Require contained live parent directories and emit exact
+          planning boundary recommendations.
+    interfaces:
+      - name: foundation pytest suite
+        kind: test_suite
+        signature: pytest tests/engineering_foundation
+        ownership: Invoked through scripts/check.sh; focus runs supported.
+      - name: BoundaryReadinessVerifier
+        kind: service
+        signature: "verify(plan_root: Path, repository_root: Path) ->
+          BoundaryReadinessReport"
+        ownership: Read-only with injected filesystem and YAML reader.
+    data_models:
+      - name: BoundaryReadinessReport
+        shape: immutable model
+        fields:
+          - live
+          - dead
+          - outside_root
+          - recommended_parent_paths
+        validation: Paths relative, normalized, contained, and traceable to slice id.
+      - name: ContractScenario
+        shape: immutable parametrization
+        fields:
+          - id
+          - given
+          - action
+          - expected
+          - failure_injection?
+        validation: Unique stable id and discriminating outcome.
+    behavior:
+      - given: a clean temporary checkout
+        when: frozen sync, external import, checks, and doctor run
+        then: the foundation passes without cloud secret/provider access
+      - given: canonical slice files
+        when: boundary readiness runs
+        then: every downstream file has a contained live parent recommendation
+      - given: synthetic secret values in supported error/event positions
+        when: serializers run
+        then: no value appears in diagnostics
+    error_handling:
+      - condition: clean_checkout_failure
+        error: FoundationAcceptanceError
+        recovery: Keep dependent entries blocked and preserve bounded diagnostics.
+        retryable: false
+      - condition: dead_or_unsafe_boundary
+        error: BoundaryReadinessError
+        recovery: Update paths through planning operations and rerun before unblocking.
+        retryable: false
+      - condition: flaky_order_dependent_test
+        error: TestIsolationError
+        recovery: Fix isolation; retries cannot turn the suite green.
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - engineering-foundation/slice/4
+      external:
+        - pytest
+        - pytest-cov
+        - uv
+        - Bash 3.2
+        - tkr-kit canonical YAML
+      inversion_of_control: Temp filesystem, clocks, settings, sinks, and subprocess
+        execution are fixture-owned/injected.
+    integration_points:
+      consumes:
+        - All engineering foundation components
+        - _tkr_kit/slices/*.yaml
+        - Repository filesystem
+      provides:
+        - Acceptance evidence
+        - BoundaryReadinessReport
+        - Manual unblock evidence
+      forbidden:
+        - Plan mutation from tests
+        - Cloud credentials
+        - Provider network calls
+        - Retry-masked failures
+    configuration:
+      - name: COVERAGE_FAIL_UNDER
+        type: integer
+        default: 90
+        validation: Matches pyproject coverage
+      - name: PROJECT_ROOT
+        type: path
+        default: auto-discovered
+        validation: Canonical contained directory; injectable temp root
+    observability:
+      events:
+        - engineering.acceptance.started
+        - engineering.acceptance.succeeded
+        - engineering.acceptance.failed
+        - engineering.boundary.verified
+      required_fields:
+        - event
+        - correlation_id
+        - scenario_id?
+        - duration_ms
+        - outcome
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - tokens
+        - absolute temp/home paths
+        - environment dump
+        - raw exception repr
+    security_constraints:
+      - Fixtures use synthetic credentials and assert redaction.
+      - Canonicalize and contain each path before observation.
+      - Tests do not mutate planning state; unblocking requires reviewed
+        evidence through planning operations.
+      - Provider network access is denied or faked.
+    test_scenarios:
+      - id: EF-S5-T01
+        level: acceptance
+        given: a clean temp checkout
+        when: the full quality contract runs
+        then: sync, import, typing, tests, coverage, and doctor pass
+      - id: EF-S5-T02
+        level: security
+        given: synthetic secret markers
+        when: serializers run
+        then: no marker appears
+      - id: EF-S5-T03
+        level: integration
+        given: all downstream file targets
+        when: boundary verification runs
+        then: each has a contained live parent recommendation
+      - id: EF-S5-TF
+        level: failure_injection
+        given: a missing directory, stale lock, and sink failure
+        when: the suite runs
+        then: each is independently detected and entries remain blocked
+    definition_of_done:
+      - The full acceptance suite passes through scripts/check.sh.
+      - Clean checkout, external import, offline doctor, strict typing,
+        coverage, and redaction evidence are recorded.
+      - Boundary report has no escape and provides reviewed live parent mappings.
+      - Planning boundaries are reconciled and rerun clean before dependent
+        entries unblock.
+      - No flaky retry, hidden exclusion, placeholder, TODO, or production
+        credential remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Temp checkouts, captured events, coverage, caches, and reports are
+        disposable; CI keeps only bounded diagnostics and fixtures are
+        synthetic.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, explicit exported return types,
+        immutable models where practical, and constructor injection for every
+        effect.
+      logging: structlog JSON only, with allowlisted fields and structural redaction
+        before serialization.
+      bash: Bash 3.2; set -euo pipefail; quote expansions; no GNU-only shell features;
+        delegate policy to Python or declared tools.
+      testing: pytest parametrization with deterministic fakes implementing production
+        Protocols.
+      dependencies: uv owns frozen synchronization and the committed lockfile; runtime
+        code never mutates dependency versions.

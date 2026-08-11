@@ -1,12 +1,13 @@
 capabilities:
   - name: security-foundation
     layer: domain
-    status: planned
+    status: deferred
     display_name: Security Foundation
     description: Defines enforceable trust boundaries, least-privilege credentials,
       input containment, private access, and supply-chain policy shared by every
       worker and service.
-    depends_on: []
+    depends_on:
+      - engineering-foundation
     optional_depends_on: []
     provides_to:
       - artifact-foundation
@@ -45,14 +46,27 @@ capabilities:
     paths:
       - docs/assurance/**
       - docs/audits/**
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: Implementation is intentionally withheld until
+      engineering-foundation/slice/5 is done and this capability's declared
+      prerequisites are satisfied.
+    resume_condition: Transition this capability to planned, then its entry slice
+      from blocked to planned, only with reviewed prerequisite completion and
+      boundary-readiness evidence.
   - name: artifact-foundation
     layer: data
-    status: planned
+    status: deferred
     display_name: Artifact Foundation
     description: Owns the immutable object layout, manifests, workflow/model
       provenance, and deterministic local NVMe hydration used to reconstruct a
       worker.
     depends_on:
+      - engineering-foundation
       - security-foundation
     optional_depends_on: []
     provides_to:
@@ -85,13 +99,27 @@ capabilities:
         cache blobs.
     paths:
       - docs/models/**
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: Implementation is intentionally withheld until
+      engineering-foundation/slice/5 is done and this capability's declared
+      prerequisites are satisfied.
+    resume_condition: Transition this capability to planned, then its entry slice
+      from blocked to planned, only with reviewed prerequisite completion and
+      boundary-readiness evidence.
   - name: worker-runtime
     layer: service
-    status: planned
+    status: deferred
     display_name: Worker Runtime
     description: Builds and supervises the pinned RunPod/ComfyUI runtime, turning
       verified artifacts into a health-checked worker with truthful readiness.
     depends_on:
+      - engineering-foundation
       - security-foundation
       - artifact-foundation
     optional_depends_on: []
@@ -126,14 +154,29 @@ capabilities:
         required for inference.
     paths:
       - docs/patterns/**
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+        - artifact-foundation
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: Implementation is intentionally withheld until
+      engineering-foundation/slice/5 is done and this capability's declared
+      prerequisites are satisfied.
+    resume_condition: Transition this capability to planned, then its entry slice
+      from blocked to planned, only with reviewed prerequisite completion and
+      boundary-readiness evidence.
   - name: job-execution
     layer: service
-    status: planned
+    status: deferred
     display_name: Job Execution
     description: Defines the validated job contract and deterministic wrapper that
       stages inputs, invokes ComfyUI, tracks execution, and yields an exact
       local result set.
     depends_on:
+      - engineering-foundation
       - security-foundation
       - worker-runtime
     optional_depends_on: []
@@ -167,14 +210,29 @@ capabilities:
         parameters, media path, byte count, and SHA-256 digest.
     paths:
       - docs/briefs/**
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+        - worker-runtime
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: Implementation is intentionally withheld until
+      engineering-foundation/slice/5 is done and this capability's declared
+      prerequisites are satisfied.
+    resume_condition: Transition this capability to planned, then its entry slice
+      from blocked to planned, only with reviewed prerequisite completion and
+      boundary-readiness evidence.
   - name: durable-delivery
     layer: integration
-    status: planned
+    status: deferred
     display_name: Durable Delivery
     description: Commits generated media and reproducibility metadata to private
       object storage and exposes completed results without false-positive
       completion.
     depends_on:
+      - engineering-foundation
       - security-foundation
       - job-execution
     optional_depends_on: []
@@ -207,14 +265,29 @@ capabilities:
         and incomplete uploads without deleting retained deliverables.
     paths:
       - docs/published/**
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+        - job-execution
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: Implementation is intentionally withheld until
+      engineering-foundation/slice/5 is done and this capability's declared
+      prerequisites are satisfied.
+    resume_condition: Transition this capability to planned, then its entry slice
+      from blocked to planned, only with reviewed prerequisite completion and
+      boundary-readiness evidence.
   - name: operations-and-scale
     layer: infra
-    status: planned
+    status: deferred
     display_name: Operations and Scale
     description: Makes the platform observable and operable, validates
       cost/performance assumptions, and promotes the proven Interactive Pod
       contract to RunPod Serverless.
     depends_on:
+      - engineering-foundation
       - security-foundation
       - artifact-foundation
       - worker-runtime
@@ -252,3 +325,81 @@ capabilities:
     paths:
       - docs/runbooks/**
       - docs/adr/**
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+        - artifact-foundation
+        - worker-runtime
+        - job-execution
+        - durable-delivery
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: Implementation is intentionally withheld until
+      engineering-foundation/slice/5 is done and this capability's declared
+      prerequisites are satisfied.
+    resume_condition: Transition this capability to planned, then its entry slice from blocked
+      to planned, only with reviewed prerequisite completion and
+      boundary-readiness evidence.
+  - name: engineering-foundation
+    layer: infra
+    status: planned
+    display_name: Engineering Foundation
+    description: Establishes the reproducible Python project, shared runtime
+      contracts, local and CI quality gates, and live execution boundaries
+      required before product-domain implementation begins.
+    depends_on: []
+    optional_depends_on: []
+    provides_to:
+      - security-foundation
+      - artifact-foundation
+      - worker-runtime
+      - job-execution
+      - durable-delivery
+      - operations-and-scale
+    scope_in:
+      - Python 3.11+ src-layout packaging with committed pyproject metadata, uv
+        lockfile, typed package marker, documented developer commands, and
+        deterministic runtime/development dependency groups.
+      - Shared IoC-friendly runtime contracts for operation context, typed
+        errors, validated settings sources, clocks, structured structlog events,
+        correlation, and structural redaction.
+      - One local and CI quality contract covering Ruff formatting/linting,
+        strict mypy checks, pytest with coverage, package/import smoke tests,
+        lockfile drift, and Bash 3.2-compatible orchestration.
+      - A diagnostic package entrypoint that verifies configuration and
+        dependency wiring without contacting cloud providers or requiring
+        secrets.
+      - Execution-boundary reconciliation so later slices own live directories
+        while retaining exact planned file targets.
+    scope_out:
+      - Backblaze, RunPod, ComfyUI, ffprobe, or other provider integrations.
+      - Product-domain credential, artifact, job, delivery, or operations
+        behavior.
+      - Container-image construction and deployment automation beyond exercising
+        the package contract.
+      - Provisioning cloud infrastructure or storing production secrets.
+    acceptance_criteria:
+      - A fresh checkout on a supported Python version reproduces the
+        environment with uv sync --frozen from the committed lockfile.
+      - The package imports from the src layout and exposes no provider client
+        or ambient global dependency.
+      - Ruff, strict mypy, pytest, coverage, lockfile verification, and package
+        smoke checks run through one Bash 3.2-compatible command locally and in
+        CI.
+      - structlog emits allowlisted JSON with correlation context while secrets,
+        authorization headers, signed URLs, prompts, and user filenames are
+        structurally excluded.
+      - The diagnostic entrypoint succeeds without cloud credentials and reports
+        typed, actionable failures for invalid local configuration.
+      - Dependent product slices remain blocked until this capability's test
+        slice is done and their declared capability prerequisites are satisfied.
+    paths:
+      - pyproject.toml
+      - uv.lock
+      - README.md
+      - src/tkr_cloud_video/**
+      - tests/engineering_foundation/**
+      - .github/workflows/**
+      - scripts/**

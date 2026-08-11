@@ -14,7 +14,7 @@ slices:
     number: 1
     layer: data
     feature: reproducible-worker-image
-    status: planned
+    status: blocked
     paths:
       - src/tkr_cloud_video/runtime/build_manifest.py
       - schemas/worker-release.schema.json
@@ -23,6 +23,14 @@ slices:
       detail: Promoted OCI images and release manifests are retained by digest. Build
         workspaces and unverified caches are disposable and cleaned after the
         build; unpromoted images follow bounded registry retention.
+    blocked_reason: Cross-capability prerequisites are not expressible as slice depends_on
+      edges in this tkr-kit version.
+    external_prerequisites:
+      - engineering-foundation
+      - security-foundation
+      - artifact-foundation
+    unblock_condition: engineering-foundation/slice/5, security-foundation/slice/10, and
+      artifact-foundation/slice/10 are done
   - delivers:
       - Multi-stage digest-pinned container build with locked dependencies,
         approved ComfyUI/custom nodes, rclone, ffprobe, and health tooling

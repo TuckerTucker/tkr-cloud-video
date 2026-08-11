@@ -1,0 +1,25 @@
+# Reviewed 2026-08-10. These records name prerequisite capabilities or their final
+# test slices solely to express execution gates that the current tkr-kit graph cannot
+# encode as cross-capability slice dependencies. Dependency/ownership is not lineage:
+# none of these subjects continues the named target's work.
+orphan-continuation:artifact-foundation/slice/1::security-foundation/slice/10
+orphan-continuation:artifact-foundation::security-foundation
+orphan-continuation:durable-delivery/slice/1::job-execution/slice/10
+orphan-continuation:durable-delivery/slice/1::security-foundation/slice/10
+orphan-continuation:durable-delivery::job-execution
+orphan-continuation:durable-delivery::security-foundation
+orphan-continuation:job-execution/slice/1::security-foundation/slice/10
+orphan-continuation:job-execution/slice/1::worker-runtime/slice/10
+orphan-continuation:job-execution::durable-delivery
+orphan-continuation:job-execution::security-foundation
+orphan-continuation:job-execution::worker-runtime
+orphan-continuation:operations-and-scale::artifact-foundation
+orphan-continuation:operations-and-scale::durable-delivery
+orphan-continuation:operations-and-scale::job-execution
+orphan-continuation:operations-and-scale::security-foundation
+orphan-continuation:operations-and-scale::worker-runtime
+orphan-continuation:worker-runtime/slice/1::artifact-foundation/slice/10
+orphan-continuation:worker-runtime/slice/1::security-foundation/slice/10
+orphan-continuation:worker-runtime::artifact-foundation
+orphan-continuation:worker-runtime::operations-and-scale
+orphan-continuation:worker-runtime::security-foundation

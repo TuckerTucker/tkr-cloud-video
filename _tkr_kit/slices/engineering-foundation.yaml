@@ -1,0 +1,188 @@
+capability: engineering-foundation
+slices:
+  - number: 1
+    feature: reproducible-python-foundation
+    delivers:
+      - Python 3.11+ pyproject metadata with hatchling src-layout packaging,
+        declared runtime/development dependency groups, and uv as the
+        lock/environment contract
+      - Committed uv.lock, typed tkr_cloud_video package marker, initial
+        package/core/test directories, ignores, and developer bootstrap
+        documentation
+      - A frozen-install and import-smoke contract that fails on unsupported
+        Python, lock drift, or broken package discovery
+    depends_on: []
+    story_ids:
+      - bootstrap-reproducible-python-project
+    files:
+      - pyproject.toml
+      - uv.lock
+      - README.md
+      - .gitignore
+      - src/tkr_cloud_video/__init__.py
+      - src/tkr_cloud_video/py.typed
+      - src/tkr_cloud_video/core/__init__.py
+      - tests/engineering_foundation/__init__.py
+    paths:
+      - "**"
+    data_lifecycle:
+      kind: bounded
+      detail: pyproject.toml and uv.lock are versioned release inputs retained with
+        Git history. .venv, build output, Ruff/mypy/pytest caches, coverage
+        data, and downloaded package caches are ignored disposable artifacts
+        that may be removed at any time. No credential is stored in project
+        metadata.
+    commits:
+      - project metadata and lock
+      - src package skeleton
+      - bootstrap documentation
+    title: Locked Python project skeleton
+    layer: data
+    status: planned
+  - number: 2
+    feature: reproducible-python-foundation
+    delivers:
+      - Immutable OperationContext and validated identifier/correlation
+        primitives shared by all capabilities
+      - Provider-neutral Clock, SettingsSource, and EventSink Protocols plus
+        typed AppError with safe context and explicit retryability
+      - structlog JSON configuration with allowlisted fields, context
+        propagation, and structural redaction before serialization
+    depends_on:
+      - 1
+    story_ids:
+      - consume-shared-runtime-contracts
+    files:
+      - src/tkr_cloud_video/core/context.py
+      - src/tkr_cloud_video/core/errors.py
+      - src/tkr_cloud_video/core/settings.py
+      - src/tkr_cloud_video/core/clock.py
+      - src/tkr_cloud_video/core/logging.py
+      - src/tkr_cloud_video/core/__init__.py
+    paths:
+      - src/tkr_cloud_video/core/
+    data_lifecycle:
+      kind: bounded
+      detail: The shared runtime contracts retain no records themselves. Correlation
+        context exists only for an operation lifetime. Event retention is
+        delegated to injected sinks and must be bounded by the consuming
+        capability; forbidden sensitive values are rejected before any sink
+        receives them.
+    commits:
+      - typed context and errors
+      - IoC ports
+      - structured logging boundary
+    title: Shared runtime contracts
+    layer: domain
+    status: planned
+  - number: 3
+    feature: reproducible-python-foundation
+    delivers:
+      - Ruff formatting/linting, strict mypy, pytest, coverage, lock
+        verification, and package smoke configuration with no duplicate tool
+        configuration
+      - Bash 3.2-compatible scripts/check.sh as the single ordered local/CI
+        quality entrypoint
+      - GitHub Actions workflow using frozen dependency synchronization,
+        supported Python validation, dependency caching keyed by the lockfile,
+        and no production secrets
+    depends_on:
+      - 1
+      - 2
+    story_ids:
+      - run-identical-local-and-ci-gates
+    files:
+      - pyproject.toml
+      - scripts/check.sh
+      - .github/workflows/ci.yml
+      - tests/conftest.py
+      - tests/engineering_foundation/test_package_contract.py
+      - tests/engineering_foundation/test_runtime_contracts.py
+    paths:
+      - "**"
+    data_lifecycle:
+      kind: bounded
+      detail: CI logs, coverage reports, and dependency caches are diagnostic
+        artifacts with provider-configured bounded retention. Cache keys include
+        uv.lock and may be discarded without data loss. Test output must contain
+        no credentials, authorization values, signed links, prompts, or user
+        filenames.
+    commits:
+      - quality tool configuration
+      - single local check command
+      - matching CI workflow
+    title: Deterministic quality gates
+    layer: integration
+    status: planned
+  - number: 4
+    feature: reproducible-python-foundation
+    delivers:
+      - IoC bootstrap that constructs validated settings, clock, operation
+        context, and structlog processors without global provider clients
+      - python -m tkr_cloud_video doctor entrypoint that validates package
+        wiring, configuration schema, lock identity, and downstream directory
+        readiness offline
+      - Stable package exports for downstream capability composition roots
+    depends_on:
+      - 1
+      - 2
+      - 3
+    story_ids:
+      - bootstrap-reproducible-python-project
+      - consume-shared-runtime-contracts
+      - run-identical-local-and-ci-gates
+    files:
+      - src/tkr_cloud_video/bootstrap.py
+      - src/tkr_cloud_video/cli.py
+      - src/tkr_cloud_video/__main__.py
+      - src/tkr_cloud_video/__init__.py
+    paths:
+      - src/tkr_cloud_video/
+    data_lifecycle:
+      kind: exempt
+      detail: The diagnostic entrypoint is read-only and emits ephemeral stdout/stderr
+        plus injected structured events. It writes no state, never reads
+        production secrets, and does not initialize network or provider
+        adapters.
+    commits:
+      - composition bootstrap
+      - offline doctor command
+      - public package exports
+    title: Wire Reproducible Python Foundation
+    layer: integration
+    status: planned
+  - number: 5
+    feature: reproducible-python-foundation
+    delivers:
+      - Table-driven tests for context validation, error safety, settings,
+        clocks, log redaction, correlation, and bootstrap behavior
+      - Clean-checkout/frozen-lock and local-versus-CI command contract tests
+      - Boundary evidence identifying the live parent directories that must
+        replace dead exact-file paths before dependent entry slices are
+        unblocked
+    depends_on:
+      - 4
+    story_ids:
+      - bootstrap-reproducible-python-project
+      - consume-shared-runtime-contracts
+      - run-identical-local-and-ci-gates
+    files:
+      - tests/engineering_foundation/test_project_foundation.py
+      - tests/engineering_foundation/test_logging_redaction.py
+      - tests/engineering_foundation/test_doctor.py
+      - tests/engineering_foundation/test_quality_contract.py
+      - tests/engineering_foundation/test_boundary_readiness.py
+    paths:
+      - tests/engineering_foundation/
+    data_lifecycle:
+      kind: bounded
+      detail: Test workspaces, coverage data, temporary lock copies, captured events,
+        and boundary reports are disposable after the test run; CI retains only
+        bounded diagnostic artifacts. Fixtures use synthetic non-secret values.
+    commits:
+      - runtime contract tests
+      - clean-checkout and doctor tests
+      - boundary readiness evidence
+    title: Test Reproducible Python Foundation
+    layer: integration
+    status: planned

@@ -22,10 +22,18 @@ slices:
     number: 1
     layer: domain
     feature: validated-job-intake
-    status: planned
+    status: blocked
     paths:
       - src/tkr_cloud_video/jobs/contracts.py
       - schemas/generation-request.schema.json
+    blocked_reason: Cross-capability prerequisites are not expressible as slice depends_on
+      edges in this tkr-kit version.
+    external_prerequisites:
+      - engineering-foundation
+      - security-foundation
+      - worker-runtime
+    unblock_condition: engineering-foundation/slice/5, security-foundation/slice/10, and
+      worker-runtime/slice/10 are done
   - delivers:
       - Principal-scoped idempotency state machine and server-owned workspace
         allocation

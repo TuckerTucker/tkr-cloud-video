@@ -1,0 +1,43 @@
+capability: engineering-foundation
+features:
+  - name: reproducible-python-foundation
+    status: planned
+    display_name: Reproducible Python Foundation
+    user_story: As an implementation engineer, I want a locked, typed, testable
+      Python foundation with shared runtime contracts so every product slice can
+      add behavior without inventing packaging, dependency injection, logging,
+      errors, or quality tooling.
+    acceptance_criteria:
+      - A fresh checkout recreates the supported environment exclusively from
+        committed project metadata and lock data.
+      - Shared context, configuration, error, clock, and structured-event
+        contracts are provider-neutral and injected rather than ambient globals.
+      - One documented local command runs the same formatting, linting, typing,
+        testing, coverage, lock, and smoke checks enforced by CI.
+      - The diagnostic entrypoint validates local wiring without secrets,
+        network access, or provider SDK initialization.
+      - The final foundation test proves downstream directory boundaries exist
+        and are ready to be narrowed before dependent slices start.
+    scope_in:
+      - Create the Python 3.11+ src-layout package, dependency groups, lockfile,
+        typed marker, ignores, developer documentation, and deterministic
+        install/import contract.
+      - Implement shared runtime value objects and Protocol boundaries for
+        operation context, typed safe errors, settings, clocks, structlog JSON
+        events, correlation, and structural redaction.
+      - Implement local and GitHub Actions quality orchestration plus
+        clean-checkout, package, diagnostic, and execution-boundary
+        verification.
+    scope_out:
+      - Provider adapters, network calls, GPU/runtime behavior, or cloud
+        credentials.
+      - Container image construction.
+      - Product business rules already owned by downstream capabilities.
+    dependencies: []
+    implementation_steps:
+      - Establish locked project metadata and src package first.
+      - Add shared provider-neutral runtime contracts.
+      - Make the same quality gates executable locally and in CI.
+      - Wire a safe diagnostic entrypoint.
+      - Exercise all contracts from a clean checkout and publish boundary
+        evidence.

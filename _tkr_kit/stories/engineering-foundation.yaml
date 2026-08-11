@@ -1,0 +1,117 @@
+capability: engineering-foundation
+stories:
+  - name: bootstrap-reproducible-python-project
+    status: planned
+    display_name: Bootstrap a reproducible Python project
+    feature: reproducible-python-foundation
+    actor: Implementation engineer
+    intent: recreate the supported development and runtime environment from
+      committed metadata without choosing tools or versions ad hoc
+    preconditions:
+      - The repository is checked out on a supported Python 3.11+ interpreter.
+      - uv is available as the declared project environment and lockfile runner.
+    trigger_action: The engineer bootstraps a fresh checkout or validates dependency drift
+    steps:
+      - actor: Implementation engineer
+        action: runs the documented frozen synchronization command
+        system_response: uv resolves only the committed lock graph and creates the
+          isolated environment
+      - actor: System
+        action: installs runtime and development groups from the src-layout project
+          metadata
+        system_response: the typed tkr_cloud_video package imports without relying on
+          the working directory
+      - actor: Implementation engineer
+        action: runs lock and package smoke checks
+        system_response: metadata/lock drift, unsupported Python, or a broken package
+          layout fails with an actionable error
+    acceptance_criteria:
+      - given: a clean checkout and supported Python interpreter
+        when: uv sync --frozen completes
+        then: the environment matches the committed lock graph and tkr_cloud_video
+          imports from the src package
+      - given: project dependency metadata has changed without an updated lockfile
+        when: the quality contract runs
+        then: lock verification fails before tests or deployment can claim success
+    slice_ids:
+      - engineering-foundation/slice/1
+      - engineering-foundation/slice/4
+      - engineering-foundation/slice/5
+  - name: consume-shared-runtime-contracts
+    status: planned
+    display_name: Consume shared runtime contracts
+    feature: reproducible-python-foundation
+    actor: Capability implementer
+    intent: reuse provider-neutral context, error, settings, clock, and
+      structured-event contracts instead of defining incompatible globals in
+      each capability
+    preconditions:
+      - The Python package and dependency lock are installed.
+      - No cloud credential or provider client is needed to construct the shared
+        core.
+    trigger_action: A capability composition root constructs a service or adapter
+    steps:
+      - actor: Capability implementer
+        action: constructs an immutable OperationContext and validated settings object
+        system_response: unsafe identifiers, unsupported values, and unknown
+          configuration fields are rejected at construction
+      - actor: Capability implementer
+        action: injects clock, settings source, and structured event sink Protocol
+          implementations
+        system_response: domain code receives explicit dependencies with no ambient
+          global clients
+      - actor: System
+        action: emits success or failure events through the shared logging boundary
+        system_response: correlation fields are present and forbidden sensitive fields
+          are structurally excluded
+    acceptance_criteria:
+      - given: a deterministic fake clock, settings source, and event sink
+        when: the shared runtime context is built
+        then: tests observe stable typed values without reading process globals or
+          contacting a provider
+      - given: an error cause or event includes credentials, authorization, signed
+          links, prompts, or user filenames
+        when: it crosses the structured logging boundary
+        then: the forbidden values are absent while the safe error code and correlation
+          context remain
+    slice_ids:
+      - engineering-foundation/slice/2
+      - engineering-foundation/slice/4
+      - engineering-foundation/slice/5
+  - name: run-identical-local-and-ci-gates
+    status: planned
+    display_name: Run identical local and CI gates
+    feature: reproducible-python-foundation
+    actor: Implementation engineer
+    intent: run one deterministic quality contract locally and in CI and prove
+      downstream boundaries are safe to open
+    preconditions:
+      - The project package and shared runtime contracts exist.
+      - The checkout contains no cloud secrets and CI receives no production
+        credential.
+    trigger_action: The engineer runs the check script or pushes a change
+    steps:
+      - actor: Implementation engineer
+        action: runs the Bash 3.2-compatible quality command
+        system_response: format, lint, strict typing, unit tests, coverage, lock
+          verification, and package smoke checks run in a fixed order
+      - actor: GitHub Actions
+        action: executes the same checked-in command on the supported Python matrix
+        system_response: CI behavior cannot drift from the local contract
+      - actor: System
+        action: runs the offline diagnostic and boundary verification
+        system_response: provider initialization is absent and downstream directories
+          are reported as live before their entry slices are unblocked
+    acceptance_criteria:
+      - given: the same committed checkout locally and in GitHub Actions
+        when: the quality command runs
+        then: both environments execute the same gates and any failing gate produces a
+          non-zero exit with contextual output
+      - given: no cloud credentials and no network-enabled provider adapter
+        when: python -m tkr_cloud_video doctor runs
+        then: it validates package wiring and downstream boundary directories without
+          accessing external services
+    slice_ids:
+      - engineering-foundation/slice/3
+      - engineering-foundation/slice/4
+      - engineering-foundation/slice/5

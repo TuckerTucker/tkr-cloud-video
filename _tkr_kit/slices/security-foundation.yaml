@@ -13,7 +13,7 @@ slices:
     number: 1
     layer: domain
     feature: least-privilege-credentials
-    status: planned
+    status: blocked
     paths:
       - src/tkr_cloud_video/security/credentials.py
     data_lifecycle:
@@ -23,6 +23,12 @@ slices:
         secret store and allowlisted process memory, never in plans, logs,
         images, workflows, or artifacts. Superseded credentials are revoked and
         removed after replacement verification.
+    blocked_reason: Cross-capability prerequisites are not expressible as slice depends_on
+      edges in this tkr-kit version.
+    external_prerequisites:
+      - engineering-foundation
+    unblock_condition: engineering-foundation/slice/5 is done with passing local/CI and
+      boundary-readiness evidence
   - delivers:
       - Backblaze-specific provisioning plan that emits separate single-prefix
         application-key requests

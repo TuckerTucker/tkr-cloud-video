@@ -101,3 +101,15 @@ product:
   paths:
     - _tkr_kit/**
     - .claude/**
+  execution_policy:
+    entry_capability: engineering-foundation
+    first_slice: engineering-foundation/slice/1
+    rule: Implement one capability at a time in declared dependency order.
+      Cross-capability slice dependencies are unsupported by the current tkr-kit
+      graph, so dependent entry slices carry explicit blocked status and manual
+      unblock conditions.
+    completion_gate: A capability prerequisite is satisfied only when its final Test
+      slice is done with run or commit evidence.
+    boundary_rule: Foundation slice 1 may write at repository root to create the
+      scaffold. Later slices must use live directory boundaries and retain exact
+      intended files in their files field.
