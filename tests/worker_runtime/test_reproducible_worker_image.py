@@ -44,3 +44,17 @@ def test_dockerfile_pins_gpu_comfy_and_runtime_tools() -> None:
     assert "RUNPOD_SECRET" not in dockerfile
     entrypoint = (ROOT / "scripts" / "entrypoint.sh").read_text()
     assert "set -- serverless" in entrypoint
+
+
+def test_publisher_image_is_pinned_minimal_and_unprivileged() -> None:
+    """Publisher image excludes the GPU runtime while retaining release tools."""
+    dockerfile = (ROOT / "Dockerfile.publisher").read_text()
+    assert "python:3.12-slim-bookworm@sha256:" in dockerfile
+    assert "RCLONE_RELEASE=1.75.0" in dockerfile
+    assert "RCLONE_SHA256=aa2804e08f48250e71009c727124b634" in dockerfile
+    assert "uv sync --frozen --no-dev" in dockerfile
+    assert "COPY release-assets ./release-assets" in dockerfile
+    assert "USER 65532:65532" in dockerfile
+    assert "nvidia/cuda" not in dockerfile
+    assert "requirements/comfyui.lock" not in dockerfile
+    assert "RUNPOD_SECRET" not in dockerfile
