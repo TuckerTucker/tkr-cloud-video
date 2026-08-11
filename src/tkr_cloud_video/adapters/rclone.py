@@ -17,6 +17,8 @@ from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
 from tkr_cloud_video.delivery.uploader import RemoteMetadata
 from tkr_cloud_video.security.validation import ObjectKey, Sha256Digest
 
+RCLONE_EXECUTABLE = "/opt/tkr-cloud-video/bin/rclone"
+
 
 @dataclass(frozen=True, slots=True)
 class RcloneCredentials:
@@ -87,7 +89,7 @@ class RcloneB2Client:
         credentials: RcloneCredentials,
         location: RcloneLocation,
         *,
-        executable: str = "/usr/bin/rclone",
+        executable: str = RCLONE_EXECUTABLE,
     ) -> None:
         """Initialize from explicit command, secret, and scope dependencies."""
         if not executable.startswith("/"):

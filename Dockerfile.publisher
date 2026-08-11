@@ -16,7 +16,7 @@ RUN apt-get update \
        "https://github.com/rclone/rclone/releases/download/v${RCLONE_RELEASE}/rclone-v${RCLONE_RELEASE}-linux-amd64.zip" \
     && echo "${RCLONE_SHA256}  /tmp/rclone.zip" | sha256sum -c - \
     && unzip -q /tmp/rclone.zip -d /tmp/rclone \
-    && install -m 0555 "/tmp/rclone/rclone-v${RCLONE_RELEASE}-linux-amd64/rclone" /usr/bin/rclone \
+    && install -D -m 0555 "/tmp/rclone/rclone-v${RCLONE_RELEASE}-linux-amd64/rclone" /opt/tkr-cloud-video/bin/rclone \
     && rm -rf /tmp/rclone /tmp/rclone.zip
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.26@sha256:9a23023be68b2ed09750ae636228e903a54a05ea56ed03a934d00fe9fbeded4b /uv /usr/local/bin/uv
@@ -28,7 +28,7 @@ RUN uv sync --frozen --no-dev --no-cache --no-install-project
 COPY src ./src
 RUN uv sync --frozen --no-dev --no-cache --inexact \
     && python -m tkr_cloud_video release --help \
-    && rclone version
+    && /opt/tkr-cloud-video/bin/rclone version
 
 COPY release-assets ./release-assets
 RUN groupadd --gid 65532 tkr-publisher \

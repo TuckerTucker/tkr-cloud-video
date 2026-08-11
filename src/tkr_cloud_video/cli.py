@@ -7,7 +7,6 @@ import asyncio
 import importlib
 import json
 import os
-import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -17,6 +16,7 @@ from structlog.typing import FilteringBoundLogger
 
 from tkr_cloud_video.adapters.process import SubprocessCommandExecutor
 from tkr_cloud_video.adapters.rclone import (
+    RCLONE_EXECUTABLE,
     ArtifactRcloneStore,
     RcloneB2Client,
     RcloneCredentials,
@@ -199,12 +199,6 @@ def run_release_publish(
             _required_environment("B2_MODEL_PUBLISHER_KEY_ID"),
             _required_environment("B2_MODEL_PUBLISHER_APPLICATION_KEY"),
         )
-        executable = shutil.which("rclone")
-        if executable is None or not executable.startswith("/"):
-            raise AppError(
-                "rclone_unavailable",
-                "Release publication requires an absolute rclone executable.",
-            )
         store = ArtifactRcloneStore(
             RcloneB2Client(
                 SubprocessCommandExecutor(),
@@ -216,7 +210,7 @@ def run_release_publish(
                     os.environ.get("TKR_B2_S3_ENDPOINT", B2_S3_ENDPOINT),
                     os.environ.get("TKR_B2_S3_REGION", B2_S3_REGION),
                 ),
-                executable=executable,
+                executable=RCLONE_EXECUTABLE,
             )
         )
         receipt = asyncio.run(

@@ -30,6 +30,8 @@ def test_dockerfile_pins_gpu_comfy_and_runtime_tools() -> None:
     assert "RCLONE_RELEASE=1.75.0" in dockerfile
     assert "ARG RCLONE_VERSION" not in dockerfile
     assert "RCLONE_SHA256=aa2804e08f48250e71009c727124b634" in dockerfile
+    assert "/opt/tkr-cloud-video/bin/rclone" in dockerfile
+    assert "/usr/bin/rclone" not in dockerfile
     assert (
         "ca-certificates curl ffmpeg git python3.12 python3.12-venv unzip" in dockerfile
     )
@@ -52,6 +54,8 @@ def test_publisher_image_is_pinned_minimal_and_unprivileged() -> None:
     assert "python:3.12-slim-bookworm@sha256:" in dockerfile
     assert "RCLONE_RELEASE=1.75.0" in dockerfile
     assert "RCLONE_SHA256=aa2804e08f48250e71009c727124b634" in dockerfile
+    assert "/opt/tkr-cloud-video/bin/rclone" in dockerfile
+    assert "/usr/bin/rclone" not in dockerfile
     assert "uv sync --frozen --no-dev" in dockerfile
     assert "COPY release-assets ./release-assets" in dockerfile
     assert "USER 65532:65532" in dockerfile

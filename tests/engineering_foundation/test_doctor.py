@@ -226,9 +226,6 @@ def test_release_publish_cli_composes_streaming_store_without_exposing_secrets(
     monkeypatch.setattr(  # type: ignore[attr-defined]
         "tkr_cloud_video.cli.StreamingArtifactPublisher", Publisher
     )
-    monkeypatch.setattr(  # type: ignore[attr-defined]
-        "tkr_cloud_video.cli.shutil.which", lambda _name: "/usr/bin/rclone"
-    )
     for name, value in {
         "TKR_B2_BUCKET_NAME": "private-bucket",
         "B2_MODEL_PUBLISHER_KEY_ID": "publisher-id",
