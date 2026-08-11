@@ -1,0 +1,56 @@
+capability: worker-runtime
+features:
+  - name: reproducible-worker-image
+    status: planned
+    display_name: Reproducible Worker Image
+    user_story: As a platform operator, I want a pinned worker image and validated
+      runtime configuration so new Pods start identically without manual
+      mutation.
+    acceptance_criteria:
+      - The image is reproducible from pinned sources and emits a
+        machine-readable build manifest.
+      - Invalid configuration or insufficient capacity fails before hydration or
+        ComfyUI startup.
+      - Secrets are referenced, not materialized into image layers or config
+        files.
+      - The image exposes version and diagnostics endpoints that contain no
+        sensitive values.
+    scope_in:
+      - Build a digest-pinned image with Python, ComfyUI, approved custom nodes,
+        rclone, ffprobe, bootstrap code, and health tooling at recorded
+        versions.
+      - Load typed environment configuration, RunPod secret references,
+        object-store remote definitions, timeouts, concurrency, and path roots
+        with safe defaults.
+      - Run preflight checks for GPU visibility, disk capacity, required
+        directories, network access, and artifact-manifest compatibility.
+    scope_out:
+      - Installing dependencies interactively after a Pod starts.
+      - Embedding frequently changing model weights or plaintext credentials in
+        the image.
+  - name: supervised-readiness
+    status: planned
+    display_name: Supervised Readiness
+    user_story: As a scheduler, I want truthful readiness and liveness signals so
+      jobs reach only workers whose exact ComfyUI workflow and models are
+      usable.
+    acceptance_criteria:
+      - Readiness stays false throughout configuration, hydration, process
+        start, and workflow validation.
+      - Liveness distinguishes a recoverable child-process restart from an
+        unrecoverable bootstrap failure.
+      - A missing model, custom node, or workflow reference prevents readiness
+        with an actionable error.
+      - Termination stops admission and allows bounded active-job handling
+        without relying on shutdown uploads.
+    scope_in:
+      - Supervise hydration and the ComfyUI process with explicit startup
+        phases, deadlines, cancellation, and typed failure states.
+      - Poll local ComfyUI health, validate required nodes and model references
+        for the selected workflow, and expose readiness only after all checks
+        pass.
+      - Drain new work on termination, bound graceful shutdown, and preserve
+        per-job durable commit semantics without a directory-wide sync.
+    scope_out:
+      - Publishing raw ComfyUI port 8188 without an authenticated proxy.
+      - Marking a worker ready based only on process existence.

@@ -1,0 +1,207 @@
+capability: job-execution
+stories:
+  - name: validate-versioned-generation-request
+    status: planned
+    display_name: Validate versioned generation request
+    feature: validated-job-intake
+    actor: Authorized application
+    intent: submit a supported MiniMax H3 generation request and receive complete
+      inline validation before execution
+    preconditions:
+      - The caller is authenticated and authorized.
+      - Supported schema, workflow, and model-set versions are configured.
+    trigger_action: The application calls the job submission contract
+    steps:
+      - actor: Authorized application
+        action: submits a versioned request
+        system_response: the service validates operation type, prompt bounds,
+          parameters, workflow, model set, and unknown fields
+      - actor: Job service
+        action: normalizes the request canonically
+        system_response: a stable request hash and safe correlation context are produced
+      - actor: Job service
+        action: returns acceptance or field-specific rejection
+        system_response: no GPU or input transfer begins on rejection
+    acceptance_criteria:
+      - given: a request contains an unsupported field, workflow, model set, or
+          out-of-range parameter
+        when: validation runs
+        then: the response identifies all safe field errors and creates no job
+      - given: a valid request is submitted
+        when: normalization completes
+        then: the stored canonical request and hash are deterministic
+    slice_ids:
+      - job-execution/slice/1
+      - job-execution/slice/4
+      - job-execution/slice/5
+  - name: allocate-idempotent-job-workspace
+    status: planned
+    display_name: Allocate idempotent job workspace
+    feature: validated-job-intake
+    actor: Job service
+    intent: derive server-owned job and attempt identities so duplicate requests
+      cannot collide or traverse local storage
+    preconditions:
+      - The caller supplies or receives an idempotency key under an
+        authenticated principal.
+      - Workspace root containment rules are configured.
+    trigger_action: A validated canonical request is accepted
+    steps:
+      - actor: Job service
+        action: looks up the principal-scoped idempotency key
+        system_response: the existing state is returned or a new server-generated job ID
+          is allocated
+      - actor: Job service
+        action: creates a unique attempt and normalized workspace beneath the job root
+        system_response: user filenames and path components are never used directly
+      - actor: Job service
+        action: records the state transition
+        system_response: concurrent duplicate submissions converge on the documented outcome
+    acceptance_criteria:
+      - given: two concurrent requests share a valid idempotency key and canonical
+          payload
+        when: allocation runs
+        then: one job identity is created and both callers observe the same state
+      - given: the same key is reused with a different canonical payload
+        when: allocation runs
+        then: the request is rejected as an idempotency conflict
+    slice_ids:
+      - job-execution/slice/2
+      - job-execution/slice/4
+      - job-execution/slice/5
+  - name: stage-and-verify-job-inputs
+    status: planned
+    display_name: Stage and verify job inputs
+    feature: validated-job-intake
+    actor: Job service
+    intent: download only authorized declared inputs and verify them inside the
+      server-owned workspace
+    preconditions:
+      - Object references are tied to the authorized principal and request.
+      - Input size, type, count, and digest policies are configured.
+    trigger_action: An image-to-video or reference-to-video job enters input staging
+    steps:
+      - actor: Job service
+        action: authorizes and resolves each private input reference
+        system_response: unauthorized or cross-tenant references are rejected without disclosure
+      - actor: Input adapter
+        action: downloads to a partial workspace path under declared limits
+        system_response: streaming size enforcement prevents resource exhaustion
+      - actor: Job service
+        action: verifies media type, dimensions, optional digest, and final containment
+        system_response: validated inputs are atomically promoted for execution
+    acceptance_criteria:
+      - given: an input exceeds limits or fails declared media validation
+        when: staging runs
+        then: the partial file is removed according to policy and GPU execution does not
+          start
+      - given: an authorized valid input is staged
+        when: verification completes
+        then: the execution contract receives only a server-owned normalized path
+    slice_ids:
+      - job-execution/slice/3
+      - job-execution/slice/4
+      - job-execution/slice/5
+  - name: bind-request-to-pinned-workflow
+    status: planned
+    display_name: Bind request to pinned workflow
+    feature: deterministic-comfy-execution
+    actor: Job orchestrator
+    intent: apply validated generation parameters to an approved workflow without
+      permitting undeclared graph mutation
+    preconditions:
+      - The workflow digest and parameter-binding map are part of the approved
+        release.
+      - The request schema has normalized all values.
+    trigger_action: A job with verified inputs enters execution
+    steps:
+      - actor: Job orchestrator
+        action: loads the pinned API workflow
+        system_response: the digest is rechecked against the approved release
+      - actor: Job orchestrator
+        action: applies allowlisted bindings to named nodes and inputs
+        system_response: undeclared nodes, models, and output locations remain unchanged
+      - actor: Job orchestrator
+        action: validates the bound graph against ComfyUI capabilities
+        system_response: a ready prompt payload is produced or execution fails before submission
+    acceptance_criteria:
+      - given: a binding points to an absent or disallowed node/input
+        when: workflow binding runs
+        then: the job fails without submitting a prompt
+      - given: a valid request is bound
+        when: the prompt payload is inspected
+        then: it references the approved workflow/model identity and only normalized
+          parameters
+    slice_ids:
+      - job-execution/slice/6
+      - job-execution/slice/9
+      - job-execution/slice/10
+  - name: supervise-comfy-prompt-execution
+    status: planned
+    display_name: Supervise ComfyUI prompt execution
+    feature: deterministic-comfy-execution
+    actor: Job orchestrator
+    intent: track one ComfyUI prompt through completion, cancellation, timeout, or
+      node failure with typed outcomes
+    preconditions:
+      - The worker is ready and not draining.
+      - Execution and cancellation deadlines are configured.
+    trigger_action: A validated prompt payload is submitted
+    steps:
+      - actor: Job orchestrator
+        action: submits the prompt and records its prompt identifier
+        system_response: events and history are correlated to the job attempt
+      - actor: Job orchestrator
+        action: polls or subscribes with bounded backoff
+        system_response: progress is observed without unbounded waits
+      - actor: Job orchestrator
+        action: handles success, cancellation, timeout, process exit, or node error
+        system_response: the state machine emits a terminal or retryable outcome
+    acceptance_criteria:
+      - given: execution exceeds its deadline
+        when: the supervisor cancels the prompt
+        then: the job records a typed timeout and cannot publish completion
+      - given: ComfyUI reports a node failure
+        when: execution finishes
+        then: the safe error identifies the node/classification without leaking prompt
+          content
+    slice_ids:
+      - job-execution/slice/7
+      - job-execution/slice/9
+      - job-execution/slice/10
+  - name: validate-exact-local-result-set
+    status: planned
+    display_name: Validate exact local result set
+    feature: deterministic-comfy-execution
+    actor: Job orchestrator
+    intent: identify and validate only media generated for the current prompt and
+      produce reproducibility metadata
+    preconditions:
+      - The prompt history includes output-node records.
+      - The job workspace and allowed output root are known.
+    trigger_action: ComfyUI reports prompt success
+    steps:
+      - actor: Job orchestrator
+        action: resolves output records for the current prompt
+        system_response: paths are normalized and contained; unrelated directory entries
+          are ignored
+      - actor: Media validator
+        action: inspects expected video and audio tracks and computes byte count and
+          SHA-256
+        system_response: missing, malformed, or unexpected outputs fail the job
+      - actor: Job orchestrator
+        action: writes canonical workflow, generation, and local-result metadata
+        system_response: the uploader receives an exact immutable local result set
+    acceptance_criteria:
+      - given: ComfyUI reports success but no valid expected video is attributable to
+          the prompt
+        when: result validation runs
+        then: the job fails and emits no upload-ready result
+      - given: a valid result is found
+        when: metadata generation completes
+        then: every local artifact has a role, contained path, size, digest, and
+          provenance reference
+    slice_ids:
+      - job-execution/slice/8
+      - job-execution/slice/9
+      - job-execution/slice/10

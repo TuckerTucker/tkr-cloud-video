@@ -1,0 +1,53 @@
+capability: operations-and-scale
+features:
+  - name: observability-and-cost-control
+    status: planned
+    display_name: Observability and Cost Control
+    user_story: As an operator, I want correlated telemetry and measured
+      cost/performance so I can diagnose failures and choose storage/runtime
+      settings from evidence.
+    acceptance_criteria:
+      - A job can be traced end to end by safe correlation identifiers.
+      - Alerts identify the failed phase and distinguish retryable from terminal
+        conditions.
+      - Telemetry stores declare retention and enforce bounded cardinality.
+      - Provider comparisons record source date, region, model-set size,
+        transfer volume, operations, and benchmark results.
+    scope_in:
+      - Emit structured JSON events and metrics for boot, hydration, cache,
+        readiness, generation, upload, commit, delivery, and authorization with
+        shared correlation fields.
+      - Provide bounded dashboards, alerts, and health views for latency, bytes,
+        cache hit rate, error classes, GPU utilization, object-store behavior,
+        and security anomalies.
+      - Run reproducible cold/warm benchmarks and calculate provider cost from
+        current official pricing inputs and measured usage.
+    scope_out:
+      - Logging secrets, signed URLs, full prompts, or user filenames.
+      - Selecting a provider from list price without regional measurements.
+  - name: serverless-release
+    status: planned
+    display_name: Serverless Release
+    user_story: As a release operator, I want to promote the proven Interactive Pod
+      contract to RunPod Serverless with automated acceptance and rollback
+      evidence.
+    acceptance_criteria:
+      - The Interactive Pod acceptance campaign produces durable evidence for
+        every product success criterion.
+      - Serverless passes contract parity tests and returns object references
+        instead of proxying MP4 bytes.
+      - Concurrency and duplicate-job tests prove isolation and idempotency.
+      - Rollback and failure runbooks have observable completion conditions and
+        rehearsal records.
+    scope_in:
+      - Automate Interactive Pod acceptance for cold boot, warm cache,
+        generation, durable commit, termination, and recovery scenarios.
+      - Implement a RunPod Serverless handler that reuses the same request,
+        execution, idempotency, result, and error contracts.
+      - Exercise concurrency, cold/warm starts, timeouts, duplicate jobs,
+        cancellation, storage failure, capacity exhaustion, rollout, and
+        rollback with runbooks.
+    scope_out:
+      - Changing external contracts solely for Serverless convenience.
+      - Declaring production readiness without license, security, retention, and
+        failure-recovery evidence.

@@ -1,0 +1,2229 @@
+capability: artifact-foundation
+slice_specs:
+  - name: immutable-artifact-catalog-1-spec
+    title: Artifact catalog contracts Specification
+    status: approved
+    format: full
+    capability: artifact-foundation
+    feature: immutable-artifact-catalog
+    slice: 1
+    source_story_ids:
+      - artifact-foundation/story/publish-content-addressed-model-blobs
+    purpose: Implement Artifact catalog contracts as the data contract that
+      versioned model-set manifest, artifact entry, workflow identity,
+      provenance, and publication receipt models.
+    layer_assignment:
+      - component: ArtifactCatalogContractsPort
+        layer: data
+        responsibility: Versioned model-set manifest, artifact entry, workflow identity,
+          provenance, and publication receipt models
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ArtifactCatalogContractsPort
+        kind: schema_or_repository_port
+        signature: "async def execute(self, request: ArtifactCatalogContractsRequest,
+          context: OperationContext) -> ArtifactCatalogContractsResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ArtifactCatalogContractsError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ArtifactCatalogContractsRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ArtifactCatalogContractsResult
+        shape: frozen dataclass or Pydantic model
+        fields: Versioned model-set manifest, artifact entry, workflow identity,
+          provenance, and publication receipt models,Canonical JSON
+          serialization and schema fixtures
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/publish-content-addressed-model-blobs
+        given: an existing digest key with different bytes or metadata
+        when: publication is attempted
+        then: the publisher fails without overwriting the object
+      - story_id: artifact-foundation/story/publish-content-addressed-model-blobs
+        given: a new model artifact
+        when: upload and verification complete
+        then: the remote blob is addressable by its verified SHA-256 identity
+    error_handling:
+      - condition: manifest_invalid
+        error: ManifestValidationError
+        recovery: Reject the release and return all safe validation defects
+        retryable: false
+      - condition: artifact_conflict_or_missing
+        error: ArtifactIdentityError
+        recovery: Do not overwrite; quarantine the publication attempt for review
+        retryable: false
+      - condition: remote_transient_failure
+        error: ArtifactStoreUnavailable
+        recovery: Retry with bounded exponential backoff and cancellation
+        retryable: true
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - product configuration, security policy, and injected platform ports
+      provides:
+        - Versioned model-set manifest, artifact entry, workflow identity,
+          provenance, and publication receipt models
+        - Canonical JSON serialization and schema fixtures
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - artifact-foundation.immutable-artifact-catalog.1.started
+        - artifact-foundation.immutable-artifact-catalog.1.succeeded
+        - artifact-foundation.immutable-artifact-catalog.1.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S1-T01
+        level: unit
+        given: an existing digest key with different bytes or metadata
+        when: publication is attempted
+        then: the publisher fails without overwriting the object
+      - id: S1-T02
+        level: unit
+        given: a new model artifact
+        when: upload and verification complete
+        then: the remote blob is addressable by its verified SHA-256 identity
+      - id: S1-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Artifact catalog contracts runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: immutable-artifact-catalog-2-spec
+    title: Artifact publication service Specification
+    status: approved
+    format: full
+    capability: artifact-foundation
+    feature: immutable-artifact-catalog
+    slice: 2
+    source_story_ids:
+      - artifact-foundation/story/publish-pinned-model-set-manifest
+    purpose: Implement Artifact publication service as the service contract that
+      streaming size/sha-256 calculation, immutable blob upload, conflict
+      detection, and remote verification.
+    layer_assignment:
+      - component: ArtifactPublicationServiceService
+        layer: service
+        responsibility: Streaming size/SHA-256 calculation, immutable blob upload,
+          conflict detection, and remote verification
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ArtifactPublicationServiceService
+        kind: application_service
+        signature: "async def execute(self, request: ArtifactPublicationServiceRequest,
+          context: OperationContext) -> ArtifactPublicationServiceResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ArtifactPublicationServiceError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ArtifactPublicationServiceRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ArtifactPublicationServiceResult
+        shape: frozen dataclass or Pydantic model
+        fields: Streaming size/SHA-256 calculation, immutable blob upload, conflict
+          detection, and remote verification,Manifest validation and
+          publish-last workflow through injected object-store adapter
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/publish-pinned-model-set-manifest
+        given: a manifest references a missing blob or unsafe destination
+        when: publication validation runs
+        then: the manifest is not published
+      - story_id: artifact-foundation/story/publish-pinned-model-set-manifest
+        given: a published model-set version
+        when: its external identity is resolved
+        then: the exact canonical manifest bytes and all artifact identities are
+          reproducible
+    error_handling:
+      - condition: manifest_invalid
+        error: ManifestValidationError
+        recovery: Reject the release and return all safe validation defects
+        retryable: false
+      - condition: artifact_conflict_or_missing
+        error: ArtifactIdentityError
+        recovery: Do not overwrite; quarantine the publication attempt for review
+        retryable: false
+      - condition: remote_transient_failure
+        error: ArtifactStoreUnavailable
+        recovery: Retry with bounded exponential backoff and cancellation
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/1
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/1
+      provides:
+        - Streaming size/SHA-256 calculation, immutable blob upload, conflict
+          detection, and remote verification
+        - Manifest validation and publish-last workflow through injected
+          object-store adapter
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - artifact-foundation.immutable-artifact-catalog.2.started
+        - artifact-foundation.immutable-artifact-catalog.2.succeeded
+        - artifact-foundation.immutable-artifact-catalog.2.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S2-T01
+        level: contract
+        given: a manifest references a missing blob or unsafe destination
+        when: publication validation runs
+        then: the manifest is not published
+      - id: S2-T02
+        level: contract
+        given: a published model-set version
+        when: its external identity is resolved
+        then: the exact canonical manifest bytes and all artifact identities are
+          reproducible
+      - id: S2-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Artifact publication service runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: immutable-artifact-catalog-3-spec
+    title: Approved release resolver Specification
+    status: approved
+    format: full
+    capability: artifact-foundation
+    feature: immutable-artifact-catalog
+    slice: 3
+    source_story_ids:
+      - artifact-foundation/story/resolve-approved-artifact-release
+    purpose: Implement Approved release resolver as the service contract that
+      resolution of configured release references to independently pinned
+      manifest bytes.
+    layer_assignment:
+      - component: ApprovedReleaseResolverService
+        layer: service
+        responsibility: Resolution of configured release references to independently
+          pinned manifest bytes
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ApprovedReleaseResolverService
+        kind: application_service
+        signature: "async def execute(self, request: ApprovedReleaseResolverRequest,
+          context: OperationContext) -> ApprovedReleaseResolverResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ApprovedReleaseResolverError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ApprovedReleaseResolverRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ApprovedReleaseResolverResult
+        shape: frozen dataclass or Pydantic model
+        fields: Resolution of configured release references to independently pinned
+          manifest bytes,Manifest identity verification, parsing, referential
+          checks, and sanitized release context
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/resolve-approved-artifact-release
+        given: a mutable object at the expected name is replaced
+        when: worker startup verifies the pinned identity
+        then: startup fails before model downloads begin
+      - story_id: artifact-foundation/story/resolve-approved-artifact-release
+        given: an approved release reference
+        when: resolution succeeds
+        then: the worker records the immutable manifest and workflow identities in
+          structured startup context
+    error_handling:
+      - condition: manifest_invalid
+        error: ManifestValidationError
+        recovery: Reject the release and return all safe validation defects
+        retryable: false
+      - condition: artifact_conflict_or_missing
+        error: ArtifactIdentityError
+        recovery: Do not overwrite; quarantine the publication attempt for review
+        retryable: false
+      - condition: remote_transient_failure
+        error: ArtifactStoreUnavailable
+        recovery: Retry with bounded exponential backoff and cancellation
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/1
+        - artifact-foundation/slice/2
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/1
+        - artifact-foundation/slice/2
+      provides:
+        - Resolution of configured release references to independently pinned
+          manifest bytes
+        - Manifest identity verification, parsing, referential checks, and
+          sanitized release context
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - artifact-foundation.immutable-artifact-catalog.3.started
+        - artifact-foundation.immutable-artifact-catalog.3.succeeded
+        - artifact-foundation.immutable-artifact-catalog.3.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S3-T01
+        level: contract
+        given: a mutable object at the expected name is replaced
+        when: worker startup verifies the pinned identity
+        then: startup fails before model downloads begin
+      - id: S3-T02
+        level: contract
+        given: an approved release reference
+        when: resolution succeeds
+        then: the worker records the immutable manifest and workflow identities in
+          structured startup context
+      - id: S3-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Approved release resolver runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: immutable-artifact-catalog-4-spec
+    title: Wire Immutable Artifact Catalog Specification
+    status: approved
+    format: abbreviated
+    capability: artifact-foundation
+    feature: immutable-artifact-catalog
+    slice: 4
+    source_story_ids:
+      - artifact-foundation/story/publish-content-addressed-model-blobs
+      - artifact-foundation/story/publish-pinned-model-set-manifest
+      - artifact-foundation/story/resolve-approved-artifact-release
+    purpose: Implement Wire Immutable Artifact Catalog as the integration contract
+      that ioc composition of all immutable artifact catalog components and
+      adapters.
+    layer_assignment:
+      - component: compose_immutable_artifact_catalog
+        layer: integration
+        responsibility: IoC composition of all Immutable Artifact Catalog components and
+          adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_immutable_artifact_catalog
+        kind: composition_root
+        signature: "def compose_immutable_artifact_catalog(dependencies:
+          ImmutableArtifactCatalogDependencies) ->
+          ImmutableArtifactCatalogServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireImmutableArtifactCatalogError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireImmutableArtifactCatalogRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireImmutableArtifactCatalogResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Immutable Artifact Catalog components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/publish-content-addressed-model-blobs
+        given: an existing digest key with different bytes or metadata
+        when: publication is attempted
+        then: the publisher fails without overwriting the object
+      - story_id: artifact-foundation/story/publish-content-addressed-model-blobs
+        given: a new model artifact
+        when: upload and verification complete
+        then: the remote blob is addressable by its verified SHA-256 identity
+      - story_id: artifact-foundation/story/publish-pinned-model-set-manifest
+        given: a manifest references a missing blob or unsafe destination
+        when: publication validation runs
+        then: the manifest is not published
+      - story_id: artifact-foundation/story/publish-pinned-model-set-manifest
+        given: a published model-set version
+        when: its external identity is resolved
+        then: the exact canonical manifest bytes and all artifact identities are
+          reproducible
+      - story_id: artifact-foundation/story/resolve-approved-artifact-release
+        given: a mutable object at the expected name is replaced
+        when: worker startup verifies the pinned identity
+        then: startup fails before model downloads begin
+      - story_id: artifact-foundation/story/resolve-approved-artifact-release
+        given: an approved release reference
+        when: resolution succeeds
+        then: the worker records the immutable manifest and workflow identities in
+          structured startup context
+    error_handling:
+      - condition: manifest_invalid
+        error: ManifestValidationError
+        recovery: Reject the release and return all safe validation defects
+        retryable: false
+      - condition: artifact_conflict_or_missing
+        error: ArtifactIdentityError
+        recovery: Do not overwrite; quarantine the publication attempt for review
+        retryable: false
+      - condition: remote_transient_failure
+        error: ArtifactStoreUnavailable
+        recovery: Retry with bounded exponential backoff and cancellation
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/1
+        - artifact-foundation/slice/2
+        - artifact-foundation/slice/3
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/1
+        - artifact-foundation/slice/2
+        - artifact-foundation/slice/3
+      provides:
+        - IoC composition of all Immutable Artifact Catalog components and
+          adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - artifact-foundation.immutable-artifact-catalog.4.started
+        - artifact-foundation.immutable-artifact-catalog.4.succeeded
+        - artifact-foundation.immutable-artifact-catalog.4.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S4-T01
+        level: contract
+        given: an existing digest key with different bytes or metadata
+        when: publication is attempted
+        then: the publisher fails without overwriting the object
+      - id: S4-T02
+        level: contract
+        given: a new model artifact
+        when: upload and verification complete
+        then: the remote blob is addressable by its verified SHA-256 identity
+      - id: S4-T03
+        level: contract
+        given: a manifest references a missing blob or unsafe destination
+        when: publication validation runs
+        then: the manifest is not published
+      - id: S4-T04
+        level: contract
+        given: a published model-set version
+        when: its external identity is resolved
+        then: the exact canonical manifest bytes and all artifact identities are
+          reproducible
+      - id: S4-T05
+        level: contract
+        given: a mutable object at the expected name is replaced
+        when: worker startup verifies the pinned identity
+        then: startup fails before model downloads begin
+      - id: S4-T06
+        level: contract
+        given: an approved release reference
+        when: resolution succeeds
+        then: the worker records the immutable manifest and workflow identities in
+          structured startup context
+      - id: S4-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Immutable Artifact Catalog runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: immutable-artifact-catalog-5-spec
+    title: Test Immutable Artifact Catalog Specification
+    status: approved
+    format: abbreviated
+    capability: artifact-foundation
+    feature: immutable-artifact-catalog
+    slice: 5
+    source_story_ids:
+      - artifact-foundation/story/publish-content-addressed-model-blobs
+      - artifact-foundation/story/publish-pinned-model-set-manifest
+      - artifact-foundation/story/resolve-approved-artifact-release
+    purpose: Implement Test Immutable Artifact Catalog as the integration contract
+      that table-driven unit coverage for immutable artifact catalog domain
+      contracts.
+    layer_assignment:
+      - component: test_immutable_artifact_catalog
+        layer: integration
+        responsibility: Table-driven unit coverage for Immutable Artifact Catalog domain
+          contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_immutable_artifact_catalog
+        kind: test_suite
+        signature: "pytest suite: test_immutable_artifact_catalog"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestImmutableArtifactCatalogError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestImmutableArtifactCatalogRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestImmutableArtifactCatalogResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Immutable Artifact Catalog domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/publish-content-addressed-model-blobs
+        given: an existing digest key with different bytes or metadata
+        when: publication is attempted
+        then: the publisher fails without overwriting the object
+      - story_id: artifact-foundation/story/publish-content-addressed-model-blobs
+        given: a new model artifact
+        when: upload and verification complete
+        then: the remote blob is addressable by its verified SHA-256 identity
+      - story_id: artifact-foundation/story/publish-pinned-model-set-manifest
+        given: a manifest references a missing blob or unsafe destination
+        when: publication validation runs
+        then: the manifest is not published
+      - story_id: artifact-foundation/story/publish-pinned-model-set-manifest
+        given: a published model-set version
+        when: its external identity is resolved
+        then: the exact canonical manifest bytes and all artifact identities are
+          reproducible
+      - story_id: artifact-foundation/story/resolve-approved-artifact-release
+        given: a mutable object at the expected name is replaced
+        when: worker startup verifies the pinned identity
+        then: startup fails before model downloads begin
+      - story_id: artifact-foundation/story/resolve-approved-artifact-release
+        given: an approved release reference
+        when: resolution succeeds
+        then: the worker records the immutable manifest and workflow identities in
+          structured startup context
+    error_handling:
+      - condition: manifest_invalid
+        error: ManifestValidationError
+        recovery: Reject the release and return all safe validation defects
+        retryable: false
+      - condition: artifact_conflict_or_missing
+        error: ArtifactIdentityError
+        recovery: Do not overwrite; quarantine the publication attempt for review
+        retryable: false
+      - condition: remote_transient_failure
+        error: ArtifactStoreUnavailable
+        recovery: Retry with bounded exponential backoff and cancellation
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/4
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/4
+      provides:
+        - Table-driven unit coverage for Immutable Artifact Catalog domain
+          contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - artifact-foundation.immutable-artifact-catalog.5.started
+        - artifact-foundation.immutable-artifact-catalog.5.succeeded
+        - artifact-foundation.immutable-artifact-catalog.5.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S5-T01
+        level: integration
+        given: an existing digest key with different bytes or metadata
+        when: publication is attempted
+        then: the publisher fails without overwriting the object
+      - id: S5-T02
+        level: integration
+        given: a new model artifact
+        when: upload and verification complete
+        then: the remote blob is addressable by its verified SHA-256 identity
+      - id: S5-T03
+        level: integration
+        given: a manifest references a missing blob or unsafe destination
+        when: publication validation runs
+        then: the manifest is not published
+      - id: S5-T04
+        level: integration
+        given: a published model-set version
+        when: its external identity is resolved
+        then: the exact canonical manifest bytes and all artifact identities are
+          reproducible
+      - id: S5-T05
+        level: integration
+        given: a mutable object at the expected name is replaced
+        when: worker startup verifies the pinned identity
+        then: startup fails before model downloads begin
+      - id: S5-T06
+        level: integration
+        given: an approved release reference
+        when: resolution succeeds
+        then: the worker records the immutable manifest and workflow identities in
+          structured startup context
+      - id: S5-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Immutable Artifact Catalog runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-cache-hydration-6-spec
+    title: Cache index and lease contracts Specification
+    status: approved
+    format: full
+    capability: artifact-foundation
+    feature: deterministic-cache-hydration
+    slice: 6
+    source_story_ids:
+      - artifact-foundation/story/hydrate-and-atomically-promote-blobs
+    purpose: Implement Cache index and lease contracts as the data contract that
+      content-addressed cache paths, partial-file identity, active-reference
+      leases, capacity accounting, and eviction candidates.
+    layer_assignment:
+      - component: CacheIndexAndLeaseContractsPort
+        layer: data
+        responsibility: Content-addressed cache paths, partial-file identity,
+          active-reference leases, capacity accounting, and eviction candidates
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: CacheIndexAndLeaseContractsPort
+        kind: schema_or_repository_port
+        signature: "async def execute(self, request: CacheIndexAndLeaseContractsRequest,
+          context: OperationContext) -> CacheIndexAndLeaseContractsResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: CacheIndexAndLeaseContractsError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: CacheIndexAndLeaseContractsRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: CacheIndexAndLeaseContractsResult
+        shape: frozen dataclass or Pydantic model
+        fields: Content-addressed cache paths, partial-file identity, active-reference
+          leases, capacity accounting, and eviction candidates,Filesystem
+          abstraction with atomic promote and containment invariants
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/hydrate-and-atomically-promote-blobs
+        given: a download is interrupted or has a checksum mismatch
+        when: verification finishes
+        then: no final cache blob exists and cleanup behavior is recorded
+      - story_id: artifact-foundation/story/hydrate-and-atomically-promote-blobs
+        given: a valid download completes
+        when: promotion occurs
+        then: readers observe either no blob or the complete verified blob, never a
+          partial state
+    error_handling:
+      - condition: checksum_or_size_mismatch
+        error: ArtifactVerificationError
+        recovery: Delete or quarantine only the partial file; never expose the final
+          cache key
+        retryable: false
+      - condition: unsafe_destination
+        error: PathContainmentError
+        recovery: Refuse materialization and leave the model tree unchanged
+        retryable: false
+      - condition: capacity_or_transfer_failure
+        error: HydrationUnavailable
+        recovery: Retry only when capacity/network classification is retryable; keep
+          readiness false
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/5
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/5
+      provides:
+        - Content-addressed cache paths, partial-file identity, active-reference
+          leases, capacity accounting, and eviction candidates
+        - Filesystem abstraction with atomic promote and containment invariants
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - artifact-foundation.deterministic-cache-hydration.6.started
+        - artifact-foundation.deterministic-cache-hydration.6.succeeded
+        - artifact-foundation.deterministic-cache-hydration.6.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S6-T01
+        level: unit
+        given: a download is interrupted or has a checksum mismatch
+        when: verification finishes
+        then: no final cache blob exists and cleanup behavior is recorded
+      - id: S6-T02
+        level: unit
+        given: a valid download completes
+        when: promotion occurs
+        then: readers observe either no blob or the complete verified blob, never a
+          partial state
+      - id: S6-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Cache index and lease contracts runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-cache-hydration-7-spec
+    title: Verified hydration service Specification
+    status: approved
+    format: full
+    capability: artifact-foundation
+    feature: deterministic-cache-hydration
+    slice: 7
+    source_story_ids:
+      - artifact-foundation/story/materialize-safe-comfy-model-links
+    purpose: Implement Verified hydration service as the service contract that
+      concurrent bounded downloads to unique partial files with size/sha-256
+      verification and atomic promotion.
+    layer_assignment:
+      - component: VerifiedHydrationServiceService
+        layer: service
+        responsibility: Concurrent bounded downloads to unique partial files with
+          size/SHA-256 verification and atomic promotion
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: VerifiedHydrationServiceService
+        kind: application_service
+        signature: "async def execute(self, request: VerifiedHydrationServiceRequest,
+          context: OperationContext) -> VerifiedHydrationServiceResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: VerifiedHydrationServiceError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: VerifiedHydrationServiceRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: VerifiedHydrationServiceResult
+        shape: frozen dataclass or Pydantic model
+        fields: Concurrent bounded downloads to unique partial files with size/SHA-256
+          verification and atomic promotion,Cleanup and retry classification for
+          interrupted, missing, and corrupt artifacts
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/materialize-safe-comfy-model-links
+        given: a destination is absolute, empty, trailing parent, or escapes through a
+          symlink
+        when: materialization is attempted
+        then: the operation fails before the model tree changes
+      - story_id: artifact-foundation/story/materialize-safe-comfy-model-links
+        given: a valid destination already has the correct managed link
+        when: materialization repeats
+        then: the operation is idempotent and leaves the link unchanged
+    error_handling:
+      - condition: checksum_or_size_mismatch
+        error: ArtifactVerificationError
+        recovery: Delete or quarantine only the partial file; never expose the final
+          cache key
+        retryable: false
+      - condition: unsafe_destination
+        error: PathContainmentError
+        recovery: Refuse materialization and leave the model tree unchanged
+        retryable: false
+      - condition: capacity_or_transfer_failure
+        error: HydrationUnavailable
+        recovery: Retry only when capacity/network classification is retryable; keep
+          readiness false
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/6
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/6
+      provides:
+        - Concurrent bounded downloads to unique partial files with size/SHA-256
+          verification and atomic promotion
+        - Cleanup and retry classification for interrupted, missing, and corrupt
+          artifacts
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - artifact-foundation.deterministic-cache-hydration.7.started
+        - artifact-foundation.deterministic-cache-hydration.7.succeeded
+        - artifact-foundation.deterministic-cache-hydration.7.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S7-T01
+        level: contract
+        given: a destination is absolute, empty, trailing parent, or escapes through a
+          symlink
+        when: materialization is attempted
+        then: the operation fails before the model tree changes
+      - id: S7-T02
+        level: contract
+        given: a valid destination already has the correct managed link
+        when: materialization repeats
+        then: the operation is idempotent and leaves the link unchanged
+      - id: S7-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Verified hydration service runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-cache-hydration-8-spec
+    title: Model materialization and eviction Specification
+    status: approved
+    format: full
+    capability: artifact-foundation
+    feature: deterministic-cache-hydration
+    slice: 8
+    source_story_ids:
+      - artifact-foundation/story/reuse-and-evict-bounded-cache
+    purpose: Implement Model materialization and eviction as the integration
+      contract that safe managed symlink materialization under the comfyui model
+      root.
+    layer_assignment:
+      - component: ModelMaterializationAndEvictionAdapter
+        layer: integration
+        responsibility: Safe managed symlink materialization under the ComfyUI model root
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ModelMaterializationAndEvictionAdapter
+        kind: integration_adapter
+        signature: "async def execute(self, request:
+          ModelMaterializationAndEvictionRequest, context: OperationContext) ->
+          ModelMaterializationAndEvictionResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ModelMaterializationAndEvictionError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ModelMaterializationAndEvictionRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ModelMaterializationAndEvictionResult
+        shape: frozen dataclass or Pydantic model
+        fields: Safe managed symlink materialization under the ComfyUI model
+          root,Warm-cache verification and whole-blob eviction that protects
+          selected and leased digests
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/reuse-and-evict-bounded-cache
+        given: all required blobs are present and verified
+        when: hydration runs
+        then: zero model bytes are downloaded
+      - story_id: artifact-foundation/story/reuse-and-evict-bounded-cache
+        given: capacity is insufficient and no safe candidate exists
+        when: preflight completes
+        then: startup fails before partial downloads consume remaining disk
+    error_handling:
+      - condition: checksum_or_size_mismatch
+        error: ArtifactVerificationError
+        recovery: Delete or quarantine only the partial file; never expose the final
+          cache key
+        retryable: false
+      - condition: unsafe_destination
+        error: PathContainmentError
+        recovery: Refuse materialization and leave the model tree unchanged
+        retryable: false
+      - condition: capacity_or_transfer_failure
+        error: HydrationUnavailable
+        recovery: Retry only when capacity/network classification is retryable; keep
+          readiness false
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/6
+        - artifact-foundation/slice/7
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/6
+        - artifact-foundation/slice/7
+      provides:
+        - Safe managed symlink materialization under the ComfyUI model root
+        - Warm-cache verification and whole-blob eviction that protects selected
+          and leased digests
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - artifact-foundation.deterministic-cache-hydration.8.started
+        - artifact-foundation.deterministic-cache-hydration.8.succeeded
+        - artifact-foundation.deterministic-cache-hydration.8.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S8-T01
+        level: contract
+        given: all required blobs are present and verified
+        when: hydration runs
+        then: zero model bytes are downloaded
+      - id: S8-T02
+        level: contract
+        given: capacity is insufficient and no safe candidate exists
+        when: preflight completes
+        then: startup fails before partial downloads consume remaining disk
+      - id: S8-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Model materialization and eviction runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-cache-hydration-9-spec
+    title: Wire Deterministic Cache Hydration Specification
+    status: approved
+    format: abbreviated
+    capability: artifact-foundation
+    feature: deterministic-cache-hydration
+    slice: 9
+    source_story_ids:
+      - artifact-foundation/story/hydrate-and-atomically-promote-blobs
+      - artifact-foundation/story/materialize-safe-comfy-model-links
+      - artifact-foundation/story/reuse-and-evict-bounded-cache
+    purpose: Implement Wire Deterministic Cache Hydration as the integration
+      contract that ioc composition of all deterministic cache hydration
+      components and adapters.
+    layer_assignment:
+      - component: compose_deterministic_cache_hydration
+        layer: integration
+        responsibility: IoC composition of all Deterministic Cache Hydration components
+          and adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_deterministic_cache_hydration
+        kind: composition_root
+        signature: "def compose_deterministic_cache_hydration(dependencies:
+          DeterministicCacheHydrationDependencies) ->
+          DeterministicCacheHydrationServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireDeterministicCacheHydrationError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireDeterministicCacheHydrationRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireDeterministicCacheHydrationResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Deterministic Cache Hydration components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/hydrate-and-atomically-promote-blobs
+        given: a download is interrupted or has a checksum mismatch
+        when: verification finishes
+        then: no final cache blob exists and cleanup behavior is recorded
+      - story_id: artifact-foundation/story/hydrate-and-atomically-promote-blobs
+        given: a valid download completes
+        when: promotion occurs
+        then: readers observe either no blob or the complete verified blob, never a
+          partial state
+      - story_id: artifact-foundation/story/materialize-safe-comfy-model-links
+        given: a destination is absolute, empty, trailing parent, or escapes through a
+          symlink
+        when: materialization is attempted
+        then: the operation fails before the model tree changes
+      - story_id: artifact-foundation/story/materialize-safe-comfy-model-links
+        given: a valid destination already has the correct managed link
+        when: materialization repeats
+        then: the operation is idempotent and leaves the link unchanged
+      - story_id: artifact-foundation/story/reuse-and-evict-bounded-cache
+        given: all required blobs are present and verified
+        when: hydration runs
+        then: zero model bytes are downloaded
+      - story_id: artifact-foundation/story/reuse-and-evict-bounded-cache
+        given: capacity is insufficient and no safe candidate exists
+        when: preflight completes
+        then: startup fails before partial downloads consume remaining disk
+    error_handling:
+      - condition: checksum_or_size_mismatch
+        error: ArtifactVerificationError
+        recovery: Delete or quarantine only the partial file; never expose the final
+          cache key
+        retryable: false
+      - condition: unsafe_destination
+        error: PathContainmentError
+        recovery: Refuse materialization and leave the model tree unchanged
+        retryable: false
+      - condition: capacity_or_transfer_failure
+        error: HydrationUnavailable
+        recovery: Retry only when capacity/network classification is retryable; keep
+          readiness false
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/6
+        - artifact-foundation/slice/7
+        - artifact-foundation/slice/8
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/6
+        - artifact-foundation/slice/7
+        - artifact-foundation/slice/8
+      provides:
+        - IoC composition of all Deterministic Cache Hydration components and
+          adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - artifact-foundation.deterministic-cache-hydration.9.started
+        - artifact-foundation.deterministic-cache-hydration.9.succeeded
+        - artifact-foundation.deterministic-cache-hydration.9.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S9-T01
+        level: contract
+        given: a download is interrupted or has a checksum mismatch
+        when: verification finishes
+        then: no final cache blob exists and cleanup behavior is recorded
+      - id: S9-T02
+        level: contract
+        given: a valid download completes
+        when: promotion occurs
+        then: readers observe either no blob or the complete verified blob, never a
+          partial state
+      - id: S9-T03
+        level: contract
+        given: a destination is absolute, empty, trailing parent, or escapes through a
+          symlink
+        when: materialization is attempted
+        then: the operation fails before the model tree changes
+      - id: S9-T04
+        level: contract
+        given: a valid destination already has the correct managed link
+        when: materialization repeats
+        then: the operation is idempotent and leaves the link unchanged
+      - id: S9-T05
+        level: contract
+        given: all required blobs are present and verified
+        when: hydration runs
+        then: zero model bytes are downloaded
+      - id: S9-T06
+        level: contract
+        given: capacity is insufficient and no safe candidate exists
+        when: preflight completes
+        then: startup fails before partial downloads consume remaining disk
+      - id: S9-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Deterministic Cache Hydration runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-cache-hydration-10-spec
+    title: Test Deterministic Cache Hydration Specification
+    status: approved
+    format: abbreviated
+    capability: artifact-foundation
+    feature: deterministic-cache-hydration
+    slice: 10
+    source_story_ids:
+      - artifact-foundation/story/hydrate-and-atomically-promote-blobs
+      - artifact-foundation/story/materialize-safe-comfy-model-links
+      - artifact-foundation/story/reuse-and-evict-bounded-cache
+    purpose: Implement Test Deterministic Cache Hydration as the integration
+      contract that table-driven unit coverage for deterministic cache hydration
+      domain contracts.
+    layer_assignment:
+      - component: test_deterministic_cache_hydration
+        layer: integration
+        responsibility: Table-driven unit coverage for Deterministic Cache Hydration
+          domain contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_deterministic_cache_hydration
+        kind: test_suite
+        signature: "pytest suite: test_deterministic_cache_hydration"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestDeterministicCacheHydrationError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestDeterministicCacheHydrationRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestDeterministicCacheHydrationResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Deterministic Cache Hydration domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: artifact-foundation/story/hydrate-and-atomically-promote-blobs
+        given: a download is interrupted or has a checksum mismatch
+        when: verification finishes
+        then: no final cache blob exists and cleanup behavior is recorded
+      - story_id: artifact-foundation/story/hydrate-and-atomically-promote-blobs
+        given: a valid download completes
+        when: promotion occurs
+        then: readers observe either no blob or the complete verified blob, never a
+          partial state
+      - story_id: artifact-foundation/story/materialize-safe-comfy-model-links
+        given: a destination is absolute, empty, trailing parent, or escapes through a
+          symlink
+        when: materialization is attempted
+        then: the operation fails before the model tree changes
+      - story_id: artifact-foundation/story/materialize-safe-comfy-model-links
+        given: a valid destination already has the correct managed link
+        when: materialization repeats
+        then: the operation is idempotent and leaves the link unchanged
+      - story_id: artifact-foundation/story/reuse-and-evict-bounded-cache
+        given: all required blobs are present and verified
+        when: hydration runs
+        then: zero model bytes are downloaded
+      - story_id: artifact-foundation/story/reuse-and-evict-bounded-cache
+        given: capacity is insufficient and no safe candidate exists
+        when: preflight completes
+        then: startup fails before partial downloads consume remaining disk
+    error_handling:
+      - condition: checksum_or_size_mismatch
+        error: ArtifactVerificationError
+        recovery: Delete or quarantine only the partial file; never expose the final
+          cache key
+        retryable: false
+      - condition: unsafe_destination
+        error: PathContainmentError
+        recovery: Refuse materialization and leave the model tree unchanged
+        retryable: false
+      - condition: capacity_or_transfer_failure
+        error: HydrationUnavailable
+        recovery: Retry only when capacity/network classification is retryable; keep
+          readiness false
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - artifact-foundation/slice/9
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - artifact-foundation/slice/9
+      provides:
+        - Table-driven unit coverage for Deterministic Cache Hydration domain
+          contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - artifact-foundation.deterministic-cache-hydration.10.started
+        - artifact-foundation.deterministic-cache-hydration.10.succeeded
+        - artifact-foundation.deterministic-cache-hydration.10.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S10-T01
+        level: integration
+        given: a download is interrupted or has a checksum mismatch
+        when: verification finishes
+        then: no final cache blob exists and cleanup behavior is recorded
+      - id: S10-T02
+        level: integration
+        given: a valid download completes
+        when: promotion occurs
+        then: readers observe either no blob or the complete verified blob, never a
+          partial state
+      - id: S10-T03
+        level: integration
+        given: a destination is absolute, empty, trailing parent, or escapes through a
+          symlink
+        when: materialization is attempted
+        then: the operation fails before the model tree changes
+      - id: S10-T04
+        level: integration
+        given: a valid destination already has the correct managed link
+        when: materialization repeats
+        then: the operation is idempotent and leaves the link unchanged
+      - id: S10-T05
+        level: integration
+        given: all required blobs are present and verified
+        when: hydration runs
+        then: zero model bytes are downloaded
+      - id: S10-T06
+        level: integration
+        given: capacity is insufficient and no safe candidate exists
+        when: preflight completes
+        then: startup fails before partial downloads consume remaining disk
+      - id: S10-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Deterministic Cache Hydration runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.

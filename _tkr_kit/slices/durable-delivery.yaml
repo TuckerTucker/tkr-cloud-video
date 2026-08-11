@@ -1,0 +1,254 @@
+capability: durable-delivery
+slices:
+  - delivers:
+      - Versioned result manifest, artifact evidence, upload attempt, and
+        commit-state models
+      - Canonical serialization and idempotent matching/conflict rules
+    depends_on: []
+    story_ids:
+      - allocate-immutable-result-attempt
+    files:
+      - src/tkr_cloud_video/delivery/contracts.py
+      - schemas/result.schema.json
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    title: Result commit contracts
+    number: 1
+    layer: domain
+    feature: verified-result-commit
+    status: planned
+    paths:
+      - src/tkr_cloud_video/delivery/contracts.py
+      - schemas/result.schema.json
+  - delivers:
+      - Role-based upload of exact local result set to immutable attempt prefixes
+      - Remote head/list verification of every object by size and
+        provider-supported checksum plus immutable version capture
+    depends_on:
+      - 1
+    story_ids:
+      - upload-and-verify-all-result-artifacts
+    files:
+      - src/tkr_cloud_video/delivery/uploader.py
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    title: Verified object uploader
+    number: 2
+    layer: service
+    feature: verified-result-commit
+    status: planned
+    paths:
+      - src/tkr_cloud_video/delivery/uploader.py
+  - delivers:
+      - Commit builder from verified evidence and publish-last result.json
+        workflow
+      - Existing-marker match/conflict handling and consumer-visible state
+        transition
+    depends_on:
+      - 1
+      - 2
+    story_ids:
+      - publish-result-commit-marker-last
+    files:
+      - src/tkr_cloud_video/delivery/commit.py
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    title: Commit marker service
+    number: 3
+    layer: service
+    feature: verified-result-commit
+    status: planned
+    paths:
+      - src/tkr_cloud_video/delivery/commit.py
+  - delivers:
+      - IoC composition of all Verified Result Commit components and adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 1
+      - 2
+      - 3
+    story_ids:
+      - allocate-immutable-result-attempt
+      - upload-and-verify-all-result-artifacts
+      - publish-result-commit-marker-last
+    files:
+      - src/tkr_cloud_video/durable_delivery/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    title: Wire Verified Result Commit
+    number: 4
+    layer: integration
+    feature: verified-result-commit
+    status: planned
+    paths:
+      - src/tkr_cloud_video/durable_delivery/composition.py
+  - delivers:
+      - Table-driven unit coverage for Verified Result Commit domain contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 4
+    story_ids:
+      - allocate-immutable-result-attempt
+      - upload-and-verify-all-result-artifacts
+      - publish-result-commit-marker-last
+    files:
+      - tests/durable_delivery/test_verified_result_commit.py
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    title: Test Verified Result Commit
+    number: 5
+    layer: integration
+    feature: verified-result-commit
+    status: planned
+    paths:
+      - tests/durable_delivery/test_verified_result_commit.py
+  - delivers:
+      - Authorization decision contract and non-enumerating job-state mapping
+      - Stable not-found, in-progress, failed, expired, and completed domain
+        outcomes
+    depends_on:
+      - 5
+    story_ids:
+      - authorize-private-result-lookup
+    files:
+      - src/tkr_cloud_video/delivery/access_policy.py
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    title: Result access policy
+    number: 6
+    layer: domain
+    feature: private-result-access-and-retention
+    status: planned
+    paths:
+      - src/tkr_cloud_video/delivery/access_policy.py
+  - delivers:
+      - Authorized result lookup and sanitized committed metadata response
+      - Delivery-only signed-link adapter with bounded TTL and structural
+        redaction
+    depends_on:
+      - 6
+    story_ids:
+      - issue-short-lived-download-link
+    files:
+      - src/tkr_cloud_video/delivery/api.py
+      - src/tkr_cloud_video/delivery/signed_links.py
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    title: Private delivery API
+    number: 7
+    layer: api
+    feature: private-result-access-and-retention
+    status: planned
+    paths:
+      - src/tkr_cloud_video/delivery/api.py
+      - src/tkr_cloud_video/delivery/signed_links.py
+  - delivers:
+      - Versioned object-class retention policy and Backblaze lifecycle adapter
+      - Fixture-based audit for inputs, failed attempts, scratch, deliverables,
+        hidden versions, and multipart uploads
+    depends_on:
+      - 6
+      - 7
+    story_ids:
+      - enforce-object-lifecycle-policy
+    files:
+      - src/tkr_cloud_video/delivery/lifecycle.py
+      - config/lifecycle.yaml
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    title: Lifecycle policy provisioner
+    number: 8
+    layer: integration
+    feature: private-result-access-and-retention
+    status: planned
+    paths:
+      - src/tkr_cloud_video/delivery/lifecycle.py
+      - config/lifecycle.yaml
+  - delivers:
+      - IoC composition of all Private Result Access and Retention components
+        and adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 6
+      - 7
+      - 8
+    story_ids:
+      - authorize-private-result-lookup
+      - issue-short-lived-download-link
+      - enforce-object-lifecycle-policy
+    files:
+      - src/tkr_cloud_video/durable_delivery/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    title: Wire Private Result Access and Retention
+    number: 9
+    layer: integration
+    feature: private-result-access-and-retention
+    status: planned
+    paths:
+      - src/tkr_cloud_video/durable_delivery/composition.py
+  - delivers:
+      - Table-driven unit coverage for Private Result Access and Retention
+        domain contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 9
+    story_ids:
+      - authorize-private-result-lookup
+      - issue-short-lived-download-link
+      - enforce-object-lifecycle-policy
+    files:
+      - tests/durable_delivery/test_private_result_access_and_retention.py
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    title: Test Private Result Access and Retention
+    number: 10
+    layer: integration
+    feature: private-result-access-and-retention
+    status: planned
+    paths:
+      - tests/durable_delivery/test_private_result_access_and_retention.py

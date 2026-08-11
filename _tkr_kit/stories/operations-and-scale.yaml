@@ -1,0 +1,207 @@
+capability: operations-and-scale
+stories:
+  - name: emit-correlated-structured-events
+    status: planned
+    display_name: Emit correlated structured events
+    feature: observability-and-cost-control
+    actor: Platform operator
+    intent: trace each worker and job phase through structured JSON without
+      sensitive data
+    preconditions:
+      - The event schema and redaction policy are versioned.
+      - Worker, release, job, and attempt correlation identifiers are available.
+    trigger_action: A boot, hydration, readiness, job, upload, commit, delivery, or
+      authorization state changes
+    steps:
+      - actor: Domain component
+        action: emits a typed event through the injected logger
+        system_response: common correlation and phase fields are added
+      - actor: Logging adapter
+        action: applies allowlists, redaction, and bounded serialization
+        system_response: secrets, links, prompts, and user filenames are excluded
+      - actor: Telemetry backend
+        action: indexes the event under bounded-cardinality dimensions
+        system_response: operators can reconstruct the state transition sequence
+    acceptance_criteria:
+      - given: a secret or signed URL is present in an exception or adapter payload
+        when: structured logging runs
+        then: the sensitive value is redacted before serialization
+      - given: a job completes or fails
+        when: its correlation ID is queried
+        then: the ordered phase history identifies the terminal transition
+    slice_ids:
+      - operations-and-scale/slice/1
+      - operations-and-scale/slice/4
+      - operations-and-scale/slice/5
+  - name: alert-on-health-security-and-capacity
+    status: planned
+    display_name: Alert on health, security, and capacity
+    feature: observability-and-cost-control
+    actor: On-call operator
+    intent: receive contextual alerts that distinguish actionable failure classes
+      and include safe remediation signals
+    preconditions:
+      - Metrics and structured events map to typed failure classes.
+      - Alert thresholds, deduplication, and routing are configured.
+    trigger_action: A monitored signal crosses its policy threshold
+    steps:
+      - actor: Monitoring system
+        action: evaluates readiness, checksum, transfer, generation, authorization,
+          storage, GPU, and capacity signals
+        system_response: an alert is created only after the configured condition
+      - actor: On-call operator
+        action: opens the alert
+        system_response: safe correlation, release, phase, severity, and runbook
+          references are available
+      - actor: Monitoring system
+        action: observes recovery or operator action
+        system_response: the alert resolves with recorded evidence
+    acceptance_criteria:
+      - given: hydration checksum failures spike for one release
+        when: alert evaluation runs
+        then: the alert identifies artifact/release context without credentials
+      - given: a transient retry recovers below threshold
+        when: alert evaluation runs
+        then: no noisy page is emitted and the recovery remains visible in metrics
+    slice_ids:
+      - operations-and-scale/slice/2
+      - operations-and-scale/slice/4
+      - operations-and-scale/slice/5
+  - name: benchmark-cold-warm-and-provider-cost
+    status: planned
+    display_name: Benchmark cold, warm, and provider cost
+    feature: observability-and-cost-control
+    actor: Platform operator
+    intent: compare B2 and R2 using measured regional behavior and current pricing
+      inputs
+    preconditions:
+      - The benchmark fixture and model-set manifest are immutable.
+      - Official pricing source date and units are recorded.
+    trigger_action: A model set, RunPod region, transfer configuration, or provider
+      price changes
+    steps:
+      - actor: Benchmark runner
+        action: executes controlled empty-cache and retained-cache starts
+        system_response: duration, bytes, throughput, requests, errors, and cache hits
+          are captured
+      - actor: Cost model
+        action: combines measured storage, transfer, and operation volumes with current
+          provider rules
+        system_response: assumptions and free-tier treatment are explicit
+      - actor: Platform operator
+        action: reviews the evidence
+        system_response: provider or tuning changes require a recorded decision rather
+          than list-price intuition
+    acceptance_criteria:
+      - given: a benchmark report omits region, manifest identity, or source date
+        when: report validation runs
+        then: the comparison is rejected as non-reproducible
+      - given: B2 and R2 runs complete
+        when: the report is generated
+        then: cost and startup performance are comparable from the same measured
+          workload
+    slice_ids:
+      - operations-and-scale/slice/3
+      - operations-and-scale/slice/4
+      - operations-and-scale/slice/5
+  - name: prove-interactive-pod-acceptance
+    status: planned
+    display_name: Prove Interactive Pod acceptance
+    feature: serverless-release
+    actor: Release operator
+    intent: validate the complete product contract on a disposable Interactive Pod
+      before Serverless packaging
+    preconditions:
+      - All feature specs are approved for the candidate.
+      - The test bucket, secrets, model set, and workflow are provisioned.
+    trigger_action: A release candidate is ready for environment acceptance
+    steps:
+      - actor: Acceptance runner
+        action: launches a fresh Pod and executes cold-start, generation, commit, and
+          destroy scenarios
+        system_response: artifacts and structured evidence are captured
+      - actor: Acceptance runner
+        action: restarts with retained cache and injects corruption, storage, readiness,
+          and upload failures
+        system_response: fail-closed and zero-download warm behavior are verified
+      - actor: Release operator
+        action: reviews the evidence bundle
+        system_response: only a passing candidate may enter Serverless rollout
+    acceptance_criteria:
+      - given: any product success criterion lacks an executed scenario
+        when: acceptance review runs
+        then: the candidate is not eligible for Serverless promotion
+      - given: a passing job's Pod is destroyed immediately after commit
+        when: the result is resolved and downloaded
+        then: all required artifacts remain valid and private
+    slice_ids:
+      - operations-and-scale/slice/6
+      - operations-and-scale/slice/9
+      - operations-and-scale/slice/10
+  - name: run-contract-compatible-serverless-handler
+    status: planned
+    display_name: Run contract-compatible Serverless handler
+    feature: serverless-release
+    actor: Authorized application
+    intent: use the same generation and result contracts through a RunPod Serverless
+      endpoint
+    preconditions:
+      - The Interactive Pod contract has passed acceptance.
+      - The Serverless worker image and handler pin the same release.
+    trigger_action: The application invokes the deployed Serverless endpoint
+    steps:
+      - actor: Serverless handler
+        action: validates the request using the shared intake contract
+        system_response: invalid work is rejected before worker initialization where possible
+      - actor: Serverless worker
+        action: initializes artifacts and executes through shared domain services
+        system_response: cold and warm behavior preserves readiness and idempotency
+      - actor: Serverless handler
+        action: returns stable job/result references and typed errors
+        system_response: MP4 bytes and storage credentials are not proxied
+    acceptance_criteria:
+      - given: the same canonical request is submitted to Interactive Pod and Serverless
+          adapters
+        when: contract tests run
+        then: validation, execution metadata, result schema, and error classifications
+          match
+      - given: a Serverless invocation succeeds
+        when: the response is returned
+        then: it contains object/job references rather than embedded media bytes
+    slice_ids:
+      - operations-and-scale/slice/7
+      - operations-and-scale/slice/9
+      - operations-and-scale/slice/10
+  - name: exercise-rollout-failure-and-rollback
+    status: planned
+    display_name: Exercise rollout, failure, and rollback
+    feature: serverless-release
+    actor: On-call operator
+    intent: deploy and recover Serverless releases with proven concurrency, failure,
+      and rollback procedures
+    preconditions:
+      - Release gates, health metrics, rollback target, and runbooks are defined.
+      - Load and failure-injection fixtures are available.
+    trigger_action: A release enters staging or production rollout
+    steps:
+      - actor: Release pipeline
+        action: runs concurrency, duplicate, timeout, cancellation, storage-failure, and
+          capacity-exhaustion scenarios
+        system_response: isolation and typed outcomes are recorded
+      - actor: Release pipeline
+        action: rolls out under bounded exposure while monitoring gates
+        system_response: automatic or operator rollback triggers on declared signals
+      - actor: On-call operator
+        action: rehearses rollback and recovery
+        system_response: observables confirm the prior healthy release and job safety
+    acceptance_criteria:
+      - given: concurrent jobs share a worker
+        when: isolation tests run
+        then: workspaces, prompt IDs, outputs, and commits cannot cross-contaminate
+      - given: a rollout breaches a declared readiness or error threshold
+        when: the gate evaluates
+        then: traffic returns to the pinned rollback release with evidence of recovery
+    slice_ids:
+      - operations-and-scale/slice/8
+      - operations-and-scale/slice/9
+      - operations-and-scale/slice/10

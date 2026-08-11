@@ -1,0 +1,2088 @@
+capability: durable-delivery
+slice_specs:
+  - name: verified-result-commit-1-spec
+    title: Result commit contracts Specification
+    status: approved
+    format: full
+    capability: durable-delivery
+    feature: verified-result-commit
+    slice: 1
+    source_story_ids:
+      - durable-delivery/story/allocate-immutable-result-attempt
+    purpose: Implement Result commit contracts as the domain contract that versioned
+      result manifest, artifact evidence, upload attempt, and commit-state
+      models.
+    layer_assignment:
+      - component: ResultCommitContractsPolicy
+        layer: domain
+        responsibility: Versioned result manifest, artifact evidence, upload attempt,
+          and commit-state models
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ResultCommitContractsPolicy
+        kind: policy_or_domain_service
+        signature: "async def execute(self, request: ResultCommitContractsRequest,
+          context: OperationContext) -> ResultCommitContractsResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ResultCommitContractsError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ResultCommitContractsRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ResultCommitContractsResult
+        shape: frozen dataclass or Pydantic model
+        fields: Versioned result manifest, artifact evidence, upload attempt, and
+          commit-state models,Canonical serialization and idempotent
+          matching/conflict rules
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/allocate-immutable-result-attempt
+        given: a completed job is delivered again
+        when: attempt allocation runs
+        then: the existing committed result is returned without remote mutation
+      - story_id: durable-delivery/story/allocate-immutable-result-attempt
+        given: concurrent upload retries target the same job
+        when: attempt allocation runs
+        then: they converge safely or receive distinct attempts that cannot mix
+          artifacts
+    error_handling:
+      - condition: upload_failed
+        error: ArtifactUploadError
+        recovery: Retry within the immutable attempt; never publish completion
+        retryable: true
+      - condition: remote_mismatch
+        error: RemoteVerificationError
+        recovery: Mark the attempt failed and preserve evidence for bounded diagnostics
+        retryable: false
+      - condition: commit_conflict_or_incomplete
+        error: ResultCommitError
+        recovery: Refuse mutation and return the existing matching commit or a conflict
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - product configuration, security policy, and injected platform ports
+      provides:
+        - Versioned result manifest, artifact evidence, upload attempt, and
+          commit-state models
+        - Canonical serialization and idempotent matching/conflict rules
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - durable-delivery.verified-result-commit.1.started
+        - durable-delivery.verified-result-commit.1.succeeded
+        - durable-delivery.verified-result-commit.1.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S1-T01
+        level: unit
+        given: a completed job is delivered again
+        when: attempt allocation runs
+        then: the existing committed result is returned without remote mutation
+      - id: S1-T02
+        level: unit
+        given: concurrent upload retries target the same job
+        when: attempt allocation runs
+        then: they converge safely or receive distinct attempts that cannot mix
+          artifacts
+      - id: S1-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Result commit contracts runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: verified-result-commit-2-spec
+    title: Verified object uploader Specification
+    status: approved
+    format: full
+    capability: durable-delivery
+    feature: verified-result-commit
+    slice: 2
+    source_story_ids:
+      - durable-delivery/story/upload-and-verify-all-result-artifacts
+    purpose: Implement Verified object uploader as the service contract that
+      role-based upload of exact local result set to immutable attempt prefixes.
+    layer_assignment:
+      - component: VerifiedObjectUploaderService
+        layer: service
+        responsibility: Role-based upload of exact local result set to immutable attempt
+          prefixes
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: VerifiedObjectUploaderService
+        kind: application_service
+        signature: "async def execute(self, request: VerifiedObjectUploaderRequest,
+          context: OperationContext) -> VerifiedObjectUploaderResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: VerifiedObjectUploaderError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: VerifiedObjectUploaderRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: VerifiedObjectUploaderResult
+        shape: frozen dataclass or Pydantic model
+        fields: Role-based upload of exact local result set to immutable attempt
+          prefixes,Remote head/list verification of every object by size and
+          provider-supported checksum plus immutable version capture
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/upload-and-verify-all-result-artifacts
+        given: video upload is absent or mismatched while metadata matches
+        when: verification runs
+        then: the attempt fails and result.json is not uploaded
+      - story_id: durable-delivery/story/upload-and-verify-all-result-artifacts
+        given: all required artifacts match
+        when: verification completes
+        then: each result entry has local SHA-256, byte count, remote key, and immutable
+          provider identity
+    error_handling:
+      - condition: upload_failed
+        error: ArtifactUploadError
+        recovery: Retry within the immutable attempt; never publish completion
+        retryable: true
+      - condition: remote_mismatch
+        error: RemoteVerificationError
+        recovery: Mark the attempt failed and preserve evidence for bounded diagnostics
+        retryable: false
+      - condition: commit_conflict_or_incomplete
+        error: ResultCommitError
+        recovery: Refuse mutation and return the existing matching commit or a conflict
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/1
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/1
+      provides:
+        - Role-based upload of exact local result set to immutable attempt
+          prefixes
+        - Remote head/list verification of every object by size and
+          provider-supported checksum plus immutable version capture
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: TRANSFER_CONCURRENCY
+        type: integer
+        default: 4
+        secret: false
+        validation: 1..16 and memory-budget checked
+      - name: TRANSFER_TIMEOUT_SECONDS
+        type: integer
+        default: 7200
+        secret: false
+        validation: "> 0"
+      - name: MAX_RETRIES
+        type: integer
+        default: 5
+        secret: false
+        validation: 0..10
+    observability:
+      events:
+        - durable-delivery.verified-result-commit.2.started
+        - durable-delivery.verified-result-commit.2.succeeded
+        - durable-delivery.verified-result-commit.2.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S2-T01
+        level: contract
+        given: video upload is absent or mismatched while metadata matches
+        when: verification runs
+        then: the attempt fails and result.json is not uploaded
+      - id: S2-T02
+        level: contract
+        given: all required artifacts match
+        when: verification completes
+        then: each result entry has local SHA-256, byte count, remote key, and immutable
+          provider identity
+      - id: S2-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Verified object uploader runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: verified-result-commit-3-spec
+    title: Commit marker service Specification
+    status: approved
+    format: full
+    capability: durable-delivery
+    feature: verified-result-commit
+    slice: 3
+    source_story_ids:
+      - durable-delivery/story/publish-result-commit-marker-last
+    purpose: Implement Commit marker service as the service contract that commit
+      builder from verified evidence and publish-last result.json workflow.
+    layer_assignment:
+      - component: CommitMarkerServiceService
+        layer: service
+        responsibility: Commit builder from verified evidence and publish-last
+          result.json workflow
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: CommitMarkerServiceService
+        kind: application_service
+        signature: "async def execute(self, request: CommitMarkerServiceRequest,
+          context: OperationContext) -> CommitMarkerServiceResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: CommitMarkerServiceError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: CommitMarkerServiceRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: CommitMarkerServiceResult
+        shape: frozen dataclass or Pydantic model
+        fields: Commit builder from verified evidence and publish-last result.json
+          workflow,Existing-marker match/conflict handling and consumer-visible
+          state transition
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/publish-result-commit-marker-last
+        given: any artifact verification is incomplete
+        when: commit publication is requested
+        then: publication is refused and consumers cannot observe completed
+      - story_id: durable-delivery/story/publish-result-commit-marker-last
+        given: an identical commit upload is retried
+        when: the result service compares canonical content
+        then: the operation is idempotent without creating a divergent result
+    error_handling:
+      - condition: upload_failed
+        error: ArtifactUploadError
+        recovery: Retry within the immutable attempt; never publish completion
+        retryable: true
+      - condition: remote_mismatch
+        error: RemoteVerificationError
+        recovery: Mark the attempt failed and preserve evidence for bounded diagnostics
+        retryable: false
+      - condition: commit_conflict_or_incomplete
+        error: ResultCommitError
+        recovery: Refuse mutation and return the existing matching commit or a conflict
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/1
+        - durable-delivery/slice/2
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/1
+        - durable-delivery/slice/2
+      provides:
+        - Commit builder from verified evidence and publish-last result.json
+          workflow
+        - Existing-marker match/conflict handling and consumer-visible state
+          transition
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - durable-delivery.verified-result-commit.3.started
+        - durable-delivery.verified-result-commit.3.succeeded
+        - durable-delivery.verified-result-commit.3.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S3-T01
+        level: contract
+        given: any artifact verification is incomplete
+        when: commit publication is requested
+        then: publication is refused and consumers cannot observe completed
+      - id: S3-T02
+        level: contract
+        given: an identical commit upload is retried
+        when: the result service compares canonical content
+        then: the operation is idempotent without creating a divergent result
+      - id: S3-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Commit marker service runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: verified-result-commit-4-spec
+    title: Wire Verified Result Commit Specification
+    status: approved
+    format: abbreviated
+    capability: durable-delivery
+    feature: verified-result-commit
+    slice: 4
+    source_story_ids:
+      - durable-delivery/story/allocate-immutable-result-attempt
+      - durable-delivery/story/upload-and-verify-all-result-artifacts
+      - durable-delivery/story/publish-result-commit-marker-last
+    purpose: Implement Wire Verified Result Commit as the integration contract that
+      ioc composition of all verified result commit components and adapters.
+    layer_assignment:
+      - component: compose_verified_result_commit
+        layer: integration
+        responsibility: IoC composition of all Verified Result Commit components and adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_verified_result_commit
+        kind: composition_root
+        signature: "def compose_verified_result_commit(dependencies:
+          VerifiedResultCommitDependencies) -> VerifiedResultCommitServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireVerifiedResultCommitError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireVerifiedResultCommitRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireVerifiedResultCommitResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Verified Result Commit components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/allocate-immutable-result-attempt
+        given: a completed job is delivered again
+        when: attempt allocation runs
+        then: the existing committed result is returned without remote mutation
+      - story_id: durable-delivery/story/allocate-immutable-result-attempt
+        given: concurrent upload retries target the same job
+        when: attempt allocation runs
+        then: they converge safely or receive distinct attempts that cannot mix
+          artifacts
+      - story_id: durable-delivery/story/upload-and-verify-all-result-artifacts
+        given: video upload is absent or mismatched while metadata matches
+        when: verification runs
+        then: the attempt fails and result.json is not uploaded
+      - story_id: durable-delivery/story/upload-and-verify-all-result-artifacts
+        given: all required artifacts match
+        when: verification completes
+        then: each result entry has local SHA-256, byte count, remote key, and immutable
+          provider identity
+      - story_id: durable-delivery/story/publish-result-commit-marker-last
+        given: any artifact verification is incomplete
+        when: commit publication is requested
+        then: publication is refused and consumers cannot observe completed
+      - story_id: durable-delivery/story/publish-result-commit-marker-last
+        given: an identical commit upload is retried
+        when: the result service compares canonical content
+        then: the operation is idempotent without creating a divergent result
+    error_handling:
+      - condition: upload_failed
+        error: ArtifactUploadError
+        recovery: Retry within the immutable attempt; never publish completion
+        retryable: true
+      - condition: remote_mismatch
+        error: RemoteVerificationError
+        recovery: Mark the attempt failed and preserve evidence for bounded diagnostics
+        retryable: false
+      - condition: commit_conflict_or_incomplete
+        error: ResultCommitError
+        recovery: Refuse mutation and return the existing matching commit or a conflict
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/1
+        - durable-delivery/slice/2
+        - durable-delivery/slice/3
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/1
+        - durable-delivery/slice/2
+        - durable-delivery/slice/3
+      provides:
+        - IoC composition of all Verified Result Commit components and adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - durable-delivery.verified-result-commit.4.started
+        - durable-delivery.verified-result-commit.4.succeeded
+        - durable-delivery.verified-result-commit.4.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S4-T01
+        level: contract
+        given: a completed job is delivered again
+        when: attempt allocation runs
+        then: the existing committed result is returned without remote mutation
+      - id: S4-T02
+        level: contract
+        given: concurrent upload retries target the same job
+        when: attempt allocation runs
+        then: they converge safely or receive distinct attempts that cannot mix
+          artifacts
+      - id: S4-T03
+        level: contract
+        given: video upload is absent or mismatched while metadata matches
+        when: verification runs
+        then: the attempt fails and result.json is not uploaded
+      - id: S4-T04
+        level: contract
+        given: all required artifacts match
+        when: verification completes
+        then: each result entry has local SHA-256, byte count, remote key, and immutable
+          provider identity
+      - id: S4-T05
+        level: contract
+        given: any artifact verification is incomplete
+        when: commit publication is requested
+        then: publication is refused and consumers cannot observe completed
+      - id: S4-T06
+        level: contract
+        given: an identical commit upload is retried
+        when: the result service compares canonical content
+        then: the operation is idempotent without creating a divergent result
+      - id: S4-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Verified Result Commit runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: verified-result-commit-5-spec
+    title: Test Verified Result Commit Specification
+    status: approved
+    format: abbreviated
+    capability: durable-delivery
+    feature: verified-result-commit
+    slice: 5
+    source_story_ids:
+      - durable-delivery/story/allocate-immutable-result-attempt
+      - durable-delivery/story/upload-and-verify-all-result-artifacts
+      - durable-delivery/story/publish-result-commit-marker-last
+    purpose: Implement Test Verified Result Commit as the integration contract that
+      table-driven unit coverage for verified result commit domain contracts.
+    layer_assignment:
+      - component: test_verified_result_commit
+        layer: integration
+        responsibility: Table-driven unit coverage for Verified Result Commit domain contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_verified_result_commit
+        kind: test_suite
+        signature: "pytest suite: test_verified_result_commit"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestVerifiedResultCommitError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestVerifiedResultCommitRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestVerifiedResultCommitResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Verified Result Commit domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/allocate-immutable-result-attempt
+        given: a completed job is delivered again
+        when: attempt allocation runs
+        then: the existing committed result is returned without remote mutation
+      - story_id: durable-delivery/story/allocate-immutable-result-attempt
+        given: concurrent upload retries target the same job
+        when: attempt allocation runs
+        then: they converge safely or receive distinct attempts that cannot mix
+          artifacts
+      - story_id: durable-delivery/story/upload-and-verify-all-result-artifacts
+        given: video upload is absent or mismatched while metadata matches
+        when: verification runs
+        then: the attempt fails and result.json is not uploaded
+      - story_id: durable-delivery/story/upload-and-verify-all-result-artifacts
+        given: all required artifacts match
+        when: verification completes
+        then: each result entry has local SHA-256, byte count, remote key, and immutable
+          provider identity
+      - story_id: durable-delivery/story/publish-result-commit-marker-last
+        given: any artifact verification is incomplete
+        when: commit publication is requested
+        then: publication is refused and consumers cannot observe completed
+      - story_id: durable-delivery/story/publish-result-commit-marker-last
+        given: an identical commit upload is retried
+        when: the result service compares canonical content
+        then: the operation is idempotent without creating a divergent result
+    error_handling:
+      - condition: upload_failed
+        error: ArtifactUploadError
+        recovery: Retry within the immutable attempt; never publish completion
+        retryable: true
+      - condition: remote_mismatch
+        error: RemoteVerificationError
+        recovery: Mark the attempt failed and preserve evidence for bounded diagnostics
+        retryable: false
+      - condition: commit_conflict_or_incomplete
+        error: ResultCommitError
+        recovery: Refuse mutation and return the existing matching commit or a conflict
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/4
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/4
+      provides:
+        - Table-driven unit coverage for Verified Result Commit domain contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - durable-delivery.verified-result-commit.5.started
+        - durable-delivery.verified-result-commit.5.succeeded
+        - durable-delivery.verified-result-commit.5.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S5-T01
+        level: integration
+        given: a completed job is delivered again
+        when: attempt allocation runs
+        then: the existing committed result is returned without remote mutation
+      - id: S5-T02
+        level: integration
+        given: concurrent upload retries target the same job
+        when: attempt allocation runs
+        then: they converge safely or receive distinct attempts that cannot mix
+          artifacts
+      - id: S5-T03
+        level: integration
+        given: video upload is absent or mismatched while metadata matches
+        when: verification runs
+        then: the attempt fails and result.json is not uploaded
+      - id: S5-T04
+        level: integration
+        given: all required artifacts match
+        when: verification completes
+        then: each result entry has local SHA-256, byte count, remote key, and immutable
+          provider identity
+      - id: S5-T05
+        level: integration
+        given: any artifact verification is incomplete
+        when: commit publication is requested
+        then: publication is refused and consumers cannot observe completed
+      - id: S5-T06
+        level: integration
+        given: an identical commit upload is retried
+        when: the result service compares canonical content
+        then: the operation is idempotent without creating a divergent result
+      - id: S5-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Verified Result Commit runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Uncommitted upload attempts expire after the retry/debug window;
+        committed result manifests and selected deliverables follow product
+        retention. Abandoned multipart uploads and hidden versions are
+        explicitly expired.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: private-result-access-and-retention-6-spec
+    title: Result access policy Specification
+    status: approved
+    format: full
+    capability: durable-delivery
+    feature: private-result-access-and-retention
+    slice: 6
+    source_story_ids:
+      - durable-delivery/story/authorize-private-result-lookup
+    purpose: Implement Result access policy as the domain contract that
+      authorization decision contract and non-enumerating job-state mapping.
+    layer_assignment:
+      - component: ResultAccessPolicyPolicy
+        layer: domain
+        responsibility: Authorization decision contract and non-enumerating job-state mapping
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ResultAccessPolicyPolicy
+        kind: policy_or_domain_service
+        signature: "async def execute(self, request: ResultAccessPolicyRequest, context:
+          OperationContext) -> ResultAccessPolicyResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ResultAccessPolicyError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ResultAccessPolicyRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ResultAccessPolicyResult
+        shape: frozen dataclass or Pydantic model
+        fields: Authorization decision contract and non-enumerating job-state
+          mapping,Stable not-found, in-progress, failed, expired, and completed
+          domain outcomes
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/authorize-private-result-lookup
+        given: a caller lacks access to an existing job
+        when: result lookup runs
+        then: the response does not disclose job existence or metadata
+      - story_id: durable-delivery/story/authorize-private-result-lookup
+        given: an authorized completed job is requested
+        when: lookup succeeds
+        then: the response matches the committed result manifest and contains no storage
+          credential
+    error_handling:
+      - condition: access_denied
+        error: ResultAccessError
+        recovery: Return a non-enumerating denial and emit a redacted audit event
+        retryable: false
+      - condition: result_missing_expired_or_uncommitted
+        error: ResultUnavailable
+        recovery: Map to the stable domain state without leaking provider errors
+        retryable: false
+      - condition: provider_or_policy_failure
+        error: DeliveryPolicyError
+        recovery: Fail issuance/provisioning safely and alert when policy drift is
+          detected
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/5
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/5
+      provides:
+        - Authorization decision contract and non-enumerating job-state mapping
+        - Stable not-found, in-progress, failed, expired, and completed domain
+          outcomes
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - durable-delivery.private-result-access-and-retention.6.started
+        - durable-delivery.private-result-access-and-retention.6.succeeded
+        - durable-delivery.private-result-access-and-retention.6.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S6-T01
+        level: unit
+        given: a caller lacks access to an existing job
+        when: result lookup runs
+        then: the response does not disclose job existence or metadata
+      - id: S6-T02
+        level: unit
+        given: an authorized completed job is requested
+        when: lookup succeeds
+        then: the response matches the committed result manifest and contains no storage
+          credential
+      - id: S6-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Result access policy runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: private-result-access-and-retention-7-spec
+    title: Private delivery API Specification
+    status: approved
+    format: full
+    capability: durable-delivery
+    feature: private-result-access-and-retention
+    slice: 7
+    source_story_ids:
+      - durable-delivery/story/issue-short-lived-download-link
+    purpose: Implement Private delivery API as the api contract that authorized
+      result lookup and sanitized committed metadata response.
+    layer_assignment:
+      - component: PrivateDeliveryAPIHandler
+        layer: api
+        responsibility: Authorized result lookup and sanitized committed metadata response
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: PrivateDeliveryAPIHandler
+        kind: api_handler
+        signature: "async def execute(self, request: PrivateDeliveryAPIRequest, context:
+          OperationContext) -> PrivateDeliveryAPIResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: PrivateDeliveryAPIError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: PrivateDeliveryAPIRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: PrivateDeliveryAPIResult
+        shape: frozen dataclass or Pydantic model
+        fields: Authorized result lookup and sanitized committed metadata
+          response,Delivery-only signed-link adapter with bounded TTL and
+          structural redaction
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/issue-short-lived-download-link
+        given: an authorization is revoked before link issuance
+        when: the download request runs
+        then: no signed link is created
+      - story_id: durable-delivery/story/issue-short-lived-download-link
+        given: a signed link exceeds its TTL
+        when: the client attempts download
+        then: the provider rejects access without exposing reusable credentials
+    error_handling:
+      - condition: access_denied
+        error: ResultAccessError
+        recovery: Return a non-enumerating denial and emit a redacted audit event
+        retryable: false
+      - condition: result_missing_expired_or_uncommitted
+        error: ResultUnavailable
+        recovery: Map to the stable domain state without leaking provider errors
+        retryable: false
+      - condition: provider_or_policy_failure
+        error: DeliveryPolicyError
+        recovery: Fail issuance/provisioning safely and alert when policy drift is
+          detected
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/6
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/6
+      provides:
+        - Authorized result lookup and sanitized committed metadata response
+        - Delivery-only signed-link adapter with bounded TTL and structural
+          redaction
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: SIGNED_URL_TTL_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: 1..604800
+    observability:
+      events:
+        - durable-delivery.private-result-access-and-retention.7.started
+        - durable-delivery.private-result-access-and-retention.7.succeeded
+        - durable-delivery.private-result-access-and-retention.7.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S7-T01
+        level: contract
+        given: an authorization is revoked before link issuance
+        when: the download request runs
+        then: no signed link is created
+      - id: S7-T02
+        level: contract
+        given: a signed link exceeds its TTL
+        when: the client attempts download
+        then: the provider rejects access without exposing reusable credentials
+      - id: S7-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Private delivery API runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: private-result-access-and-retention-8-spec
+    title: Lifecycle policy provisioner Specification
+    status: approved
+    format: full
+    capability: durable-delivery
+    feature: private-result-access-and-retention
+    slice: 8
+    source_story_ids:
+      - durable-delivery/story/enforce-object-lifecycle-policy
+    purpose: Implement Lifecycle policy provisioner as the integration contract that
+      versioned object-class retention policy and backblaze lifecycle adapter.
+    layer_assignment:
+      - component: LifecyclePolicyProvisionerAdapter
+        layer: integration
+        responsibility: Versioned object-class retention policy and Backblaze lifecycle adapter
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: LifecyclePolicyProvisionerAdapter
+        kind: integration_adapter
+        signature: "async def execute(self, request: LifecyclePolicyProvisionerRequest,
+          context: OperationContext) -> LifecyclePolicyProvisionerResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: LifecyclePolicyProvisionerError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: LifecyclePolicyProvisionerRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: LifecyclePolicyProvisionerResult
+        shape: frozen dataclass or Pydantic model
+        fields: Versioned object-class retention policy and Backblaze lifecycle
+          adapter,Fixture-based audit for inputs, failed attempts, scratch,
+          deliverables, hidden versions, and multipart uploads
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/enforce-object-lifecycle-policy
+        given: a failed attempt exceeds its retention period
+        when: lifecycle processing runs
+        then: attempt objects are deleted without affecting committed deliverables
+      - story_id: durable-delivery/story/enforce-object-lifecycle-policy
+        given: a selected deliverable remains within its retention policy
+        when: lifecycle processing runs
+        then: the video and commit manifest remain available
+    error_handling:
+      - condition: access_denied
+        error: ResultAccessError
+        recovery: Return a non-enumerating denial and emit a redacted audit event
+        retryable: false
+      - condition: result_missing_expired_or_uncommitted
+        error: ResultUnavailable
+        recovery: Map to the stable domain state without leaking provider errors
+        retryable: false
+      - condition: provider_or_policy_failure
+        error: DeliveryPolicyError
+        recovery: Fail issuance/provisioning safely and alert when policy drift is
+          detected
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/6
+        - durable-delivery/slice/7
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/6
+        - durable-delivery/slice/7
+      provides:
+        - Versioned object-class retention policy and Backblaze lifecycle adapter
+        - Fixture-based audit for inputs, failed attempts, scratch,
+          deliverables, hidden versions, and multipart uploads
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - durable-delivery.private-result-access-and-retention.8.started
+        - durable-delivery.private-result-access-and-retention.8.succeeded
+        - durable-delivery.private-result-access-and-retention.8.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S8-T01
+        level: contract
+        given: a failed attempt exceeds its retention period
+        when: lifecycle processing runs
+        then: attempt objects are deleted without affecting committed deliverables
+      - id: S8-T02
+        level: contract
+        given: a selected deliverable remains within its retention policy
+        when: lifecycle processing runs
+        then: the video and commit manifest remain available
+      - id: S8-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Lifecycle policy provisioner runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: private-result-access-and-retention-9-spec
+    title: Wire Private Result Access and Retention Specification
+    status: approved
+    format: abbreviated
+    capability: durable-delivery
+    feature: private-result-access-and-retention
+    slice: 9
+    source_story_ids:
+      - durable-delivery/story/authorize-private-result-lookup
+      - durable-delivery/story/issue-short-lived-download-link
+      - durable-delivery/story/enforce-object-lifecycle-policy
+    purpose: Implement Wire Private Result Access and Retention as the integration
+      contract that ioc composition of all private result access and retention
+      components and adapters.
+    layer_assignment:
+      - component: compose_private_result_access_and_retention
+        layer: integration
+        responsibility: IoC composition of all Private Result Access and Retention
+          components and adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_private_result_access_and_retention
+        kind: composition_root
+        signature: "def compose_private_result_access_and_retention(dependencies:
+          PrivateResultAccessAndRetentionDependencies) ->
+          PrivateResultAccessAndRetentionServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WirePrivateResultAccessAndRetentionError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WirePrivateResultAccessAndRetentionRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WirePrivateResultAccessAndRetentionResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Private Result Access and Retention components
+          and adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/authorize-private-result-lookup
+        given: a caller lacks access to an existing job
+        when: result lookup runs
+        then: the response does not disclose job existence or metadata
+      - story_id: durable-delivery/story/authorize-private-result-lookup
+        given: an authorized completed job is requested
+        when: lookup succeeds
+        then: the response matches the committed result manifest and contains no storage
+          credential
+      - story_id: durable-delivery/story/issue-short-lived-download-link
+        given: an authorization is revoked before link issuance
+        when: the download request runs
+        then: no signed link is created
+      - story_id: durable-delivery/story/issue-short-lived-download-link
+        given: a signed link exceeds its TTL
+        when: the client attempts download
+        then: the provider rejects access without exposing reusable credentials
+      - story_id: durable-delivery/story/enforce-object-lifecycle-policy
+        given: a failed attempt exceeds its retention period
+        when: lifecycle processing runs
+        then: attempt objects are deleted without affecting committed deliverables
+      - story_id: durable-delivery/story/enforce-object-lifecycle-policy
+        given: a selected deliverable remains within its retention policy
+        when: lifecycle processing runs
+        then: the video and commit manifest remain available
+    error_handling:
+      - condition: dependency_missing
+        error: CompositionError
+        recovery: Fail composition before exposing the feature boundary
+        retryable: false
+      - condition: adapter_contract_mismatch
+        error: ContractError
+        recovery: Reject startup and name the incompatible port
+        retryable: false
+      - condition: configuration_invalid
+        error: RuntimeConfigurationError
+        recovery: Aggregate safe validation defects
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/6
+        - durable-delivery/slice/7
+        - durable-delivery/slice/8
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/6
+        - durable-delivery/slice/7
+        - durable-delivery/slice/8
+      provides:
+        - IoC composition of all Private Result Access and Retention components
+          and adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - durable-delivery.private-result-access-and-retention.9.started
+        - durable-delivery.private-result-access-and-retention.9.succeeded
+        - durable-delivery.private-result-access-and-retention.9.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S9-T01
+        level: contract
+        given: a caller lacks access to an existing job
+        when: result lookup runs
+        then: the response does not disclose job existence or metadata
+      - id: S9-T02
+        level: contract
+        given: an authorized completed job is requested
+        when: lookup succeeds
+        then: the response matches the committed result manifest and contains no storage
+          credential
+      - id: S9-T03
+        level: contract
+        given: an authorization is revoked before link issuance
+        when: the download request runs
+        then: no signed link is created
+      - id: S9-T04
+        level: contract
+        given: a signed link exceeds its TTL
+        when: the client attempts download
+        then: the provider rejects access without exposing reusable credentials
+      - id: S9-T05
+        level: contract
+        given: a failed attempt exceeds its retention period
+        when: lifecycle processing runs
+        then: attempt objects are deleted without affecting committed deliverables
+      - id: S9-T06
+        level: contract
+        given: a selected deliverable remains within its retention policy
+        when: lifecycle processing runs
+        then: the video and commit manifest remain available
+      - id: S9-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Private Result Access and Retention runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: private-result-access-and-retention-10-spec
+    title: Test Private Result Access and Retention Specification
+    status: approved
+    format: abbreviated
+    capability: durable-delivery
+    feature: private-result-access-and-retention
+    slice: 10
+    source_story_ids:
+      - durable-delivery/story/authorize-private-result-lookup
+      - durable-delivery/story/issue-short-lived-download-link
+      - durable-delivery/story/enforce-object-lifecycle-policy
+    purpose: Implement Test Private Result Access and Retention as the integration
+      contract that table-driven unit coverage for private result access and
+      retention domain contracts.
+    layer_assignment:
+      - component: test_private_result_access_and_retention
+        layer: integration
+        responsibility: Table-driven unit coverage for Private Result Access and
+          Retention domain contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_private_result_access_and_retention
+        kind: test_suite
+        signature: "pytest suite: test_private_result_access_and_retention"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestPrivateResultAccessAndRetentionError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestPrivateResultAccessAndRetentionRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestPrivateResultAccessAndRetentionResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Private Result Access and Retention
+          domain contracts,Integration, failure-injection, security, and
+          acceptance coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: durable-delivery/story/authorize-private-result-lookup
+        given: a caller lacks access to an existing job
+        when: result lookup runs
+        then: the response does not disclose job existence or metadata
+      - story_id: durable-delivery/story/authorize-private-result-lookup
+        given: an authorized completed job is requested
+        when: lookup succeeds
+        then: the response matches the committed result manifest and contains no storage
+          credential
+      - story_id: durable-delivery/story/issue-short-lived-download-link
+        given: an authorization is revoked before link issuance
+        when: the download request runs
+        then: no signed link is created
+      - story_id: durable-delivery/story/issue-short-lived-download-link
+        given: a signed link exceeds its TTL
+        when: the client attempts download
+        then: the provider rejects access without exposing reusable credentials
+      - story_id: durable-delivery/story/enforce-object-lifecycle-policy
+        given: a failed attempt exceeds its retention period
+        when: lifecycle processing runs
+        then: attempt objects are deleted without affecting committed deliverables
+      - story_id: durable-delivery/story/enforce-object-lifecycle-policy
+        given: a selected deliverable remains within its retention policy
+        when: lifecycle processing runs
+        then: the video and commit manifest remain available
+    error_handling:
+      - condition: test_fixture_invalid
+        error: TestContractError
+        recovery: Fail the suite before exercising production behavior
+        retryable: false
+      - condition: expected_failure_not_observed
+        error: AssertionError
+        recovery: Report the discriminating scenario and captured safe evidence
+        retryable: false
+      - condition: environment_unavailable
+        error: TestEnvironmentError
+        recovery: Mark the environment-dependent case blocked, not passed
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/9
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/9
+      provides:
+        - Table-driven unit coverage for Private Result Access and Retention
+          domain contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - durable-delivery.private-result-access-and-retention.10.started
+        - durable-delivery.private-result-access-and-retention.10.succeeded
+        - durable-delivery.private-result-access-and-retention.10.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S10-T01
+        level: integration
+        given: a caller lacks access to an existing job
+        when: result lookup runs
+        then: the response does not disclose job existence or metadata
+      - id: S10-T02
+        level: integration
+        given: an authorized completed job is requested
+        when: lookup succeeds
+        then: the response matches the committed result manifest and contains no storage
+          credential
+      - id: S10-T03
+        level: integration
+        given: an authorization is revoked before link issuance
+        when: the download request runs
+        then: no signed link is created
+      - id: S10-T04
+        level: integration
+        given: a signed link exceeds its TTL
+        when: the client attempts download
+        then: the provider rejects access without exposing reusable credentials
+      - id: S10-T05
+        level: integration
+        given: a failed attempt exceeds its retention period
+        when: lifecycle processing runs
+        then: attempt objects are deleted without affecting committed deliverables
+      - id: S10-T06
+        level: integration
+        given: a selected deliverable remains within its retention policy
+        when: lifecycle processing runs
+        then: the video and commit manifest remain available
+      - id: S10-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Private Result Access and Retention runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Input, failed-attempt, scratch, signed-link event, hidden-version,
+        multipart, and deliverable classes each carry an explicit retention
+        period. Lifecycle rules are verified with dated fixtures before
+        promotion.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.

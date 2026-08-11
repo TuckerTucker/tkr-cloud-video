@@ -1,0 +1,249 @@
+capability: worker-runtime
+slices:
+  - delivers:
+      - Machine-readable image release manifest for base image, Python lock,
+        ComfyUI, custom nodes, tools, schemas, and verification commands
+      - Deterministic build metadata exposed without secrets
+    depends_on: []
+    story_ids:
+      - build-pinned-worker-image
+    files:
+      - src/tkr_cloud_video/runtime/build_manifest.py
+      - schemas/worker-release.schema.json
+    title: Worker build manifest
+    number: 1
+    layer: data
+    feature: reproducible-worker-image
+    status: planned
+    paths:
+      - src/tkr_cloud_video/runtime/build_manifest.py
+      - schemas/worker-release.schema.json
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - delivers:
+      - Multi-stage digest-pinned container build with locked dependencies,
+        approved ComfyUI/custom nodes, rclone, ffprobe, and health tooling
+      - Build-time license, vulnerability, secret, and smoke gates
+    depends_on:
+      - 1
+    story_ids:
+      - validate-runtime-configuration
+    files:
+      - Dockerfile
+      - docker/
+    title: Pinned OCI image build
+    number: 2
+    layer: integration
+    feature: reproducible-worker-image
+    status: planned
+    paths:
+      - Dockerfile
+      - docker/
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - delivers:
+      - Typed settings with aggregated validation, secret references, safe
+        defaults, and IoC adapter construction
+      - GPU, disk, directory, artifact-size, and authorized-connectivity
+        preflight
+    depends_on:
+      - 1
+      - 2
+    story_ids:
+      - preflight-worker-capacity-and-connectivity
+    files:
+      - src/tkr_cloud_video/runtime/config.py
+      - src/tkr_cloud_video/runtime/preflight.py
+    title: Runtime configuration and preflight
+    number: 3
+    layer: service
+    feature: reproducible-worker-image
+    status: planned
+    paths:
+      - src/tkr_cloud_video/runtime/config.py
+      - src/tkr_cloud_video/runtime/preflight.py
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - delivers:
+      - IoC composition of all Reproducible Worker Image components and adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 1
+      - 2
+      - 3
+    story_ids:
+      - build-pinned-worker-image
+      - validate-runtime-configuration
+      - preflight-worker-capacity-and-connectivity
+    files:
+      - src/tkr_cloud_video/worker_runtime/composition.py
+    title: Wire Reproducible Worker Image
+    number: 4
+    layer: integration
+    feature: reproducible-worker-image
+    status: planned
+    paths:
+      - src/tkr_cloud_video/worker_runtime/composition.py
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - delivers:
+      - Table-driven unit coverage for Reproducible Worker Image domain contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 4
+    story_ids:
+      - build-pinned-worker-image
+      - validate-runtime-configuration
+      - preflight-worker-capacity-and-connectivity
+    files:
+      - tests/worker_runtime/test_reproducible_worker_image.py
+    title: Test Reproducible Worker Image
+    number: 5
+    layer: integration
+    feature: reproducible-worker-image
+    status: planned
+    paths:
+      - tests/worker_runtime/test_reproducible_worker_image.py
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - delivers:
+      - Explicit configuring, preflighting, hydrating, starting, validating,
+        ready, draining, failed, and stopped states
+      - Legal transitions, deadlines, cancellation, and typed terminal reasons
+    depends_on:
+      - 5
+    story_ids:
+      - gate-comfy-startup-on-hydration
+    files:
+      - src/tkr_cloud_video/runtime/lifecycle.py
+    title: Worker lifecycle state machine
+    number: 6
+    layer: domain
+    feature: supervised-readiness
+    status: planned
+    paths:
+      - src/tkr_cloud_video/runtime/lifecycle.py
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.
+  - delivers:
+      - Injected process runner that starts ComfyUI only after verified
+        hydration and observes exit/restart policy
+      - Admission control, drain, cancellation deadline, and bounded shutdown
+    depends_on:
+      - 6
+    story_ids:
+      - validate-comfy-health-and-workflow
+    files:
+      - src/tkr_cloud_video/runtime/supervisor.py
+    title: ComfyUI process supervisor
+    number: 7
+    layer: service
+    feature: supervised-readiness
+    status: planned
+    paths:
+      - src/tkr_cloud_video/runtime/supervisor.py
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.
+  - delivers:
+      - Local ComfyUI health/object-info/model validation adapter using
+        documented API routes
+      - Authenticated readiness/liveness endpoints with safe release context
+    depends_on:
+      - 6
+      - 7
+    story_ids:
+      - drain-and-terminate-worker
+    files:
+      - src/tkr_cloud_video/runtime/comfy_health.py
+      - src/tkr_cloud_video/runtime/health_api.py
+    title: Health workflow and readiness adapter
+    number: 8
+    layer: api
+    feature: supervised-readiness
+    status: planned
+    paths:
+      - src/tkr_cloud_video/runtime/comfy_health.py
+      - src/tkr_cloud_video/runtime/health_api.py
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.
+  - delivers:
+      - IoC composition of all Supervised Readiness components and adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 6
+      - 7
+      - 8
+    story_ids:
+      - gate-comfy-startup-on-hydration
+      - validate-comfy-health-and-workflow
+      - drain-and-terminate-worker
+    files:
+      - src/tkr_cloud_video/worker_runtime/composition.py
+    title: Wire Supervised Readiness
+    number: 9
+    layer: integration
+    feature: supervised-readiness
+    status: planned
+    paths:
+      - src/tkr_cloud_video/worker_runtime/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.
+  - delivers:
+      - Table-driven unit coverage for Supervised Readiness domain contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 9
+    story_ids:
+      - gate-comfy-startup-on-hydration
+      - validate-comfy-health-and-workflow
+      - drain-and-terminate-worker
+    files:
+      - tests/worker_runtime/test_supervised_readiness.py
+    title: Test Supervised Readiness
+    number: 10
+    layer: integration
+    feature: supervised-readiness
+    status: planned
+    paths:
+      - tests/worker_runtime/test_supervised_readiness.py
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.

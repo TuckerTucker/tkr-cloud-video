@@ -1,0 +1,255 @@
+capability: artifact-foundation
+slices:
+  - delivers:
+      - Versioned model-set manifest, artifact entry, workflow identity,
+        provenance, and publication receipt models
+      - Canonical JSON serialization and schema fixtures
+    depends_on: []
+    story_ids:
+      - publish-content-addressed-model-blobs
+    files:
+      - src/tkr_cloud_video/artifacts/models.py
+      - schemas/model-set-manifest.schema.json
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    title: Artifact catalog contracts
+    number: 1
+    layer: data
+    feature: immutable-artifact-catalog
+    status: planned
+    paths:
+      - src/tkr_cloud_video/artifacts/models.py
+      - schemas/model-set-manifest.schema.json
+  - delivers:
+      - Streaming size/SHA-256 calculation, immutable blob upload, conflict
+        detection, and remote verification
+      - Manifest validation and publish-last workflow through injected
+        object-store adapter
+    depends_on:
+      - 1
+    story_ids:
+      - publish-pinned-model-set-manifest
+    files:
+      - src/tkr_cloud_video/artifacts/publisher.py
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    title: Artifact publication service
+    number: 2
+    layer: service
+    feature: immutable-artifact-catalog
+    status: planned
+    paths:
+      - src/tkr_cloud_video/artifacts/publisher.py
+  - delivers:
+      - Resolution of configured release references to independently pinned
+        manifest bytes
+      - Manifest identity verification, parsing, referential checks, and
+        sanitized release context
+    depends_on:
+      - 1
+      - 2
+    story_ids:
+      - resolve-approved-artifact-release
+    files:
+      - src/tkr_cloud_video/artifacts/resolver.py
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    title: Approved release resolver
+    number: 3
+    layer: service
+    feature: immutable-artifact-catalog
+    status: planned
+    paths:
+      - src/tkr_cloud_video/artifacts/resolver.py
+  - delivers:
+      - IoC composition of all Immutable Artifact Catalog components and adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 1
+      - 2
+      - 3
+    story_ids:
+      - publish-content-addressed-model-blobs
+      - publish-pinned-model-set-manifest
+      - resolve-approved-artifact-release
+    files:
+      - src/tkr_cloud_video/artifact_foundation/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    title: Wire Immutable Artifact Catalog
+    number: 4
+    layer: integration
+    feature: immutable-artifact-catalog
+    status: planned
+    paths:
+      - src/tkr_cloud_video/artifact_foundation/composition.py
+  - delivers:
+      - Table-driven unit coverage for Immutable Artifact Catalog domain
+        contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 4
+    story_ids:
+      - publish-content-addressed-model-blobs
+      - publish-pinned-model-set-manifest
+      - resolve-approved-artifact-release
+    files:
+      - tests/artifact_foundation/test_immutable_artifact_catalog.py
+    data_lifecycle:
+      kind: bounded
+      detail: Model blobs are immutable and retained while referenced by an approved
+        manifest; unreferenced blobs are removed only by a reviewed catalog GC
+        operation. Superseded manifests and provenance records remain versioned
+        for release reproducibility.
+    title: Test Immutable Artifact Catalog
+    number: 5
+    layer: integration
+    feature: immutable-artifact-catalog
+    status: planned
+    paths:
+      - tests/artifact_foundation/test_immutable_artifact_catalog.py
+  - delivers:
+      - Content-addressed cache paths, partial-file identity, active-reference
+        leases, capacity accounting, and eviction candidates
+      - Filesystem abstraction with atomic promote and containment invariants
+    depends_on:
+      - 5
+    story_ids:
+      - hydrate-and-atomically-promote-blobs
+    files:
+      - src/tkr_cloud_video/artifacts/cache.py
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    title: Cache index and lease contracts
+    number: 6
+    layer: data
+    feature: deterministic-cache-hydration
+    status: planned
+    paths:
+      - src/tkr_cloud_video/artifacts/cache.py
+  - delivers:
+      - Concurrent bounded downloads to unique partial files with size/SHA-256
+        verification and atomic promotion
+      - Cleanup and retry classification for interrupted, missing, and corrupt
+        artifacts
+    depends_on:
+      - 6
+    story_ids:
+      - materialize-safe-comfy-model-links
+    files:
+      - src/tkr_cloud_video/artifacts/hydrator.py
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    title: Verified hydration service
+    number: 7
+    layer: service
+    feature: deterministic-cache-hydration
+    status: planned
+    paths:
+      - src/tkr_cloud_video/artifacts/hydrator.py
+  - delivers:
+      - Safe managed symlink materialization under the ComfyUI model root
+      - Warm-cache verification and whole-blob eviction that protects selected
+        and leased digests
+    depends_on:
+      - 6
+      - 7
+    story_ids:
+      - reuse-and-evict-bounded-cache
+    files:
+      - src/tkr_cloud_video/artifacts/materializer.py
+      - src/tkr_cloud_video/artifacts/eviction.py
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    title: Model materialization and eviction
+    number: 8
+    layer: integration
+    feature: deterministic-cache-hydration
+    status: planned
+    paths:
+      - src/tkr_cloud_video/artifacts/materializer.py
+      - src/tkr_cloud_video/artifacts/eviction.py
+  - delivers:
+      - IoC composition of all Deterministic Cache Hydration components and
+        adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 6
+      - 7
+      - 8
+    story_ids:
+      - hydrate-and-atomically-promote-blobs
+      - materialize-safe-comfy-model-links
+      - reuse-and-evict-bounded-cache
+    files:
+      - src/tkr_cloud_video/artifact_foundation/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    title: Wire Deterministic Cache Hydration
+    number: 9
+    layer: integration
+    feature: deterministic-cache-hydration
+    status: planned
+    paths:
+      - src/tkr_cloud_video/artifact_foundation/composition.py
+  - delivers:
+      - Table-driven unit coverage for Deterministic Cache Hydration domain
+        contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 9
+    story_ids:
+      - hydrate-and-atomically-promote-blobs
+      - materialize-safe-comfy-model-links
+      - reuse-and-evict-bounded-cache
+    files:
+      - tests/artifact_foundation/test_deterministic_cache_hydration.py
+    data_lifecycle:
+      kind: bounded
+      detail: Local cache growth is capped by configured bytes/high-water mark; only
+        whole unreferenced blobs are evicted. Partial files are deleted on
+        checksum failure and by startup age sweep; all local cache content is
+        disposable on worker destruction.
+    title: Test Deterministic Cache Hydration
+    number: 10
+    layer: integration
+    feature: deterministic-cache-hydration
+    status: planned
+    paths:
+      - tests/artifact_foundation/test_deterministic_cache_hydration.py

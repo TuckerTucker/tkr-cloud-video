@@ -1,0 +1,258 @@
+capability: security-foundation
+slices:
+  - delivers:
+      - Typed credential roles, bucket/prefix scope, allowed capabilities, and
+        forbidden-operation matrix
+      - Provider-neutral CredentialPolicy and CredentialProbe interfaces
+    depends_on: []
+    story_ids:
+      - provision-single-prefix-storage-keys
+    files:
+      - src/tkr_cloud_video/security/credentials.py
+    title: Credential boundary contracts
+    number: 1
+    layer: domain
+    feature: least-privilege-credentials
+    status: planned
+    paths:
+      - src/tkr_cloud_video/security/credentials.py
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - delivers:
+      - Backblaze-specific provisioning plan that emits separate single-prefix
+        application-key requests
+      - Rotation and revocation workflow with safe verification receipts
+    depends_on:
+      - 1
+    story_ids:
+      - rotate-runtime-secrets-without-rebuild
+    files:
+      - src/tkr_cloud_video/security/b2_keys.py
+    title: B2 key provisioning service
+    number: 2
+    layer: service
+    feature: least-privilege-credentials
+    status: planned
+    paths:
+      - src/tkr_cloud_video/security/b2_keys.py
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - delivers:
+      - Per-process environment allowlists for hydrator, ComfyUI, uploader, and
+        delivery roles
+      - RunPod secret-reference adapter and structured redaction boundary
+    depends_on:
+      - 1
+      - 2
+    story_ids:
+      - isolate-secrets-by-process-role
+    files:
+      - src/tkr_cloud_video/security/process_secrets.py
+      - scripts/entrypoint.sh
+    title: Process secret isolation
+    number: 3
+    layer: integration
+    feature: least-privilege-credentials
+    status: planned
+    paths:
+      - src/tkr_cloud_video/security/process_secrets.py
+      - scripts/entrypoint.sh
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - delivers:
+      - IoC composition of all Least-Privilege Credentials components and
+        adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 1
+      - 2
+      - 3
+    story_ids:
+      - provision-single-prefix-storage-keys
+      - rotate-runtime-secrets-without-rebuild
+      - isolate-secrets-by-process-role
+    files:
+      - src/tkr_cloud_video/security_foundation/composition.py
+    title: Wire Least-Privilege Credentials
+    number: 4
+    layer: integration
+    feature: least-privilege-credentials
+    status: planned
+    paths:
+      - src/tkr_cloud_video/security_foundation/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - delivers:
+      - Table-driven unit coverage for Least-Privilege Credentials domain
+        contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 4
+    story_ids:
+      - provision-single-prefix-storage-keys
+      - rotate-runtime-secrets-without-rebuild
+      - isolate-secrets-by-process-role
+    files:
+      - tests/security_foundation/test_least_privilege_credentials.py
+    title: Test Least-Privilege Credentials
+    number: 5
+    layer: integration
+    feature: least-privilege-credentials
+    status: planned
+    paths:
+      - tests/security_foundation/test_least_privilege_credentials.py
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - delivers:
+      - Strict value objects for job IDs, model-set IDs, SHA-256 digests, object
+        keys, and relative destinations
+      - Canonical path containment and symlink-aware write-target checks
+    depends_on:
+      - 5
+    story_ids:
+      - reject-unsafe-identifiers-and-paths
+    files:
+      - src/tkr_cloud_video/security/validation.py
+    title: Boundary validation primitives
+    number: 6
+    layer: domain
+    feature: boundary-validation-and-provenance
+    status: planned
+    paths:
+      - src/tkr_cloud_video/security/validation.py
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.
+  - delivers:
+      - Versioned schema covering image, Python lock, ComfyUI, custom nodes,
+        workflow, manifest, models, and verification evidence
+      - Deterministic serialization and digest verification
+    depends_on:
+      - 6
+    story_ids:
+      - verify-executable-artifact-provenance
+    files:
+      - src/tkr_cloud_video/security/provenance.py
+      - schemas/release-manifest.schema.json
+    title: Release provenance manifest
+    number: 7
+    layer: data
+    feature: boundary-validation-and-provenance
+    status: planned
+    paths:
+      - src/tkr_cloud_video/security/provenance.py
+      - schemas/release-manifest.schema.json
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.
+  - delivers:
+      - Release evaluation for provenance completeness, license approval,
+        deployment use, and territory
+      - Typed stale-evidence and policy-failure reports
+    depends_on:
+      - 6
+      - 7
+    story_ids:
+      - gate-release-on-license-and-territory
+    files:
+      - src/tkr_cloud_video/security/release_gate.py
+    title: Release assurance gate
+    number: 8
+    layer: service
+    feature: boundary-validation-and-provenance
+    status: planned
+    paths:
+      - src/tkr_cloud_video/security/release_gate.py
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.
+  - delivers:
+      - IoC composition of all Boundary Validation and Provenance components and
+        adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 6
+      - 7
+      - 8
+    story_ids:
+      - reject-unsafe-identifiers-and-paths
+      - verify-executable-artifact-provenance
+      - gate-release-on-license-and-territory
+    files:
+      - src/tkr_cloud_video/security_foundation/composition.py
+    title: Wire Boundary Validation and Provenance
+    number: 9
+    layer: integration
+    feature: boundary-validation-and-provenance
+    status: planned
+    paths:
+      - src/tkr_cloud_video/security_foundation/composition.py
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.
+  - delivers:
+      - Table-driven unit coverage for Boundary Validation and Provenance domain
+        contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 9
+    story_ids:
+      - reject-unsafe-identifiers-and-paths
+      - verify-executable-artifact-provenance
+      - gate-release-on-license-and-territory
+    files:
+      - tests/security_foundation/test_boundary_validation_and_provenance.py
+    title: Test Boundary Validation and Provenance
+    number: 10
+    layer: integration
+    feature: boundary-validation-and-provenance
+    status: planned
+    paths:
+      - tests/security_foundation/test_boundary_validation_and_provenance.py
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.

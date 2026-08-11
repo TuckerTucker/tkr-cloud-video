@@ -1,0 +1,2274 @@
+capability: job-execution
+slice_specs:
+  - name: validated-job-intake-1-spec
+    title: Generation request contracts Specification
+    status: approved
+    format: full
+    capability: job-execution
+    feature: validated-job-intake
+    slice: 1
+    source_story_ids:
+      - job-execution/story/validate-versioned-generation-request
+    purpose: Implement Generation request contracts as the domain contract that
+      discriminated t2v, i2v, and reference-to-video request models with bounded
+      parameters and canonical serialization.
+    layer_assignment:
+      - component: GenerationRequestContractsPolicy
+        layer: domain
+        responsibility: Discriminated T2V, I2V, and reference-to-video request models
+          with bounded parameters and canonical serialization
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: GenerationRequestContractsPolicy
+        kind: policy_or_domain_service
+        signature: "async def execute(self, request: GenerationRequestContractsRequest,
+          context: OperationContext) -> GenerationRequestContractsResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: GenerationRequestContractsError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: GenerationRequestContractsRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: GenerationRequestContractsResult
+        shape: frozen dataclass or Pydantic model
+        fields: Discriminated T2V, I2V, and reference-to-video request models with
+          bounded parameters and canonical serialization,Server-owned JobId,
+          AttemptId, IdempotencyKey, and typed validation errors
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/validate-versioned-generation-request
+        given: a request contains an unsupported field, workflow, model set, or
+          out-of-range parameter
+        when: validation runs
+        then: the response identifies all safe field errors and creates no job
+      - story_id: job-execution/story/validate-versioned-generation-request
+        given: a valid request is submitted
+        when: normalization completes
+        then: the stored canonical request and hash are deterministic
+    error_handling:
+      - condition: request_invalid
+        error: JobValidationError
+        recovery: Reject before download or GPU work and return safe field errors
+        retryable: false
+      - condition: authorization_denied
+        error: JobAuthorizationError
+        recovery: Return a non-enumerating denial and perform no storage read
+        retryable: false
+      - condition: idempotency_or_input_conflict
+        error: JobConflictError
+        recovery: Return the existing matching state or reject the conflicting payload
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - product configuration, security policy, and injected platform ports
+      provides:
+        - Discriminated T2V, I2V, and reference-to-video request models with
+          bounded parameters and canonical serialization
+        - Server-owned JobId, AttemptId, IdempotencyKey, and typed validation
+          errors
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.validated-job-intake.1.started
+        - job-execution.validated-job-intake.1.succeeded
+        - job-execution.validated-job-intake.1.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S1-T01
+        level: unit
+        given: a request contains an unsupported field, workflow, model set, or
+          out-of-range parameter
+        when: validation runs
+        then: the response identifies all safe field errors and creates no job
+      - id: S1-T02
+        level: unit
+        given: a valid request is submitted
+        when: normalization completes
+        then: the stored canonical request and hash are deterministic
+      - id: S1-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Generation request contracts runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: validated-job-intake-2-spec
+    title: Job identity and workspace service Specification
+    status: approved
+    format: full
+    capability: job-execution
+    feature: validated-job-intake
+    slice: 2
+    source_story_ids:
+      - job-execution/story/allocate-idempotent-job-workspace
+    purpose: Implement Job identity and workspace service as the service contract
+      that principal-scoped idempotency state machine and server-owned workspace
+      allocation.
+    layer_assignment:
+      - component: JobIdentityAndWorkspaceServiceService
+        layer: service
+        responsibility: Principal-scoped idempotency state machine and server-owned
+          workspace allocation
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: JobIdentityAndWorkspaceServiceService
+        kind: application_service
+        signature: "async def execute(self, request:
+          JobIdentityAndWorkspaceServiceRequest, context: OperationContext) ->
+          JobIdentityAndWorkspaceServiceResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: JobIdentityAndWorkspaceServiceError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: JobIdentityAndWorkspaceServiceRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: JobIdentityAndWorkspaceServiceResult
+        shape: frozen dataclass or Pydantic model
+        fields: Principal-scoped idempotency state machine and server-owned workspace
+          allocation,Concurrent duplicate convergence, payload-conflict
+          detection, and containment-safe paths
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/allocate-idempotent-job-workspace
+        given: two concurrent requests share a valid idempotency key and canonical
+          payload
+        when: allocation runs
+        then: one job identity is created and both callers observe the same state
+      - story_id: job-execution/story/allocate-idempotent-job-workspace
+        given: the same key is reused with a different canonical payload
+        when: allocation runs
+        then: the request is rejected as an idempotency conflict
+    error_handling:
+      - condition: request_invalid
+        error: JobValidationError
+        recovery: Reject before download or GPU work and return safe field errors
+        retryable: false
+      - condition: authorization_denied
+        error: JobAuthorizationError
+        recovery: Return a non-enumerating denial and perform no storage read
+        retryable: false
+      - condition: idempotency_or_input_conflict
+        error: JobConflictError
+        recovery: Return the existing matching state or reject the conflicting payload
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/1
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/1
+      provides:
+        - Principal-scoped idempotency state machine and server-owned workspace
+          allocation
+        - Concurrent duplicate convergence, payload-conflict detection, and
+          containment-safe paths
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.validated-job-intake.2.started
+        - job-execution.validated-job-intake.2.succeeded
+        - job-execution.validated-job-intake.2.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S2-T01
+        level: contract
+        given: two concurrent requests share a valid idempotency key and canonical
+          payload
+        when: allocation runs
+        then: one job identity is created and both callers observe the same state
+      - id: S2-T02
+        level: contract
+        given: the same key is reused with a different canonical payload
+        when: allocation runs
+        then: the request is rejected as an idempotency conflict
+      - id: S2-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Job identity and workspace service runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: validated-job-intake-3-spec
+    title: Authorized input staging Specification
+    status: approved
+    format: full
+    capability: job-execution
+    feature: validated-job-intake
+    slice: 3
+    source_story_ids:
+      - job-execution/story/stage-and-verify-job-inputs
+    purpose: Implement Authorized input staging as the integration contract that
+      input authorization/object-resolution port and bounded streaming download
+      adapter.
+    layer_assignment:
+      - component: AuthorizedInputStagingAdapter
+        layer: integration
+        responsibility: Input authorization/object-resolution port and bounded streaming
+          download adapter
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: AuthorizedInputStagingAdapter
+        kind: integration_adapter
+        signature: "async def execute(self, request: AuthorizedInputStagingRequest,
+          context: OperationContext) -> AuthorizedInputStagingResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: AuthorizedInputStagingError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: AuthorizedInputStagingRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: AuthorizedInputStagingResult
+        shape: frozen dataclass or Pydantic model
+        fields: Input authorization/object-resolution port and bounded streaming
+          download adapter,Media type, dimension, size, optional digest,
+          ownership, and atomic promotion checks
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/stage-and-verify-job-inputs
+        given: an input exceeds limits or fails declared media validation
+        when: staging runs
+        then: the partial file is removed according to policy and GPU execution does not
+          start
+      - story_id: job-execution/story/stage-and-verify-job-inputs
+        given: an authorized valid input is staged
+        when: verification completes
+        then: the execution contract receives only a server-owned normalized path
+    error_handling:
+      - condition: request_invalid
+        error: JobValidationError
+        recovery: Reject before download or GPU work and return safe field errors
+        retryable: false
+      - condition: authorization_denied
+        error: JobAuthorizationError
+        recovery: Return a non-enumerating denial and perform no storage read
+        retryable: false
+      - condition: idempotency_or_input_conflict
+        error: JobConflictError
+        recovery: Return the existing matching state or reject the conflicting payload
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/1
+        - job-execution/slice/2
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/1
+        - job-execution/slice/2
+      provides:
+        - Input authorization/object-resolution port and bounded streaming
+          download adapter
+        - Media type, dimension, size, optional digest, ownership, and atomic
+          promotion checks
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.validated-job-intake.3.started
+        - job-execution.validated-job-intake.3.succeeded
+        - job-execution.validated-job-intake.3.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S3-T01
+        level: contract
+        given: an input exceeds limits or fails declared media validation
+        when: staging runs
+        then: the partial file is removed according to policy and GPU execution does not
+          start
+      - id: S3-T02
+        level: contract
+        given: an authorized valid input is staged
+        when: verification completes
+        then: the execution contract receives only a server-owned normalized path
+      - id: S3-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Authorized input staging runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: validated-job-intake-4-spec
+    title: Wire Validated Job Intake Specification
+    status: approved
+    format: abbreviated
+    capability: job-execution
+    feature: validated-job-intake
+    slice: 4
+    source_story_ids:
+      - job-execution/story/validate-versioned-generation-request
+      - job-execution/story/allocate-idempotent-job-workspace
+      - job-execution/story/stage-and-verify-job-inputs
+    purpose: Implement Wire Validated Job Intake as the integration contract that
+      ioc composition of all validated job intake components and adapters.
+    layer_assignment:
+      - component: compose_validated_job_intake
+        layer: integration
+        responsibility: IoC composition of all Validated Job Intake components and adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_validated_job_intake
+        kind: composition_root
+        signature: "def compose_validated_job_intake(dependencies:
+          ValidatedJobIntakeDependencies) -> ValidatedJobIntakeServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireValidatedJobIntakeError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireValidatedJobIntakeRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireValidatedJobIntakeResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Validated Job Intake components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/validate-versioned-generation-request
+        given: a request contains an unsupported field, workflow, model set, or
+          out-of-range parameter
+        when: validation runs
+        then: the response identifies all safe field errors and creates no job
+      - story_id: job-execution/story/validate-versioned-generation-request
+        given: a valid request is submitted
+        when: normalization completes
+        then: the stored canonical request and hash are deterministic
+      - story_id: job-execution/story/allocate-idempotent-job-workspace
+        given: two concurrent requests share a valid idempotency key and canonical
+          payload
+        when: allocation runs
+        then: one job identity is created and both callers observe the same state
+      - story_id: job-execution/story/allocate-idempotent-job-workspace
+        given: the same key is reused with a different canonical payload
+        when: allocation runs
+        then: the request is rejected as an idempotency conflict
+      - story_id: job-execution/story/stage-and-verify-job-inputs
+        given: an input exceeds limits or fails declared media validation
+        when: staging runs
+        then: the partial file is removed according to policy and GPU execution does not
+          start
+      - story_id: job-execution/story/stage-and-verify-job-inputs
+        given: an authorized valid input is staged
+        when: verification completes
+        then: the execution contract receives only a server-owned normalized path
+    error_handling:
+      - condition: dependency_missing
+        error: CompositionError
+        recovery: Fail composition before exposing the feature boundary
+        retryable: false
+      - condition: adapter_contract_mismatch
+        error: ContractError
+        recovery: Reject startup and name the incompatible port
+        retryable: false
+      - condition: configuration_invalid
+        error: RuntimeConfigurationError
+        recovery: Aggregate safe validation defects
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/1
+        - job-execution/slice/2
+        - job-execution/slice/3
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/1
+        - job-execution/slice/2
+        - job-execution/slice/3
+      provides:
+        - IoC composition of all Validated Job Intake components and adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.validated-job-intake.4.started
+        - job-execution.validated-job-intake.4.succeeded
+        - job-execution.validated-job-intake.4.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S4-T01
+        level: contract
+        given: a request contains an unsupported field, workflow, model set, or
+          out-of-range parameter
+        when: validation runs
+        then: the response identifies all safe field errors and creates no job
+      - id: S4-T02
+        level: contract
+        given: a valid request is submitted
+        when: normalization completes
+        then: the stored canonical request and hash are deterministic
+      - id: S4-T03
+        level: contract
+        given: two concurrent requests share a valid idempotency key and canonical
+          payload
+        when: allocation runs
+        then: one job identity is created and both callers observe the same state
+      - id: S4-T04
+        level: contract
+        given: the same key is reused with a different canonical payload
+        when: allocation runs
+        then: the request is rejected as an idempotency conflict
+      - id: S4-T05
+        level: contract
+        given: an input exceeds limits or fails declared media validation
+        when: staging runs
+        then: the partial file is removed according to policy and GPU execution does not
+          start
+      - id: S4-T06
+        level: contract
+        given: an authorized valid input is staged
+        when: verification completes
+        then: the execution contract receives only a server-owned normalized path
+      - id: S4-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Validated Job Intake runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: validated-job-intake-5-spec
+    title: Test Validated Job Intake Specification
+    status: approved
+    format: abbreviated
+    capability: job-execution
+    feature: validated-job-intake
+    slice: 5
+    source_story_ids:
+      - job-execution/story/validate-versioned-generation-request
+      - job-execution/story/allocate-idempotent-job-workspace
+      - job-execution/story/stage-and-verify-job-inputs
+    purpose: Implement Test Validated Job Intake as the integration contract that
+      table-driven unit coverage for validated job intake domain contracts.
+    layer_assignment:
+      - component: test_validated_job_intake
+        layer: integration
+        responsibility: Table-driven unit coverage for Validated Job Intake domain contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_validated_job_intake
+        kind: test_suite
+        signature: "pytest suite: test_validated_job_intake"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestValidatedJobIntakeError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestValidatedJobIntakeRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestValidatedJobIntakeResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Validated Job Intake domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/validate-versioned-generation-request
+        given: a request contains an unsupported field, workflow, model set, or
+          out-of-range parameter
+        when: validation runs
+        then: the response identifies all safe field errors and creates no job
+      - story_id: job-execution/story/validate-versioned-generation-request
+        given: a valid request is submitted
+        when: normalization completes
+        then: the stored canonical request and hash are deterministic
+      - story_id: job-execution/story/allocate-idempotent-job-workspace
+        given: two concurrent requests share a valid idempotency key and canonical
+          payload
+        when: allocation runs
+        then: one job identity is created and both callers observe the same state
+      - story_id: job-execution/story/allocate-idempotent-job-workspace
+        given: the same key is reused with a different canonical payload
+        when: allocation runs
+        then: the request is rejected as an idempotency conflict
+      - story_id: job-execution/story/stage-and-verify-job-inputs
+        given: an input exceeds limits or fails declared media validation
+        when: staging runs
+        then: the partial file is removed according to policy and GPU execution does not
+          start
+      - story_id: job-execution/story/stage-and-verify-job-inputs
+        given: an authorized valid input is staged
+        when: verification completes
+        then: the execution contract receives only a server-owned normalized path
+    error_handling:
+      - condition: test_fixture_invalid
+        error: TestContractError
+        recovery: Fail the suite before exercising production behavior
+        retryable: false
+      - condition: expected_failure_not_observed
+        error: AssertionError
+        recovery: Report the discriminating scenario and captured safe evidence
+        retryable: false
+      - condition: environment_unavailable
+        error: TestEnvironmentError
+        recovery: Mark the environment-dependent case blocked, not passed
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/4
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/4
+      provides:
+        - Table-driven unit coverage for Validated Job Intake domain contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.validated-job-intake.5.started
+        - job-execution.validated-job-intake.5.succeeded
+        - job-execution.validated-job-intake.5.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S5-T01
+        level: integration
+        given: a request contains an unsupported field, workflow, model set, or
+          out-of-range parameter
+        when: validation runs
+        then: the response identifies all safe field errors and creates no job
+      - id: S5-T02
+        level: integration
+        given: a valid request is submitted
+        when: normalization completes
+        then: the stored canonical request and hash are deterministic
+      - id: S5-T03
+        level: integration
+        given: two concurrent requests share a valid idempotency key and canonical
+          payload
+        when: allocation runs
+        then: one job identity is created and both callers observe the same state
+      - id: S5-T04
+        level: integration
+        given: the same key is reused with a different canonical payload
+        when: allocation runs
+        then: the request is rejected as an idempotency conflict
+      - id: S5-T05
+        level: integration
+        given: an input exceeds limits or fails declared media validation
+        when: staging runs
+        then: the partial file is removed according to policy and GPU execution does not
+          start
+      - id: S5-T06
+        level: integration
+        given: an authorized valid input is staged
+        when: verification completes
+        then: the execution contract receives only a server-owned normalized path
+      - id: S5-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Validated Job Intake runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-comfy-execution-6-spec
+    title: Pinned workflow binder Specification
+    status: approved
+    format: full
+    capability: job-execution
+    feature: deterministic-comfy-execution
+    slice: 6
+    source_story_ids:
+      - job-execution/story/bind-request-to-pinned-workflow
+    purpose: Implement Pinned workflow binder as the domain contract that
+      allowlisted request-to-node binding map with workflow digest verification.
+    layer_assignment:
+      - component: PinnedWorkflowBinderPolicy
+        layer: domain
+        responsibility: Allowlisted request-to-node binding map with workflow digest
+          verification
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: PinnedWorkflowBinderPolicy
+        kind: policy_or_domain_service
+        signature: "async def execute(self, request: PinnedWorkflowBinderRequest,
+          context: OperationContext) -> PinnedWorkflowBinderResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: PinnedWorkflowBinderError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: PinnedWorkflowBinderRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: PinnedWorkflowBinderResult
+        shape: frozen dataclass or Pydantic model
+        fields: Allowlisted request-to-node binding map with workflow digest
+          verification,Bound graph validation that prevents undeclared node,
+          model, and output-path substitution
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/bind-request-to-pinned-workflow
+        given: a binding points to an absent or disallowed node/input
+        when: workflow binding runs
+        then: the job fails without submitting a prompt
+      - story_id: job-execution/story/bind-request-to-pinned-workflow
+        given: a valid request is bound
+        when: the prompt payload is inspected
+        then: it references the approved workflow/model identity and only normalized
+          parameters
+    error_handling:
+      - condition: workflow_binding_invalid
+        error: WorkflowBindingError
+        recovery: Fail before prompt submission
+        retryable: false
+      - condition: node_failure_or_timeout
+        error: ExecutionError
+        recovery: Cancel when possible and classify terminal versus retryable
+        retryable: true
+      - condition: output_invalid_or_missing
+        error: MediaValidationError
+        recovery: Keep the attempt uncommitted and retain bounded diagnostics
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/5
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - ComfyUI local HTTP API
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/5
+      provides:
+        - Allowlisted request-to-node binding map with workflow digest
+          verification
+        - Bound graph validation that prevents undeclared node, model, and
+          output-path substitution
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: COMFY_HOST
+        type: string
+        default: 127.0.0.1
+        secret: false
+        validation: loopback unless an authenticated proxy boundary is configured
+      - name: COMFY_PORT
+        type: integer
+        default: 8188
+        secret: false
+        validation: 1..65535
+      - name: COMFY_STARTUP_TIMEOUT_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.deterministic-comfy-execution.6.started
+        - job-execution.deterministic-comfy-execution.6.succeeded
+        - job-execution.deterministic-comfy-execution.6.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S6-T01
+        level: unit
+        given: a binding points to an absent or disallowed node/input
+        when: workflow binding runs
+        then: the job fails without submitting a prompt
+      - id: S6-T02
+        level: unit
+        given: a valid request is bound
+        when: the prompt payload is inspected
+        then: it references the approved workflow/model identity and only normalized
+          parameters
+      - id: S6-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Pinned workflow binder runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-comfy-execution-7-spec
+    title: ComfyUI execution client Specification
+    status: approved
+    format: full
+    capability: job-execution
+    feature: deterministic-comfy-execution
+    slice: 7
+    source_story_ids:
+      - job-execution/story/supervise-comfy-prompt-execution
+    purpose: Implement ComfyUI execution client as the service contract that typed
+      adapter for prompt submission, prompt id correlation, bounded
+      history/event polling, cancellation, and node errors.
+    layer_assignment:
+      - component: ComfyUIExecutionClientService
+        layer: service
+        responsibility: Typed adapter for prompt submission, prompt ID correlation,
+          bounded history/event polling, cancellation, and node errors
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ComfyUIExecutionClientService
+        kind: application_service
+        signature: "async def execute(self, request: ComfyUIExecutionClientRequest,
+          context: OperationContext) -> ComfyUIExecutionClientResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ComfyUIExecutionClientError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ComfyUIExecutionClientRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ComfyUIExecutionClientResult
+        shape: frozen dataclass or Pydantic model
+        fields: Typed adapter for prompt submission, prompt ID correlation, bounded
+          history/event polling, cancellation, and node errors,Retryable versus
+          terminal execution classification
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/supervise-comfy-prompt-execution
+        given: execution exceeds its deadline
+        when: the supervisor cancels the prompt
+        then: the job records a typed timeout and cannot publish completion
+      - story_id: job-execution/story/supervise-comfy-prompt-execution
+        given: ComfyUI reports a node failure
+        when: execution finishes
+        then: the safe error identifies the node/classification without leaking prompt
+          content
+    error_handling:
+      - condition: workflow_binding_invalid
+        error: WorkflowBindingError
+        recovery: Fail before prompt submission
+        retryable: false
+      - condition: node_failure_or_timeout
+        error: ExecutionError
+        recovery: Cancel when possible and classify terminal versus retryable
+        retryable: true
+      - condition: output_invalid_or_missing
+        error: MediaValidationError
+        recovery: Keep the attempt uncommitted and retain bounded diagnostics
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/6
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - ComfyUI local HTTP API
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/6
+      provides:
+        - Typed adapter for prompt submission, prompt ID correlation, bounded
+          history/event polling, cancellation, and node errors
+        - Retryable versus terminal execution classification
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: COMFY_HOST
+        type: string
+        default: 127.0.0.1
+        secret: false
+        validation: loopback unless an authenticated proxy boundary is configured
+      - name: COMFY_PORT
+        type: integer
+        default: 8188
+        secret: false
+        validation: 1..65535
+      - name: COMFY_STARTUP_TIMEOUT_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: "> 0"
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.deterministic-comfy-execution.7.started
+        - job-execution.deterministic-comfy-execution.7.succeeded
+        - job-execution.deterministic-comfy-execution.7.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S7-T01
+        level: contract
+        given: execution exceeds its deadline
+        when: the supervisor cancels the prompt
+        then: the job records a typed timeout and cannot publish completion
+      - id: S7-T02
+        level: contract
+        given: ComfyUI reports a node failure
+        when: execution finishes
+        then: the safe error identifies the node/classification without leaking prompt
+          content
+      - id: S7-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: ComfyUI execution client runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-comfy-execution-8-spec
+    title: Exact result-set validator Specification
+    status: approved
+    format: full
+    capability: job-execution
+    feature: deterministic-comfy-execution
+    slice: 8
+    source_story_ids:
+      - job-execution/story/validate-exact-local-result-set
+    purpose: Implement Exact result-set validator as the service contract that
+      prompt-owned output resolution without directory scans.
+    layer_assignment:
+      - component: ExactResultSetValidatorService
+        layer: service
+        responsibility: Prompt-owned output resolution without directory scans
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ExactResultSetValidatorService
+        kind: application_service
+        signature: "async def execute(self, request: ExactResultSetValidatorRequest,
+          context: OperationContext) -> ExactResultSetValidatorResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ExactResultSetValidatorError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ExactResultSetValidatorRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ExactResultSetValidatorResult
+        shape: frozen dataclass or Pydantic model
+        fields: Prompt-owned output resolution without directory scans,ffprobe media
+          checks, byte/SHA-256 calculation, and canonical
+          workflow/generation/result metadata
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/validate-exact-local-result-set
+        given: ComfyUI reports success but no valid expected video is attributable to
+          the prompt
+        when: result validation runs
+        then: the job fails and emits no upload-ready result
+      - story_id: job-execution/story/validate-exact-local-result-set
+        given: a valid result is found
+        when: metadata generation completes
+        then: every local artifact has a role, contained path, size, digest, and
+          provenance reference
+    error_handling:
+      - condition: workflow_binding_invalid
+        error: WorkflowBindingError
+        recovery: Fail before prompt submission
+        retryable: false
+      - condition: node_failure_or_timeout
+        error: ExecutionError
+        recovery: Cancel when possible and classify terminal versus retryable
+        retryable: true
+      - condition: output_invalid_or_missing
+        error: MediaValidationError
+        recovery: Keep the attempt uncommitted and retain bounded diagnostics
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/6
+        - job-execution/slice/7
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - ComfyUI local HTTP API
+        - ffprobe
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/6
+        - job-execution/slice/7
+      provides:
+        - Prompt-owned output resolution without directory scans
+        - ffprobe media checks, byte/SHA-256 calculation, and canonical
+          workflow/generation/result metadata
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.deterministic-comfy-execution.8.started
+        - job-execution.deterministic-comfy-execution.8.succeeded
+        - job-execution.deterministic-comfy-execution.8.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S8-T01
+        level: contract
+        given: ComfyUI reports success but no valid expected video is attributable to
+          the prompt
+        when: result validation runs
+        then: the job fails and emits no upload-ready result
+      - id: S8-T02
+        level: contract
+        given: a valid result is found
+        when: metadata generation completes
+        then: every local artifact has a role, contained path, size, digest, and
+          provenance reference
+      - id: S8-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Exact result-set validator runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-comfy-execution-9-spec
+    title: Wire Deterministic ComfyUI Execution Specification
+    status: approved
+    format: abbreviated
+    capability: job-execution
+    feature: deterministic-comfy-execution
+    slice: 9
+    source_story_ids:
+      - job-execution/story/bind-request-to-pinned-workflow
+      - job-execution/story/supervise-comfy-prompt-execution
+      - job-execution/story/validate-exact-local-result-set
+    purpose: Implement Wire Deterministic ComfyUI Execution as the integration
+      contract that ioc composition of all deterministic comfyui execution
+      components and adapters.
+    layer_assignment:
+      - component: compose_deterministic_comfy_execution
+        layer: integration
+        responsibility: IoC composition of all Deterministic ComfyUI Execution
+          components and adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_deterministic_comfy_execution
+        kind: composition_root
+        signature: "def compose_deterministic_comfy_execution(dependencies:
+          DeterministicComfyExecutionDependencies) ->
+          DeterministicComfyExecutionServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireDeterministicComfyUIExecutionError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireDeterministicComfyUIExecutionRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireDeterministicComfyUIExecutionResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Deterministic ComfyUI Execution components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/bind-request-to-pinned-workflow
+        given: a binding points to an absent or disallowed node/input
+        when: workflow binding runs
+        then: the job fails without submitting a prompt
+      - story_id: job-execution/story/bind-request-to-pinned-workflow
+        given: a valid request is bound
+        when: the prompt payload is inspected
+        then: it references the approved workflow/model identity and only normalized
+          parameters
+      - story_id: job-execution/story/supervise-comfy-prompt-execution
+        given: execution exceeds its deadline
+        when: the supervisor cancels the prompt
+        then: the job records a typed timeout and cannot publish completion
+      - story_id: job-execution/story/supervise-comfy-prompt-execution
+        given: ComfyUI reports a node failure
+        when: execution finishes
+        then: the safe error identifies the node/classification without leaking prompt
+          content
+      - story_id: job-execution/story/validate-exact-local-result-set
+        given: ComfyUI reports success but no valid expected video is attributable to
+          the prompt
+        when: result validation runs
+        then: the job fails and emits no upload-ready result
+      - story_id: job-execution/story/validate-exact-local-result-set
+        given: a valid result is found
+        when: metadata generation completes
+        then: every local artifact has a role, contained path, size, digest, and
+          provenance reference
+    error_handling:
+      - condition: workflow_binding_invalid
+        error: WorkflowBindingError
+        recovery: Fail before prompt submission
+        retryable: false
+      - condition: node_failure_or_timeout
+        error: ExecutionError
+        recovery: Cancel when possible and classify terminal versus retryable
+        retryable: true
+      - condition: output_invalid_or_missing
+        error: MediaValidationError
+        recovery: Keep the attempt uncommitted and retain bounded diagnostics
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/6
+        - job-execution/slice/7
+        - job-execution/slice/8
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - ComfyUI local HTTP API
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/6
+        - job-execution/slice/7
+        - job-execution/slice/8
+      provides:
+        - IoC composition of all Deterministic ComfyUI Execution components and
+          adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: COMFY_HOST
+        type: string
+        default: 127.0.0.1
+        secret: false
+        validation: loopback unless an authenticated proxy boundary is configured
+      - name: COMFY_PORT
+        type: integer
+        default: 8188
+        secret: false
+        validation: 1..65535
+      - name: COMFY_STARTUP_TIMEOUT_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: "> 0"
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.deterministic-comfy-execution.9.started
+        - job-execution.deterministic-comfy-execution.9.succeeded
+        - job-execution.deterministic-comfy-execution.9.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S9-T01
+        level: contract
+        given: a binding points to an absent or disallowed node/input
+        when: workflow binding runs
+        then: the job fails without submitting a prompt
+      - id: S9-T02
+        level: contract
+        given: a valid request is bound
+        when: the prompt payload is inspected
+        then: it references the approved workflow/model identity and only normalized
+          parameters
+      - id: S9-T03
+        level: contract
+        given: execution exceeds its deadline
+        when: the supervisor cancels the prompt
+        then: the job records a typed timeout and cannot publish completion
+      - id: S9-T04
+        level: contract
+        given: ComfyUI reports a node failure
+        when: execution finishes
+        then: the safe error identifies the node/classification without leaking prompt
+          content
+      - id: S9-T05
+        level: contract
+        given: ComfyUI reports success but no valid expected video is attributable to
+          the prompt
+        when: result validation runs
+        then: the job fails and emits no upload-ready result
+      - id: S9-T06
+        level: contract
+        given: a valid result is found
+        when: metadata generation completes
+        then: every local artifact has a role, contained path, size, digest, and
+          provenance reference
+      - id: S9-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Deterministic ComfyUI Execution runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+  - name: deterministic-comfy-execution-10-spec
+    title: Test Deterministic ComfyUI Execution Specification
+    status: approved
+    format: abbreviated
+    capability: job-execution
+    feature: deterministic-comfy-execution
+    slice: 10
+    source_story_ids:
+      - job-execution/story/bind-request-to-pinned-workflow
+      - job-execution/story/supervise-comfy-prompt-execution
+      - job-execution/story/validate-exact-local-result-set
+    purpose: Implement Test Deterministic ComfyUI Execution as the integration
+      contract that table-driven unit coverage for deterministic comfyui
+      execution domain contracts.
+    layer_assignment:
+      - component: test_deterministic_comfy_execution
+        layer: integration
+        responsibility: Table-driven unit coverage for Deterministic ComfyUI Execution
+          domain contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_deterministic_comfy_execution
+        kind: test_suite
+        signature: "pytest suite: test_deterministic_comfy_execution"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestDeterministicComfyUIExecutionError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestDeterministicComfyUIExecutionRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestDeterministicComfyUIExecutionResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Deterministic ComfyUI Execution domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: job-execution/story/bind-request-to-pinned-workflow
+        given: a binding points to an absent or disallowed node/input
+        when: workflow binding runs
+        then: the job fails without submitting a prompt
+      - story_id: job-execution/story/bind-request-to-pinned-workflow
+        given: a valid request is bound
+        when: the prompt payload is inspected
+        then: it references the approved workflow/model identity and only normalized
+          parameters
+      - story_id: job-execution/story/supervise-comfy-prompt-execution
+        given: execution exceeds its deadline
+        when: the supervisor cancels the prompt
+        then: the job records a typed timeout and cannot publish completion
+      - story_id: job-execution/story/supervise-comfy-prompt-execution
+        given: ComfyUI reports a node failure
+        when: execution finishes
+        then: the safe error identifies the node/classification without leaking prompt
+          content
+      - story_id: job-execution/story/validate-exact-local-result-set
+        given: ComfyUI reports success but no valid expected video is attributable to
+          the prompt
+        when: result validation runs
+        then: the job fails and emits no upload-ready result
+      - story_id: job-execution/story/validate-exact-local-result-set
+        given: a valid result is found
+        when: metadata generation completes
+        then: every local artifact has a role, contained path, size, digest, and
+          provenance reference
+    error_handling:
+      - condition: workflow_binding_invalid
+        error: WorkflowBindingError
+        recovery: Fail before prompt submission
+        retryable: false
+      - condition: node_failure_or_timeout
+        error: ExecutionError
+        recovery: Cancel when possible and classify terminal versus retryable
+        retryable: true
+      - condition: output_invalid_or_missing
+        error: MediaValidationError
+        recovery: Keep the attempt uncommitted and retain bounded diagnostics
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - job-execution/slice/9
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - ComfyUI local HTTP API
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - job-execution/slice/9
+      provides:
+        - Table-driven unit coverage for Deterministic ComfyUI Execution domain
+          contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: COMFY_HOST
+        type: string
+        default: 127.0.0.1
+        secret: false
+        validation: loopback unless an authenticated proxy boundary is configured
+      - name: COMFY_PORT
+        type: integer
+        default: 8188
+        secret: false
+        validation: 1..65535
+      - name: COMFY_STARTUP_TIMEOUT_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: "> 0"
+      - name: MAX_CONCURRENT_JOBS
+        type: integer
+        default: 1
+        secret: false
+        validation: ">= 1 and GPU/capacity checked"
+      - name: JOB_TIMEOUT_SECONDS
+        type: integer
+        default: 3600
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - job-execution.deterministic-comfy-execution.10.started
+        - job-execution.deterministic-comfy-execution.10.succeeded
+        - job-execution.deterministic-comfy-execution.10.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S10-T01
+        level: integration
+        given: a binding points to an absent or disallowed node/input
+        when: workflow binding runs
+        then: the job fails without submitting a prompt
+      - id: S10-T02
+        level: integration
+        given: a valid request is bound
+        when: the prompt payload is inspected
+        then: it references the approved workflow/model identity and only normalized
+          parameters
+      - id: S10-T03
+        level: integration
+        given: execution exceeds its deadline
+        when: the supervisor cancels the prompt
+        then: the job records a typed timeout and cannot publish completion
+      - id: S10-T04
+        level: integration
+        given: ComfyUI reports a node failure
+        when: execution finishes
+        then: the safe error identifies the node/classification without leaking prompt
+          content
+      - id: S10-T05
+        level: integration
+        given: ComfyUI reports success but no valid expected video is attributable to
+          the prompt
+        when: result validation runs
+        then: the job fails and emits no upload-ready result
+      - id: S10-T06
+        level: integration
+        given: a valid result is found
+        when: metadata generation completes
+        then: every local artifact has a role, contained path, size, digest, and
+          provenance reference
+      - id: S10-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Deterministic ComfyUI Execution runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.

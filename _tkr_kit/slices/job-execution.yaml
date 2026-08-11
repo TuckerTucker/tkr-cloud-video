@@ -1,0 +1,258 @@
+capability: job-execution
+slices:
+  - delivers:
+      - Discriminated T2V, I2V, and reference-to-video request models with
+        bounded parameters and canonical serialization
+      - Server-owned JobId, AttemptId, IdempotencyKey, and typed validation
+        errors
+    depends_on: []
+    story_ids:
+      - validate-versioned-generation-request
+    files:
+      - src/tkr_cloud_video/jobs/contracts.py
+      - schemas/generation-request.schema.json
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    title: Generation request contracts
+    number: 1
+    layer: domain
+    feature: validated-job-intake
+    status: planned
+    paths:
+      - src/tkr_cloud_video/jobs/contracts.py
+      - schemas/generation-request.schema.json
+  - delivers:
+      - Principal-scoped idempotency state machine and server-owned workspace
+        allocation
+      - Concurrent duplicate convergence, payload-conflict detection, and
+        containment-safe paths
+    depends_on:
+      - 1
+    story_ids:
+      - allocate-idempotent-job-workspace
+    files:
+      - src/tkr_cloud_video/jobs/identity.py
+      - src/tkr_cloud_video/jobs/workspace.py
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    title: Job identity and workspace service
+    number: 2
+    layer: service
+    feature: validated-job-intake
+    status: planned
+    paths:
+      - src/tkr_cloud_video/jobs/identity.py
+      - src/tkr_cloud_video/jobs/workspace.py
+  - delivers:
+      - Input authorization/object-resolution port and bounded streaming
+        download adapter
+      - Media type, dimension, size, optional digest, ownership, and atomic
+        promotion checks
+    depends_on:
+      - 1
+      - 2
+    story_ids:
+      - stage-and-verify-job-inputs
+    files:
+      - src/tkr_cloud_video/jobs/input_staging.py
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    title: Authorized input staging
+    number: 3
+    layer: integration
+    feature: validated-job-intake
+    status: planned
+    paths:
+      - src/tkr_cloud_video/jobs/input_staging.py
+  - delivers:
+      - IoC composition of all Validated Job Intake components and adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 1
+      - 2
+      - 3
+    story_ids:
+      - validate-versioned-generation-request
+      - allocate-idempotent-job-workspace
+      - stage-and-verify-job-inputs
+    files:
+      - src/tkr_cloud_video/job_execution/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    title: Wire Validated Job Intake
+    number: 4
+    layer: integration
+    feature: validated-job-intake
+    status: planned
+    paths:
+      - src/tkr_cloud_video/job_execution/composition.py
+  - delivers:
+      - Table-driven unit coverage for Validated Job Intake domain contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 4
+    story_ids:
+      - validate-versioned-generation-request
+      - allocate-idempotent-job-workspace
+      - stage-and-verify-job-inputs
+    files:
+      - tests/job_execution/test_validated_job_intake.py
+    data_lifecycle:
+      kind: bounded
+      detail: Interactive job state and workspaces are ephemeral per worker and
+        removed after durable completion or a configured failed-job debugging
+        window. Idempotency records are retained only for the configured
+        request-retry window; committed results remain discoverable through
+        durable-delivery.
+    title: Test Validated Job Intake
+    number: 5
+    layer: integration
+    feature: validated-job-intake
+    status: planned
+    paths:
+      - tests/job_execution/test_validated_job_intake.py
+  - delivers:
+      - Allowlisted request-to-node binding map with workflow digest verification
+      - Bound graph validation that prevents undeclared node, model, and
+        output-path substitution
+    depends_on:
+      - 5
+    story_ids:
+      - bind-request-to-pinned-workflow
+    files:
+      - src/tkr_cloud_video/jobs/workflow_binder.py
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    title: Pinned workflow binder
+    number: 6
+    layer: domain
+    feature: deterministic-comfy-execution
+    status: planned
+    paths:
+      - src/tkr_cloud_video/jobs/workflow_binder.py
+  - delivers:
+      - Typed adapter for prompt submission, prompt ID correlation, bounded
+        history/event polling, cancellation, and node errors
+      - Retryable versus terminal execution classification
+    depends_on:
+      - 6
+    story_ids:
+      - supervise-comfy-prompt-execution
+    files:
+      - src/tkr_cloud_video/jobs/comfy_client.py
+      - src/tkr_cloud_video/jobs/executor.py
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    title: ComfyUI execution client
+    number: 7
+    layer: service
+    feature: deterministic-comfy-execution
+    status: planned
+    paths:
+      - src/tkr_cloud_video/jobs/comfy_client.py
+      - src/tkr_cloud_video/jobs/executor.py
+  - delivers:
+      - Prompt-owned output resolution without directory scans
+      - ffprobe media checks, byte/SHA-256 calculation, and canonical
+        workflow/generation/result metadata
+    depends_on:
+      - 6
+      - 7
+    story_ids:
+      - validate-exact-local-result-set
+    files:
+      - src/tkr_cloud_video/jobs/results.py
+      - src/tkr_cloud_video/jobs/media_validation.py
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    title: Exact result-set validator
+    number: 8
+    layer: service
+    feature: deterministic-comfy-execution
+    status: planned
+    paths:
+      - src/tkr_cloud_video/jobs/results.py
+      - src/tkr_cloud_video/jobs/media_validation.py
+  - delivers:
+      - IoC composition of all Deterministic ComfyUI Execution components and
+        adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 6
+      - 7
+      - 8
+    story_ids:
+      - bind-request-to-pinned-workflow
+      - supervise-comfy-prompt-execution
+      - validate-exact-local-result-set
+    files:
+      - src/tkr_cloud_video/job_execution/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    title: Wire Deterministic ComfyUI Execution
+    number: 9
+    layer: integration
+    feature: deterministic-comfy-execution
+    status: planned
+    paths:
+      - src/tkr_cloud_video/job_execution/composition.py
+  - delivers:
+      - Table-driven unit coverage for Deterministic ComfyUI Execution domain
+        contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 9
+    story_ids:
+      - bind-request-to-pinned-workflow
+      - supervise-comfy-prompt-execution
+      - validate-exact-local-result-set
+    files:
+      - tests/job_execution/test_deterministic_comfy_execution.py
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt execution records and local media are retained only until durable
+        commit plus a bounded diagnostic window on failure; cleanup is per job
+        attempt and never scans or deletes unrelated ComfyUI output.
+    title: Test Deterministic ComfyUI Execution
+    number: 10
+    layer: integration
+    feature: deterministic-comfy-execution
+    status: planned
+    paths:
+      - tests/job_execution/test_deterministic_comfy_execution.py

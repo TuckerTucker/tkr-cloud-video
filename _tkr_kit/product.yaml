@@ -1,0 +1,103 @@
+product:
+  vision: A reproducible, secure cloud video-generation platform that runs MiniMax
+    H3 workflows through ComfyUI on RunPod and treats private object storage as
+    the durable source of truth.
+  problem_statement: GPU workers are expensive and disposable, while MiniMax H3
+    model sets, workflows, inputs, and generated videos are large,
+    security-sensitive, and must survive worker termination. Ad hoc mounts,
+    mutable artifacts, broad credentials, and directory-wide synchronization
+    make cold starts unreliable, completion ambiguous, and costs difficult to
+    control.
+  target_state:
+    - A pinned worker image reconstructs an approved ComfyUI and MiniMax H3
+      runtime from immutable manifests and verified object-storage artifacts.
+    - Interactive Pods and later Serverless workers accept validated jobs,
+      execute deterministic workflows locally, and never expose an
+      unauthenticated ComfyUI service.
+    - Every completed job is durably committed with verified media and
+      reproducibility metadata before consumers can observe completion.
+    - Credentials are least-privilege and isolated by trust boundary; outputs
+      remain private and are delivered only through authorized short-lived
+      links.
+    - Cold-start, cache, generation, upload, reliability, and provider-cost
+      signals support measured operational decisions.
+  success_criteria:
+    - A fresh RunPod worker with an empty cache hydrates the selected model set,
+      verifies all digests, validates its workflow, and becomes ready without
+      manual intervention.
+    - A generated video and its metadata remain retrievable after the worker is
+      destroyed, and no completion marker can exist for an unverified media
+      object.
+    - Malformed manifests, paths, job identifiers, missing artifacts, checksum
+      failures, and unhealthy ComfyUI startup fail closed with contextual
+      structured errors.
+    - No runtime credential grants access outside its required bucket and prefix
+      boundary, and ComfyUI/custom-node processes do not receive upload
+      credentials they do not need.
+    - A warm worker reuses verified local artifacts and downloads no model bytes
+      for an unchanged model set.
+    - Operational dashboards expose storage, egress, hydration, cold-start,
+      generation, upload, error, and cache-efficiency measurements.
+    - The deployment can move from Interactive Pod validation to RunPod
+      Serverless without changing workflow or result contracts.
+  non_goals:
+    - Training or fine-tuning MiniMax models.
+    - Building a general-purpose ComfyUI hosting marketplace.
+    - Streaming model weights directly from object storage during inference.
+    - Making buckets or generated media permanently public.
+    - Supporting multiple object-storage providers before the B2 path is proven;
+      portability is preserved through interfaces and configuration.
+  principles:
+    - Object storage is durable truth; local NVMe is a disposable verified cache.
+    - Artifacts and configuration are immutable or cryptographically pinned.
+    - Completion is a commit protocol, not a filename appearing in a directory.
+    - The worker fails closed and remains unready when its declared runtime
+      cannot be proven.
+    - IoC separates provider, runtime, storage, clock, hashing, and
+      process-control adapters from domain policy.
+  source_documents:
+    - /Users/tucker/Downloads/runpod-comfyui-minimax-h3-object-storage-plan.docx
+  review_corrections:
+    - Verify video and metadata before publishing result.json.
+    - Validate and contain every manifest-derived and job-derived local path.
+    - Model Backblaze keys as separate single-prefix capability sets.
+    - Implement readiness and workflow validation rather than documenting them
+      only.
+    - Pin manifest and workflow digests independently of mutable object names.
+    - Make retry, partial-file cleanup, and duplicate-job behavior explicit.
+    - Use current Wasabi pricing and fair-use constraints in provider
+      comparisons.
+  status: planned
+  name: tkr-cloud-video
+  implementation_architecture:
+    primary_language: Python 3.11 or newer, constrained by the selected ComfyUI and
+      RunPod base image
+    entrypoint: Bash 3.2-compatible script limited to environment handoff and exec
+      of the Python supervisor
+    composition: Constructor-injected Protocol interfaces for object storage,
+      hashing, filesystem, process control, clock, authorization, job state,
+      telemetry, media inspection, and platform adapters
+    api_style: Versioned typed request/result contracts; FastAPI or the host adapter
+      may expose them, but domain services do not depend on the web framework
+    logging: structlog JSON events with allowlisted fields, correlation context, and
+      structural redaction
+    validation: Typed Pydantic models at external boundaries plus canonical
+      path-containment value objects
+    testing: pytest with table-driven parametrization, unit tests for domain policy,
+      contract tests for adapters, and failure-injection integration tests
+    packaging: Digest-pinned OCI image and locked Python dependencies; no runtime
+      package installation
+  architectural_boundaries:
+    - ComfyUI is an inference subprocess behind a typed adapter, not the storage
+      or public API.
+    - rclone/Backblaze/RunPod/ffprobe are integration adapters; domain policy is
+      provider-neutral.
+    - Hydration, inference, uploading, and signed delivery run with distinct
+      credentials and process environments.
+    - Object-store keys are not filesystem paths; all local paths are
+      server-owned and containment checked.
+    - Specs describe ports and observable behavior; concrete SDK/CLI versions
+      are pinned during implementation and recorded in the release manifest.
+  paths:
+    - _tkr_kit/**
+    - .claude/**

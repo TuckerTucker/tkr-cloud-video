@@ -1,0 +1,248 @@
+capability: operations-and-scale
+slices:
+  - delivers:
+      - Typed event names, phases, severities, correlation fields, metric
+        labels, and redaction classifications
+      - Cardinality limits and safe error serialization
+    depends_on: []
+    story_ids:
+      - emit-correlated-structured-events
+    files:
+      - src/tkr_cloud_video/operations/events.py
+    data_lifecycle:
+      kind: bounded
+      detail: Metrics and events use configured retention and bounded cardinality;
+        benchmark runs and cost reports are replace-on-release with dated
+        evidence retained only for declared comparison history.
+    title: Telemetry event contracts
+    number: 1
+    layer: domain
+    feature: observability-and-cost-control
+    status: planned
+    paths:
+      - src/tkr_cloud_video/operations/events.py
+  - delivers:
+      - structlog JSON configuration and injected metrics recorder across
+        product services
+      - Secret/signed-URL/prompt/filename redaction and bounded label enforcement
+    depends_on:
+      - 1
+    story_ids:
+      - alert-on-health-security-and-capacity
+    files:
+      - src/tkr_cloud_video/operations/logging.py
+      - src/tkr_cloud_video/operations/metrics.py
+    data_lifecycle:
+      kind: bounded
+      detail: Metrics and events use configured retention and bounded cardinality;
+        benchmark runs and cost reports are replace-on-release with dated
+        evidence retained only for declared comparison history.
+    title: Structured logging and metrics adapters
+    number: 2
+    layer: service
+    feature: observability-and-cost-control
+    status: planned
+    paths:
+      - src/tkr_cloud_video/operations/logging.py
+      - src/tkr_cloud_video/operations/metrics.py
+  - delivers:
+      - Health/security/capacity alert rules linked to runbooks
+      - Reproducible cold/warm benchmark harness and dated B2/R2 cost model with
+        explicit units and assumptions
+    depends_on:
+      - 1
+      - 2
+    story_ids:
+      - benchmark-cold-warm-and-provider-cost
+    files:
+      - src/tkr_cloud_video/operations/alerts.py
+      - src/tkr_cloud_video/operations/benchmarks.py
+      - src/tkr_cloud_video/operations/cost_model.py
+    data_lifecycle:
+      kind: bounded
+      detail: Metrics and events use configured retention and bounded cardinality;
+        benchmark runs and cost reports are replace-on-release with dated
+        evidence retained only for declared comparison history.
+    title: Alerts benchmarks and cost reports
+    number: 3
+    layer: integration
+    feature: observability-and-cost-control
+    status: planned
+    paths:
+      - src/tkr_cloud_video/operations/alerts.py
+      - src/tkr_cloud_video/operations/benchmarks.py
+      - src/tkr_cloud_video/operations/cost_model.py
+  - delivers:
+      - IoC composition of all Observability and Cost Control components and
+        adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 1
+      - 2
+      - 3
+    story_ids:
+      - emit-correlated-structured-events
+      - alert-on-health-security-and-capacity
+      - benchmark-cold-warm-and-provider-cost
+    files:
+      - src/tkr_cloud_video/operations_and_scale/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Metrics and events use configured retention and bounded cardinality;
+        benchmark runs and cost reports are replace-on-release with dated
+        evidence retained only for declared comparison history.
+    title: Wire Observability and Cost Control
+    number: 4
+    layer: integration
+    feature: observability-and-cost-control
+    status: planned
+    paths:
+      - src/tkr_cloud_video/operations_and_scale/composition.py
+  - delivers:
+      - Table-driven unit coverage for Observability and Cost Control domain
+        contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 4
+    story_ids:
+      - emit-correlated-structured-events
+      - alert-on-health-security-and-capacity
+      - benchmark-cold-warm-and-provider-cost
+    files:
+      - tests/operations_and_scale/test_observability_and_cost_control.py
+    data_lifecycle:
+      kind: bounded
+      detail: Metrics and events use configured retention and bounded cardinality;
+        benchmark runs and cost reports are replace-on-release with dated
+        evidence retained only for declared comparison history.
+    title: Test Observability and Cost Control
+    number: 5
+    layer: integration
+    feature: observability-and-cost-control
+    status: planned
+    paths:
+      - tests/operations_and_scale/test_observability_and_cost_control.py
+  - delivers:
+      - Executable acceptance-scenario definitions mapped to product success
+        criteria
+      - Evidence bundle and release-gate result contracts for cold, warm,
+        failure, commit, destroy, and recovery cases
+    depends_on:
+      - 5
+    story_ids:
+      - prove-interactive-pod-acceptance
+    files:
+      - src/tkr_cloud_video/release/acceptance.py
+    data_lifecycle:
+      kind: bounded
+      detail: Acceptance and rollout evidence is retained per release; transient
+        load-test artifacts and failed worker workspaces expire after the
+        diagnostic window. Runbooks are replace-on-write with rehearsal dates.
+    title: Environment acceptance model
+    number: 6
+    layer: domain
+    feature: serverless-release
+    status: planned
+    paths:
+      - src/tkr_cloud_video/release/acceptance.py
+  - delivers:
+      - Thin handler translating RunPod requests into shared
+        intake/execution/delivery services
+      - Contract-parity responses with object references, typed errors, and no
+        proxied MP4 bytes
+    depends_on:
+      - 6
+    story_ids:
+      - run-contract-compatible-serverless-handler
+    files:
+      - src/tkr_cloud_video/release/runpod_handler.py
+    data_lifecycle:
+      kind: bounded
+      detail: Acceptance and rollout evidence is retained per release; transient
+        load-test artifacts and failed worker workspaces expire after the
+        diagnostic window. Runbooks are replace-on-write with rehearsal dates.
+    title: RunPod Serverless adapter
+    number: 7
+    layer: api
+    feature: serverless-release
+    status: planned
+    paths:
+      - src/tkr_cloud_video/release/runpod_handler.py
+  - delivers:
+      - Concurrency, duplicate, timeout, cancellation, storage-failure, and
+        capacity-exhaustion campaigns
+      - Bounded rollout gates, rollback automation, and rehearsable runbooks
+        with observables
+    depends_on:
+      - 6
+      - 7
+    story_ids:
+      - exercise-rollout-failure-and-rollback
+    files:
+      - src/tkr_cloud_video/release/rollout.py
+      - docs/runbooks/
+    data_lifecycle:
+      kind: bounded
+      detail: Acceptance and rollout evidence is retained per release; transient
+        load-test artifacts and failed worker workspaces expire after the
+        diagnostic window. Runbooks are replace-on-write with rehearsal dates.
+    title: Rollout and recovery automation
+    number: 8
+    layer: integration
+    feature: serverless-release
+    status: planned
+    paths:
+      - src/tkr_cloud_video/release/rollout.py
+      - docs/runbooks/
+  - delivers:
+      - IoC composition of all Serverless Release components and adapters
+      - End-to-end feature path exposed through the capability's public service
+        boundary
+    depends_on:
+      - 6
+      - 7
+      - 8
+    story_ids:
+      - prove-interactive-pod-acceptance
+      - run-contract-compatible-serverless-handler
+      - exercise-rollout-failure-and-rollback
+    files:
+      - src/tkr_cloud_video/operations_and_scale/composition.py
+    data_lifecycle:
+      kind: bounded
+      detail: Acceptance and rollout evidence is retained per release; transient
+        load-test artifacts and failed worker workspaces expire after the
+        diagnostic window. Runbooks are replace-on-write with rehearsal dates.
+    title: Wire Serverless Release
+    number: 9
+    layer: integration
+    feature: serverless-release
+    status: planned
+    paths:
+      - src/tkr_cloud_video/operations_and_scale/composition.py
+  - delivers:
+      - Table-driven unit coverage for Serverless Release domain contracts
+      - Integration, failure-injection, security, and acceptance coverage for
+        all linked stories
+    depends_on:
+      - 9
+    story_ids:
+      - prove-interactive-pod-acceptance
+      - run-contract-compatible-serverless-handler
+      - exercise-rollout-failure-and-rollback
+    files:
+      - tests/operations_and_scale/test_serverless_release.py
+    data_lifecycle:
+      kind: bounded
+      detail: Acceptance and rollout evidence is retained per release; transient
+        load-test artifacts and failed worker workspaces expire after the
+        diagnostic window. Runbooks are replace-on-write with rehearsal dates.
+    title: Test Serverless Release
+    number: 10
+    layer: integration
+    feature: serverless-release
+    status: planned
+    paths:
+      - tests/operations_and_scale/test_serverless_release.py

@@ -1,0 +1,54 @@
+capability: durable-delivery
+features:
+  - name: verified-result-commit
+    status: planned
+    display_name: Verified Result Commit
+    user_story: As a result consumer, I want completion to mean every referenced
+      artifact is durable and verified so I never observe a false-positive
+      completed video.
+    acceptance_criteria:
+      - No result.json is published when any required object is absent or
+        mismatched.
+      - A retry creates or resumes the same safe attempt without mixing bytes
+        from another attempt.
+      - The result manifest validates against a versioned schema and references
+        immutable artifact identities.
+      - Destroying the worker immediately after commit preserves a complete,
+        readable job.
+    scope_in:
+      - Allocate immutable job-attempt object prefixes and prevent mutation of
+        committed attempts.
+      - Upload video and reproducibility metadata, compare every required remote
+        object by size and supported checksum, and record local SHA-256 values.
+      - Publish a versioned result.json commit marker last using an idempotent
+        state transition and include immutable object/version references.
+    scope_out:
+      - Overwriting completed artifacts in place.
+      - Using existence of video.mp4 alone as completion.
+  - name: private-result-access-and-retention
+    status: planned
+    display_name: Private Result Access and Retention
+    user_story: As an authorized application user, I want private result lookup and
+      short-lived downloads while expired inputs and scratch data disappear
+      automatically.
+    acceptance_criteria:
+      - Unauthorized callers cannot enumerate job existence or obtain output
+        access.
+      - Signed URLs expire and are redacted from logs and persisted telemetry.
+      - Lifecycle fixtures prove each object class expires or remains according
+        to policy.
+      - Consumers distinguish not-found, in-progress, failed, expired, and
+        completed outcomes without storage-specific errors.
+    scope_in:
+      - Resolve a committed result by job ID only after application
+        authorization and return object references rather than storage
+        credentials.
+      - Issue the shortest practical signed download URL through a delivery-only
+        credential or service boundary.
+      - Apply and verify lifecycle policies for inputs, failed attempts, scratch
+        outputs, selected deliverables, hidden versions, and unfinished
+        multipart uploads.
+    scope_out:
+      - Permanent public URLs or public buckets.
+      - Deleting retained deliverables because an unrelated scratch policy
+        matched.

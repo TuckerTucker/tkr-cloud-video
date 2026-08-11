@@ -1,0 +1,6 @@
+# tkr-kit (local/machine-specific)
+.tkr-kit/
+.mcp.json
+.claude/settings.local.json
+CLAUDE.local.md
+.claude/rules/tkr-kit

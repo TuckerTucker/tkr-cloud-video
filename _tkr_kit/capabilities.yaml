@@ -1,0 +1,254 @@
+capabilities:
+  - name: security-foundation
+    layer: domain
+    status: planned
+    display_name: Security Foundation
+    description: Defines enforceable trust boundaries, least-privilege credentials,
+      input containment, private access, and supply-chain policy shared by every
+      worker and service.
+    depends_on: []
+    optional_depends_on: []
+    provides_to:
+      - artifact-foundation
+      - worker-runtime
+      - job-execution
+      - durable-delivery
+      - operations-and-scale
+    scope_in:
+      - Backblaze bucket and single-prefix application-key topology with
+        distinct read, input-read, output-write, and delivery-read capabilities.
+      - RunPod secret injection, credential rotation, process-level credential
+        isolation, and log redaction.
+      - Strict identifier, digest, object-key, and local-path validation with
+        containment checks.
+      - Authenticated ComfyUI access, private output defaults, authorized
+        signed-link issuance, and threat-model controls.
+      - Pinned image, dependency, custom-node, workflow, manifest, and model
+        provenance plus MiniMax license review evidence.
+    scope_out:
+      - Identity-provider implementation for the calling application.
+      - Enterprise key-management or customer-managed encryption unless the data
+        classification requires it.
+      - General compliance certification beyond the deployment's documented data
+        classification and territory.
+    acceptance_criteria:
+      - Every credential maps to exactly one documented bucket/prefix and
+        capability set, with no impossible multi-prefix claims.
+      - Untrusted identifiers and manifest fields cannot escape their assigned
+        local roots or remote namespaces.
+      - Secrets and signed URLs are absent from logs, images, workflow files,
+        and client responses.
+      - Only authenticated, authorized callers can submit jobs or obtain output
+        access.
+      - Every executable artifact has recorded provenance and a re-verifiable
+        digest or immutable version.
+    paths:
+      - docs/assurance/**
+      - docs/audits/**
+  - name: artifact-foundation
+    layer: data
+    status: planned
+    display_name: Artifact Foundation
+    description: Owns the immutable object layout, manifests, workflow/model
+      provenance, and deterministic local NVMe hydration used to reconstruct a
+      worker.
+    depends_on:
+      - security-foundation
+    optional_depends_on: []
+    provides_to:
+      - worker-runtime
+      - operations-and-scale
+    scope_in:
+      - Private B2 object layout for content-addressed model blobs, versioned
+        manifests, workflows, and immutable provenance records.
+      - Manifest schema and publication workflow that binds exact remote keys,
+        SHA-256 digests, sizes, destinations, workflow digest, and model-set
+        version.
+      - Local content-addressed cache hydration using partial files, checksum
+        verification, atomic promotion, and safe symlink materialization.
+      - Warm-cache reuse, bounded cache eviction, concurrency control,
+        interrupted-download recovery, and retention declarations.
+    scope_out:
+      - Loading model weights through FUSE or another object-store mount.
+      - Training, quantizing, or converting model weights.
+      - Object-storage provider migration before B2 operation is measured.
+    acceptance_criteria:
+      - A fresh worker reconstructs the selected model set and workflow using
+        only the pinned image, approved manifest identity, and private object
+        storage.
+      - No artifact becomes usable before its declared digest and size verify.
+      - Malformed manifests and unsafe destinations fail before any write
+        outside the cache root.
+      - A retained warm cache downloads zero bytes for unchanged verified
+        artifacts.
+      - Concurrent or interrupted hydration cannot expose partial files as valid
+        cache blobs.
+    paths:
+      - docs/models/**
+  - name: worker-runtime
+    layer: service
+    status: planned
+    display_name: Worker Runtime
+    description: Builds and supervises the pinned RunPod/ComfyUI runtime, turning
+      verified artifacts into a health-checked worker with truthful readiness.
+    depends_on:
+      - security-foundation
+      - artifact-foundation
+    optional_depends_on: []
+    provides_to:
+      - job-execution
+      - operations-and-scale
+    scope_in:
+      - Pinned container image containing ComfyUI, approved custom nodes,
+        bootstrap package, rclone, health tooling, and runtime dependencies.
+      - Typed environment configuration with safe defaults, secret references,
+        capacity preflight, and fail-closed startup.
+      - Supervised ComfyUI process lifecycle with hydration gating, local health
+        checks, workflow/model validation, readiness and liveness signals.
+      - Graceful termination that stops accepting work and preserves already
+        committed jobs without a shutdown-wide directory sync.
+    scope_out:
+      - Manual SSH-based installation or mutation of running workers.
+      - Public unauthenticated exposure of port 8188.
+      - RunPod Serverless endpoint rollout, owned by operations-and-scale after
+        Interactive Pod validation.
+    acceptance_criteria:
+      - The image and every bundled dependency are reproducibly pinned and
+        auditable.
+      - Missing configuration, insufficient disk, failed hydration, unhealthy
+        ComfyUI, or an invalid workflow keeps readiness false and exits with a
+        typed error.
+      - Readiness becomes true only after the exact selected workflow validates
+        against available models and nodes.
+      - Termination drains work without relying on a broad best-effort output
+        sync.
+      - The ComfyUI process receives only the configuration and credentials
+        required for inference.
+    paths:
+      - docs/patterns/**
+  - name: job-execution
+    layer: service
+    status: planned
+    display_name: Job Execution
+    description: Defines the validated job contract and deterministic wrapper that
+      stages inputs, invokes ComfyUI, tracks execution, and yields an exact
+      local result set.
+    depends_on:
+      - security-foundation
+      - worker-runtime
+    optional_depends_on: []
+    provides_to:
+      - durable-delivery
+      - operations-and-scale
+    scope_in:
+      - Versioned request schema for text-to-video, image-to-video, and
+        reference-to-video jobs with strict job-id and path validation.
+      - Input acquisition and verification into a per-job workspace with
+        explicit size, type, and ownership constraints.
+      - ComfyUI API submission, prompt/workflow binding, bounded polling,
+        cancellation, timeout, and exact output-file discovery.
+      - Idempotency, duplicate-job behavior, retry classification, workspace
+        cleanup, and reproducibility metadata generation.
+    scope_out:
+      - End-user prompt-authoring UI.
+      - Training-time model selection or arbitrary user-supplied workflow
+        execution.
+      - Durable object upload and signed delivery, owned by durable-delivery.
+    acceptance_criteria:
+      - Invalid or unauthorized job requests are rejected before inputs are
+        downloaded or GPU work starts.
+      - The wrapper can identify exactly which files belong to a job without
+        scanning or syncing unrelated ComfyUI output directories.
+      - Duplicate requests have deterministic behavior and cannot overwrite
+        another job's workspace or committed result.
+      - Timeout, cancellation, ComfyUI error, and missing-output paths emit
+        typed retryable or terminal outcomes.
+      - A successful local result includes the exact workflow, model set,
+        parameters, media path, byte count, and SHA-256 digest.
+    paths:
+      - docs/briefs/**
+  - name: durable-delivery
+    layer: integration
+    status: planned
+    display_name: Durable Delivery
+    description: Commits generated media and reproducibility metadata to private
+      object storage and exposes completed results without false-positive
+      completion.
+    depends_on:
+      - security-foundation
+      - job-execution
+    optional_depends_on: []
+    provides_to:
+      - operations-and-scale
+    scope_in:
+      - Unique immutable job-attempt prefixes and a versioned result manifest.
+      - Upload of media and metadata with remote verification of every required
+        artifact before commit.
+      - Atomic consumer-visible completion using result.json as the final commit
+        marker and explicit idempotency semantics.
+      - Authorized result lookup and short-lived signed-link issuance without
+        returning storage credentials.
+      - Lifecycle policy for inputs, failed attempts, scratch outputs, selected
+        deliverables, hidden versions, and abandoned multipart uploads.
+    scope_out:
+      - Permanent public bucket URLs.
+      - Using the ComfyUI browser UI as an upload or storage API.
+      - Cross-region replication or archival tiers before retention and recovery
+        requirements justify them.
+    acceptance_criteria:
+      - A completion marker cannot exist unless every referenced object exists
+        and matches its committed size and digest.
+      - Retrying an upload cannot mix artifacts from different attempts or
+        mutate an already committed result.
+      - Destroying the worker after successful commit loses no required job
+        artifact.
+      - Only authorized callers receive short-lived access to private results.
+      - Retention rules remove expired inputs, failed attempts, hidden versions,
+        and incomplete uploads without deleting retained deliverables.
+    paths:
+      - docs/published/**
+  - name: operations-and-scale
+    layer: infra
+    status: planned
+    display_name: Operations and Scale
+    description: Makes the platform observable and operable, validates
+      cost/performance assumptions, and promotes the proven Interactive Pod
+      contract to RunPod Serverless.
+    depends_on:
+      - security-foundation
+      - artifact-foundation
+      - worker-runtime
+      - job-execution
+      - durable-delivery
+    optional_depends_on: []
+    provides_to: []
+    scope_in:
+      - Structured JSON event model and correlation across boot, hydration,
+        readiness, generation, upload, commit, and delivery.
+      - Metrics, dashboards, health probes, alerts, and runbooks for failures,
+        capacity, security, bandwidth, and cost.
+      - Cold/warm benchmark harness and provider-cost model using measured
+        stored bytes, hydration bytes, egress, operations, and startup latency.
+      - Interactive Pod acceptance campaign followed by a RunPod Serverless
+        handler that preserves request, readiness, idempotency, and result
+        contracts.
+      - Release gates, disaster exercises, rollback, and evidence-backed go-live
+        checklist.
+    scope_out:
+      - Automatic provider migration based solely on list price.
+      - Multi-cloud active-active execution.
+      - Unbounded telemetry retention.
+    acceptance_criteria:
+      - Operators can correlate every job from request through durable commit
+        without logging secrets, signed URLs, full prompts, or user filenames.
+      - Alerts distinguish checksum, hydration, readiness, generation, upload,
+        authorization, and cost anomalies.
+      - A measured report compares B2 and R2 using the actual RunPod region and
+        current official pricing inputs.
+      - Serverless cold, warm, concurrent, timeout, failure, and duplicate-job
+        tests pass against the same contracts proven on Interactive Pods.
+      - Runbooks have observable success conditions and recorded rehearsal
+        evidence before production go-live.
+    paths:
+      - docs/runbooks/**
+      - docs/adr/**

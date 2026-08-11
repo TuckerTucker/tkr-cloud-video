@@ -1,0 +1,206 @@
+capability: security-foundation
+stories:
+  - name: provision-single-prefix-storage-keys
+    status: planned
+    display_name: Provision single-prefix storage keys
+    feature: least-privilege-credentials
+    actor: Platform operator
+    intent: provision independently scoped B2 credentials for each runtime trust
+      boundary
+    preconditions:
+      - The private buckets and prefix layout are declared.
+      - The operator has an administrative provisioning credential that is never
+        placed on workers.
+    trigger_action: A deployment environment is provisioned or rotated
+    steps:
+      - actor: Platform operator
+        action: runs credential provisioning for the environment
+        system_response: the system creates or updates distinct model-read, input-read,
+          output-write, and delivery-read keys
+      - actor: System
+        action: tests every allowed and forbidden operation
+        system_response: a capability matrix records the observed result without
+          exposing key material
+      - actor: Platform operator
+        action: publishes secret references to RunPod
+        system_response: workers can resolve only the credentials assigned to their process role
+    acceptance_criteria:
+      - given: a declared credential boundary
+        when: the operator provisions runtime keys
+        then: each key has one bucket/prefix and only its required capabilities
+      - given: a provisioned runtime key
+        when: a forbidden prefix or operation is attempted
+        then: access is denied and the safe test result is recorded
+    slice_ids:
+      - security-foundation/slice/1
+      - security-foundation/slice/4
+      - security-foundation/slice/5
+  - name: rotate-runtime-secrets-without-rebuild
+    status: planned
+    display_name: Rotate runtime secrets without rebuild
+    feature: least-privilege-credentials
+    actor: Platform operator
+    intent: rotate compromised or scheduled credentials without rebuilding the
+      worker image
+    preconditions:
+      - Replacement B2 application keys exist.
+      - RunPod secret references are configured in the template.
+    trigger_action: A rotation schedule or revocation event occurs
+    steps:
+      - actor: Platform operator
+        action: updates the referenced RunPod secret values
+        system_response: new workers receive replacement credentials without template plaintext
+      - actor: System
+        action: runs readiness and credential probes
+        system_response: the replacement credentials pass allowed operations and fail
+          forbidden operations
+      - actor: Platform operator
+        action: revokes superseded keys
+        system_response: old credentials cease authorizing requests while healthy
+          workers continue
+    acceptance_criteria:
+      - given: a deployed image and template
+        when: credential values are rotated
+        then: no image rebuild or workflow change is required
+      - given: a superseded key
+        when: revocation completes
+        then: all subsequent authorization attempts with that key fail
+    slice_ids:
+      - security-foundation/slice/2
+      - security-foundation/slice/4
+      - security-foundation/slice/5
+  - name: isolate-secrets-by-process-role
+    status: planned
+    display_name: Isolate secrets by process role
+    feature: least-privilege-credentials
+    actor: Security reviewer
+    intent: prevent ComfyUI and custom nodes from inheriting storage credentials
+      used by hydration, upload, or delivery
+    preconditions:
+      - Process roles and required operations are documented.
+      - The supervisor can construct per-process environments.
+    trigger_action: The worker process topology is reviewed or launched
+    steps:
+      - actor: Worker supervisor
+        action: starts the hydration component with model-read access
+        system_response: the component exits or relinquishes credentials after verified
+          materialization
+      - actor: Worker supervisor
+        action: starts ComfyUI with an allowlisted environment
+        system_response: ComfyUI receives model paths and job parameters but no B2
+          application keys
+      - actor: Worker supervisor
+        action: starts uploader functionality with output-write access
+        system_response: upload operations occur outside the ComfyUI/custom-node trust boundary
+    acceptance_criteria:
+      - given: the ComfyUI process environment
+        when: a custom node inspects available variables
+        then: no storage application key or signed URL is present
+      - given: a component attempts an operation outside its role
+        when: the provider authorizes the request
+        then: the request is denied by its credential capability or prefix restriction
+    slice_ids:
+      - security-foundation/slice/3
+      - security-foundation/slice/4
+      - security-foundation/slice/5
+  - name: reject-unsafe-identifiers-and-paths
+    status: planned
+    display_name: Reject unsafe identifiers and paths
+    feature: boundary-validation-and-provenance
+    actor: Worker supervisor
+    intent: validate and contain all externally derived identifiers and paths before
+      side effects
+    preconditions:
+      - Canonical cache, model, workspace, and output roots are configured.
+      - Identifier and digest formats are versioned.
+    trigger_action: A manifest, job request, or environment value is accepted
+    steps:
+      - actor: Worker supervisor
+        action: parses the external value with its typed validator
+        system_response: malformed encodings, control characters, absolute paths, and
+          traversal segments are rejected
+      - actor: Worker supervisor
+        action: normalizes the candidate local path
+        system_response: the resolved path is checked for containment beneath the assigned root
+      - actor: Worker supervisor
+        action: performs the filesystem or object-store operation
+        system_response: only a validated value reaches the adapter
+    acceptance_criteria:
+      - given: a digest containing separators or not exactly 64 hexadecimal characters
+        when: manifest validation runs
+        then: validation fails before a partial destination is constructed
+      - given: a job or manifest path that resolves outside its root
+        when: containment validation runs
+        then: the operation is rejected without creating, reading, or linking a file
+    slice_ids:
+      - security-foundation/slice/6
+      - security-foundation/slice/9
+      - security-foundation/slice/10
+  - name: verify-executable-artifact-provenance
+    status: planned
+    display_name: Verify executable artifact provenance
+    feature: boundary-validation-and-provenance
+    actor: Release operator
+    intent: prove the exact image, dependencies, ComfyUI revision, custom nodes,
+      workflow, manifest, and models used by a release
+    preconditions:
+      - Every artifact source exposes an immutable digest, commit, lock entry,
+        or provider object version.
+      - The release manifest schema is available.
+    trigger_action: A release candidate is assembled or a worker reports its identity
+    steps:
+      - actor: Release operator
+        action: assembles the release manifest
+        system_response: the system records immutable identities and verification
+          commands for every executable artifact
+      - actor: System
+        action: verifies the candidate against recorded identities
+        system_response: any drift or missing provenance blocks promotion
+      - actor: Worker supervisor
+        action: emits the sanitized release identity at startup
+        system_response: operators can correlate runtime behavior to the approved release
+    acceptance_criteria:
+      - given: a dependency or custom-node revision differs from the release manifest
+        when: release verification runs
+        then: promotion fails and names the drifting component
+      - given: a healthy worker
+        when: its version endpoint is queried
+        then: the response identifies the approved release without credentials or
+          sensitive configuration
+    slice_ids:
+      - security-foundation/slice/7
+      - security-foundation/slice/9
+      - security-foundation/slice/10
+  - name: gate-release-on-license-and-territory
+    status: planned
+    display_name: Gate release on license and territory
+    feature: boundary-validation-and-provenance
+    actor: Release reviewer
+    intent: record MiniMax model license and deployment-territory approval before
+      public or commercial service
+    preconditions:
+      - The intended model artifacts and deployment use are known.
+      - A named reviewer is authorized to record the decision.
+    trigger_action: A release target changes model, use, audience, or territory
+    steps:
+      - actor: Release reviewer
+        action: reviews the applicable model terms and intended deployment
+        system_response: the decision records model identity, use, territory,
+          constraints, and reviewer
+      - actor: Release pipeline
+        action: evaluates the approval record against the candidate
+        system_response: an absent, stale, or incompatible approval blocks release
+      - actor: Release operator
+        action: promotes an approved candidate
+        system_response: the release retains the evidence reference for later assurance renewal
+    acceptance_criteria:
+      - given: a public or commercial release without current approval
+        when: the release gate runs
+        then: promotion is blocked with the missing evidence requirement
+      - given: a model or intended territory changes
+        when: an earlier approval is evaluated
+        then: the approval is treated as stale and must be renewed
+    slice_ids:
+      - security-foundation/slice/8
+      - security-foundation/slice/9
+      - security-foundation/slice/10

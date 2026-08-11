@@ -1,0 +1,202 @@
+capability: worker-runtime
+stories:
+  - name: build-pinned-worker-image
+    status: planned
+    display_name: Build pinned worker image
+    feature: reproducible-worker-image
+    actor: Release operator
+    intent: build a reproducible worker image from immutable dependencies and emit
+      its release manifest
+    preconditions:
+      - Base image digest, dependency locks, ComfyUI commit, and custom-node
+        commits are approved.
+      - The build has no plaintext runtime secrets.
+    trigger_action: A worker release is built
+    steps:
+      - actor: Release operator
+        action: runs the deterministic image build
+        system_response: dependencies install from locks and immutable revisions
+      - actor: Build pipeline
+        action: runs vulnerability, license, and smoke checks
+        system_response: failures block image publication
+      - actor: Build pipeline
+        action: publishes the image by digest with a sanitized release manifest
+        system_response: deployment templates can pin the exact result
+    acceptance_criteria:
+      - given: the same source and locks are built in a clean environment
+        when: release metadata is compared
+        then: the dependency and revision manifest is identical
+      - given: a Docker layer or build argument contains a runtime secret
+        when: release scanning runs
+        then: publication fails and identifies the unsafe source
+    slice_ids:
+      - worker-runtime/slice/1
+      - worker-runtime/slice/4
+      - worker-runtime/slice/5
+  - name: validate-runtime-configuration
+    status: planned
+    display_name: Validate runtime configuration
+    feature: reproducible-worker-image
+    actor: Worker supervisor
+    intent: load typed configuration and secret references with safe defaults before
+      any external side effect
+    preconditions:
+      - The template provides non-secret settings and RunPod secret
+        substitutions.
+      - The configuration schema version is bundled in the image.
+    trigger_action: The worker process starts
+    steps:
+      - actor: Worker supervisor
+        action: parses environment variables into typed settings
+        system_response: unknown, missing, malformed, or conflicting values produce
+          aggregated errors
+      - actor: Worker supervisor
+        action: builds dependency interfaces from validated settings
+        system_response: storage, hashing, clock, process, and telemetry adapters
+          receive explicit configuration
+      - actor: Worker supervisor
+        action: emits sanitized configuration identity
+        system_response: operators can confirm the effective non-secret settings and defaults
+    acceptance_criteria:
+      - given: required bucket, release, or secret reference is absent
+        when: configuration loads
+        then: startup fails before network or filesystem mutation
+      - given: configuration is valid
+        when: sanitized diagnostics are emitted
+        then: no secret value or signed URL appears in output
+    slice_ids:
+      - worker-runtime/slice/2
+      - worker-runtime/slice/4
+      - worker-runtime/slice/5
+  - name: preflight-worker-capacity-and-connectivity
+    status: planned
+    display_name: Preflight worker capacity and connectivity
+    feature: reproducible-worker-image
+    actor: Worker supervisor
+    intent: prove GPU, disk, directories, and required private endpoints are
+      available before expensive hydration
+    preconditions:
+      - The selected manifest exposes required artifact sizes.
+      - Storage remotes and local roots are configured.
+    trigger_action: Validated configuration is available
+    steps:
+      - actor: Worker supervisor
+        action: checks GPU and runtime compatibility
+        system_response: unsupported or missing acceleration blocks startup
+      - actor: Worker supervisor
+        action: calculates model, partial, workspace, and concurrent-output disk
+          requirements
+        system_response: available capacity is compared with the declared safety margin
+      - actor: Worker supervisor
+        action: performs minimal authorized endpoint probes
+        system_response: required reads or writes are proven without broad listings or
+          secret output
+    acceptance_criteria:
+      - given: available disk is below the calculated requirement
+        when: preflight runs
+        then: startup fails before downloading artifacts
+      - given: a required endpoint or authorized operation is unavailable
+        when: preflight runs
+        then: the typed failure names the boundary and remains safe to log
+    slice_ids:
+      - worker-runtime/slice/3
+      - worker-runtime/slice/4
+      - worker-runtime/slice/5
+  - name: gate-comfy-startup-on-hydration
+    status: planned
+    display_name: Gate ComfyUI startup on hydration
+    feature: supervised-readiness
+    actor: Worker supervisor
+    intent: start ComfyUI only after configuration, preflight, and artifact
+      materialization have succeeded
+    preconditions:
+      - Typed startup phases and deadlines are configured.
+      - Hydration exposes a verified completion result.
+    trigger_action: Worker startup begins
+    steps:
+      - actor: Worker supervisor
+        action: enters configuration and preflight phases
+        system_response: readiness remains false
+      - actor: Worker supervisor
+        action: hydrates and materializes the approved release
+        system_response: any failure transitions startup to a terminal unready state
+      - actor: Worker supervisor
+        action: starts ComfyUI with the allowlisted environment
+        system_response: the child process is supervised and readiness is still false
+    acceptance_criteria:
+      - given: hydration or materialization fails
+        when: startup state advances
+        then: ComfyUI is not started and the worker never reports ready
+      - given: all prerequisites succeed
+        when: ComfyUI starts
+        then: the process receives only approved local paths and non-secret job/runtime
+          settings
+    slice_ids:
+      - worker-runtime/slice/6
+      - worker-runtime/slice/9
+      - worker-runtime/slice/10
+  - name: validate-comfy-health-and-workflow
+    status: planned
+    display_name: Validate ComfyUI health and workflow
+    feature: supervised-readiness
+    actor: Worker supervisor
+    intent: prove the running ComfyUI instance can execute the selected pinned
+      workflow before admitting jobs
+    preconditions:
+      - The selected workflow and required node/model inventory are known.
+      - Startup and health-check deadlines are configured.
+    trigger_action: The supervised ComfyUI process begins listening locally
+    steps:
+      - actor: Worker supervisor
+        action: polls the local health endpoint with bounded backoff
+        system_response: process exit, timeout, and malformed response are classified
+      - actor: Worker supervisor
+        action: queries node/model capabilities and validates the pinned API workflow
+        system_response: missing custom nodes, models, or incompatible inputs are reported
+      - actor: Worker supervisor
+        action: sets readiness true with the release identity
+        system_response: the scheduler may now admit work
+    acceptance_criteria:
+      - given: ComfyUI listens but a required node or model is missing
+        when: workflow validation runs
+        then: readiness remains false and startup fails with the missing dependency
+      - given: health and workflow validation succeed within deadline
+        when: the readiness endpoint is queried
+        then: it reports ready and includes only safe release/status metadata
+    slice_ids:
+      - worker-runtime/slice/7
+      - worker-runtime/slice/9
+      - worker-runtime/slice/10
+  - name: drain-and-terminate-worker
+    status: planned
+    display_name: Drain and terminate worker
+    feature: supervised-readiness
+    actor: Platform operator
+    intent: stop new work and terminate predictably without making durability depend
+      on shutdown synchronization
+    preconditions:
+      - The supervisor tracks admission and active job state.
+      - Each job commits durably during normal execution.
+    trigger_action: RunPod termination or deployment replacement is signaled
+    steps:
+      - actor: Worker supervisor
+        action: marks the worker draining and readiness false
+        system_response: new jobs are rejected or routed elsewhere
+      - actor: Worker supervisor
+        action: allows active jobs to finish or cancels them at the configured deadline
+        system_response: job outcomes remain explicit and uncommitted work is not
+          reported complete
+      - actor: Worker supervisor
+        action: stops ComfyUI and exits
+        system_response: no broad output-directory sync is attempted
+    acceptance_criteria:
+      - given: termination arrives with no active jobs
+        when: the supervisor drains
+        then: readiness drops before the process exits
+      - given: termination deadline expires during an active job
+        when: the supervisor cancels work
+        then: no result commit marker is created for incomplete output
+    slice_ids:
+      - worker-runtime/slice/8
+      - worker-runtime/slice/9
+      - worker-runtime/slice/10

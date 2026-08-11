@@ -1,0 +1,52 @@
+capability: artifact-foundation
+features:
+  - name: immutable-artifact-catalog
+    status: planned
+    display_name: Immutable Artifact Catalog
+    user_story: As a release operator, I want a versioned catalog of exact workflows
+      and model blobs so any approved worker can reproduce the same MiniMax H3
+      environment.
+    acceptance_criteria:
+      - The same manifest always resolves to the same bytes and destinations.
+      - Publication refuses duplicate digest conflicts, missing workflow
+        dependencies, and mutable target keys.
+      - A manifest's own digest or immutable object version is pinned outside
+        the mutable catalog path.
+      - Catalog records include provenance and license metadata sufficient for
+        release review.
+    scope_in:
+      - Define a content-addressed B2 layout and versioned manifest schema for
+        model blobs, workflow JSON, custom-node compatibility, sizes, and
+        SHA-256 digests.
+      - Provide an offline publication command that validates artifacts, uploads
+        immutable blobs, and publishes a signed or independently pinned manifest
+        identity last.
+      - Resolve a named model set to an immutable manifest version without
+        trusting a mutable latest object.
+    scope_out:
+      - Model conversion, quantization, or training.
+      - Publishing unverified artifacts directly from a running GPU worker.
+  - name: deterministic-cache-hydration
+    status: planned
+    display_name: Deterministic Cache Hydration
+    user_story: As a worker supervisor, I want to hydrate only the selected verified
+      artifacts into local NVMe so model loading is fast, deterministic, and
+      safe after interruption.
+    acceptance_criteria:
+      - Partial or corrupt blobs never appear at a valid cache path.
+      - A warm run performs verification and downloads zero unchanged model
+        bytes.
+      - Concurrent hydrators cannot corrupt or replace each other's verified
+        blobs.
+      - All cache and partial-file stores have explicit capacity and cleanup
+        behavior.
+    scope_in:
+      - Download each missing blob to a unique partial path, verify size and
+        SHA-256, then atomically promote it into a content-addressed cache.
+      - Materialize validated ComfyUI-relative destinations using safe symlinks
+        without escaping the model root.
+      - Coordinate concurrent hydration, clean or resume interrupted partials,
+        and evict only whole unreferenced blobs under a bounded cache policy.
+    scope_out:
+      - FUSE-mounting object storage for model loading.
+      - Deleting cache entries still referenced by an active worker or job.

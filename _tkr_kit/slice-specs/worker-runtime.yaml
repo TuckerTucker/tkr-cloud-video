@@ -1,0 +1,2140 @@
+capability: worker-runtime
+slice_specs:
+  - name: reproducible-worker-image-1-spec
+    title: Worker build manifest Specification
+    status: approved
+    format: full
+    capability: worker-runtime
+    feature: reproducible-worker-image
+    slice: 1
+    source_story_ids:
+      - worker-runtime/story/build-pinned-worker-image
+    purpose: Implement Worker build manifest as the data contract that
+      machine-readable image release manifest for base image, python lock,
+      comfyui, custom nodes, tools, schemas, and verification commands.
+    layer_assignment:
+      - component: WorkerBuildManifestPort
+        layer: data
+        responsibility: Machine-readable image release manifest for base image, Python
+          lock, ComfyUI, custom nodes, tools, schemas, and verification commands
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: WorkerBuildManifestPort
+        kind: schema_or_repository_port
+        signature: "async def execute(self, request: WorkerBuildManifestRequest,
+          context: OperationContext) -> WorkerBuildManifestResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WorkerBuildManifestError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WorkerBuildManifestRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WorkerBuildManifestResult
+        shape: frozen dataclass or Pydantic model
+        fields: Machine-readable image release manifest for base image, Python lock,
+          ComfyUI, custom nodes, tools, schemas, and verification
+          commands,Deterministic build metadata exposed without secrets
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/build-pinned-worker-image
+        given: the same source and locks are built in a clean environment
+        when: release metadata is compared
+        then: the dependency and revision manifest is identical
+      - story_id: worker-runtime/story/build-pinned-worker-image
+        given: a Docker layer or build argument contains a runtime secret
+        when: release scanning runs
+        then: publication fails and identifies the unsafe source
+    error_handling:
+      - condition: configuration_invalid
+        error: RuntimeConfigurationError
+        recovery: Aggregate safe field errors and exit before side effects
+        retryable: false
+      - condition: capacity_or_dependency_missing
+        error: WorkerPreflightError
+        recovery: Keep the worker unready and identify the failed precondition
+        retryable: false
+      - condition: build_identity_mismatch
+        error: BuildAssuranceError
+        recovery: Block image publication or deployment
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - product configuration, security policy, and injected platform ports
+      provides:
+        - Machine-readable image release manifest for base image, Python lock,
+          ComfyUI, custom nodes, tools, schemas, and verification commands
+        - Deterministic build metadata exposed without secrets
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - worker-runtime.reproducible-worker-image.1.started
+        - worker-runtime.reproducible-worker-image.1.succeeded
+        - worker-runtime.reproducible-worker-image.1.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S1-T01
+        level: unit
+        given: the same source and locks are built in a clean environment
+        when: release metadata is compared
+        then: the dependency and revision manifest is identical
+      - id: S1-T02
+        level: unit
+        given: a Docker layer or build argument contains a runtime secret
+        when: release scanning runs
+        then: publication fails and identifies the unsafe source
+      - id: S1-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Worker build manifest runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - name: reproducible-worker-image-2-spec
+    title: Pinned OCI image build Specification
+    status: approved
+    format: full
+    capability: worker-runtime
+    feature: reproducible-worker-image
+    slice: 2
+    source_story_ids:
+      - worker-runtime/story/validate-runtime-configuration
+    purpose: Implement Pinned OCI image build as the integration contract that
+      multi-stage digest-pinned container build with locked dependencies,
+      approved comfyui/custom nodes, rclone, ffprobe, and health tooling.
+    layer_assignment:
+      - component: PinnedOCIImageBuildAdapter
+        layer: integration
+        responsibility: Multi-stage digest-pinned container build with locked
+          dependencies, approved ComfyUI/custom nodes, rclone, ffprobe, and
+          health tooling
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: PinnedOCIImageBuildAdapter
+        kind: integration_adapter
+        signature: "async def execute(self, request: PinnedOCIImageBuildRequest,
+          context: OperationContext) -> PinnedOCIImageBuildResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: PinnedOCIImageBuildError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: PinnedOCIImageBuildRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: PinnedOCIImageBuildResult
+        shape: frozen dataclass or Pydantic model
+        fields: Multi-stage digest-pinned container build with locked dependencies,
+          approved ComfyUI/custom nodes, rclone, ffprobe, and health
+          tooling,Build-time license, vulnerability, secret, and smoke gates
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/validate-runtime-configuration
+        given: required bucket, release, or secret reference is absent
+        when: configuration loads
+        then: startup fails before network or filesystem mutation
+      - story_id: worker-runtime/story/validate-runtime-configuration
+        given: configuration is valid
+        when: sanitized diagnostics are emitted
+        then: no secret value or signed URL appears in output
+    error_handling:
+      - condition: configuration_invalid
+        error: RuntimeConfigurationError
+        recovery: Aggregate safe field errors and exit before side effects
+        retryable: false
+      - condition: capacity_or_dependency_missing
+        error: WorkerPreflightError
+        recovery: Keep the worker unready and identify the failed precondition
+        retryable: false
+      - condition: build_identity_mismatch
+        error: BuildAssuranceError
+        recovery: Block image publication or deployment
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/1
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - OCI/Docker build engine
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/1
+      provides:
+        - Multi-stage digest-pinned container build with locked dependencies,
+          approved ComfyUI/custom nodes, rclone, ffprobe, and health tooling
+        - Build-time license, vulnerability, secret, and smoke gates
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - worker-runtime.reproducible-worker-image.2.started
+        - worker-runtime.reproducible-worker-image.2.succeeded
+        - worker-runtime.reproducible-worker-image.2.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S2-T01
+        level: contract
+        given: required bucket, release, or secret reference is absent
+        when: configuration loads
+        then: startup fails before network or filesystem mutation
+      - id: S2-T02
+        level: contract
+        given: configuration is valid
+        when: sanitized diagnostics are emitted
+        then: no secret value or signed URL appears in output
+      - id: S2-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Pinned OCI image build runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - name: reproducible-worker-image-3-spec
+    title: Runtime configuration and preflight Specification
+    status: approved
+    format: full
+    capability: worker-runtime
+    feature: reproducible-worker-image
+    slice: 3
+    source_story_ids:
+      - worker-runtime/story/preflight-worker-capacity-and-connectivity
+    purpose: Implement Runtime configuration and preflight as the service contract
+      that typed settings with aggregated validation, secret references, safe
+      defaults, and ioc adapter construction.
+    layer_assignment:
+      - component: RuntimeConfigurationAndPreflightService
+        layer: service
+        responsibility: Typed settings with aggregated validation, secret references,
+          safe defaults, and IoC adapter construction
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: RuntimeConfigurationAndPreflightService
+        kind: application_service
+        signature: "async def execute(self, request:
+          RuntimeConfigurationAndPreflightRequest, context: OperationContext) ->
+          RuntimeConfigurationAndPreflightResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: RuntimeConfigurationAndPreflightError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: RuntimeConfigurationAndPreflightRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: RuntimeConfigurationAndPreflightResult
+        shape: frozen dataclass or Pydantic model
+        fields: Typed settings with aggregated validation, secret references, safe
+          defaults, and IoC adapter construction,GPU, disk, directory,
+          artifact-size, and authorized-connectivity preflight
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/preflight-worker-capacity-and-connectivity
+        given: available disk is below the calculated requirement
+        when: preflight runs
+        then: startup fails before downloading artifacts
+      - story_id: worker-runtime/story/preflight-worker-capacity-and-connectivity
+        given: a required endpoint or authorized operation is unavailable
+        when: preflight runs
+        then: the typed failure names the boundary and remains safe to log
+    error_handling:
+      - condition: configuration_invalid
+        error: RuntimeConfigurationError
+        recovery: Aggregate safe field errors and exit before side effects
+        retryable: false
+      - condition: capacity_or_dependency_missing
+        error: WorkerPreflightError
+        recovery: Keep the worker unready and identify the failed precondition
+        retryable: false
+      - condition: build_identity_mismatch
+        error: BuildAssuranceError
+        recovery: Block image publication or deployment
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/1
+        - worker-runtime/slice/2
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/1
+        - worker-runtime/slice/2
+      provides:
+        - Typed settings with aggregated validation, secret references, safe
+          defaults, and IoC adapter construction
+        - GPU, disk, directory, artifact-size, and authorized-connectivity
+          preflight
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - worker-runtime.reproducible-worker-image.3.started
+        - worker-runtime.reproducible-worker-image.3.succeeded
+        - worker-runtime.reproducible-worker-image.3.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S3-T01
+        level: contract
+        given: available disk is below the calculated requirement
+        when: preflight runs
+        then: startup fails before downloading artifacts
+      - id: S3-T02
+        level: contract
+        given: a required endpoint or authorized operation is unavailable
+        when: preflight runs
+        then: the typed failure names the boundary and remains safe to log
+      - id: S3-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Runtime configuration and preflight runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - name: reproducible-worker-image-4-spec
+    title: Wire Reproducible Worker Image Specification
+    status: approved
+    format: abbreviated
+    capability: worker-runtime
+    feature: reproducible-worker-image
+    slice: 4
+    source_story_ids:
+      - worker-runtime/story/build-pinned-worker-image
+      - worker-runtime/story/validate-runtime-configuration
+      - worker-runtime/story/preflight-worker-capacity-and-connectivity
+    purpose: Implement Wire Reproducible Worker Image as the integration contract
+      that ioc composition of all reproducible worker image components and
+      adapters.
+    layer_assignment:
+      - component: compose_reproducible_worker_image
+        layer: integration
+        responsibility: IoC composition of all Reproducible Worker Image components and
+          adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_reproducible_worker_image
+        kind: composition_root
+        signature: "def compose_reproducible_worker_image(dependencies:
+          ReproducibleWorkerImageDependencies) ->
+          ReproducibleWorkerImageServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireReproducibleWorkerImageError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireReproducibleWorkerImageRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireReproducibleWorkerImageResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Reproducible Worker Image components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/build-pinned-worker-image
+        given: the same source and locks are built in a clean environment
+        when: release metadata is compared
+        then: the dependency and revision manifest is identical
+      - story_id: worker-runtime/story/build-pinned-worker-image
+        given: a Docker layer or build argument contains a runtime secret
+        when: release scanning runs
+        then: publication fails and identifies the unsafe source
+      - story_id: worker-runtime/story/validate-runtime-configuration
+        given: required bucket, release, or secret reference is absent
+        when: configuration loads
+        then: startup fails before network or filesystem mutation
+      - story_id: worker-runtime/story/validate-runtime-configuration
+        given: configuration is valid
+        when: sanitized diagnostics are emitted
+        then: no secret value or signed URL appears in output
+      - story_id: worker-runtime/story/preflight-worker-capacity-and-connectivity
+        given: available disk is below the calculated requirement
+        when: preflight runs
+        then: startup fails before downloading artifacts
+      - story_id: worker-runtime/story/preflight-worker-capacity-and-connectivity
+        given: a required endpoint or authorized operation is unavailable
+        when: preflight runs
+        then: the typed failure names the boundary and remains safe to log
+    error_handling:
+      - condition: dependency_missing
+        error: CompositionError
+        recovery: Fail composition before exposing the feature boundary
+        retryable: false
+      - condition: adapter_contract_mismatch
+        error: ContractError
+        recovery: Reject startup and name the incompatible port
+        retryable: false
+      - condition: configuration_invalid
+        error: RuntimeConfigurationError
+        recovery: Aggregate safe validation defects
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/1
+        - worker-runtime/slice/2
+        - worker-runtime/slice/3
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - OCI/Docker build engine
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/1
+        - worker-runtime/slice/2
+        - worker-runtime/slice/3
+      provides:
+        - IoC composition of all Reproducible Worker Image components and
+          adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - worker-runtime.reproducible-worker-image.4.started
+        - worker-runtime.reproducible-worker-image.4.succeeded
+        - worker-runtime.reproducible-worker-image.4.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S4-T01
+        level: contract
+        given: the same source and locks are built in a clean environment
+        when: release metadata is compared
+        then: the dependency and revision manifest is identical
+      - id: S4-T02
+        level: contract
+        given: a Docker layer or build argument contains a runtime secret
+        when: release scanning runs
+        then: publication fails and identifies the unsafe source
+      - id: S4-T03
+        level: contract
+        given: required bucket, release, or secret reference is absent
+        when: configuration loads
+        then: startup fails before network or filesystem mutation
+      - id: S4-T04
+        level: contract
+        given: configuration is valid
+        when: sanitized diagnostics are emitted
+        then: no secret value or signed URL appears in output
+      - id: S4-T05
+        level: contract
+        given: available disk is below the calculated requirement
+        when: preflight runs
+        then: startup fails before downloading artifacts
+      - id: S4-T06
+        level: contract
+        given: a required endpoint or authorized operation is unavailable
+        when: preflight runs
+        then: the typed failure names the boundary and remains safe to log
+      - id: S4-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Reproducible Worker Image runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - name: reproducible-worker-image-5-spec
+    title: Test Reproducible Worker Image Specification
+    status: approved
+    format: abbreviated
+    capability: worker-runtime
+    feature: reproducible-worker-image
+    slice: 5
+    source_story_ids:
+      - worker-runtime/story/build-pinned-worker-image
+      - worker-runtime/story/validate-runtime-configuration
+      - worker-runtime/story/preflight-worker-capacity-and-connectivity
+    purpose: Implement Test Reproducible Worker Image as the integration contract
+      that table-driven unit coverage for reproducible worker image domain
+      contracts.
+    layer_assignment:
+      - component: test_reproducible_worker_image
+        layer: integration
+        responsibility: Table-driven unit coverage for Reproducible Worker Image domain
+          contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_reproducible_worker_image
+        kind: test_suite
+        signature: "pytest suite: test_reproducible_worker_image"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestReproducibleWorkerImageError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestReproducibleWorkerImageRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestReproducibleWorkerImageResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Reproducible Worker Image domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/build-pinned-worker-image
+        given: the same source and locks are built in a clean environment
+        when: release metadata is compared
+        then: the dependency and revision manifest is identical
+      - story_id: worker-runtime/story/build-pinned-worker-image
+        given: a Docker layer or build argument contains a runtime secret
+        when: release scanning runs
+        then: publication fails and identifies the unsafe source
+      - story_id: worker-runtime/story/validate-runtime-configuration
+        given: required bucket, release, or secret reference is absent
+        when: configuration loads
+        then: startup fails before network or filesystem mutation
+      - story_id: worker-runtime/story/validate-runtime-configuration
+        given: configuration is valid
+        when: sanitized diagnostics are emitted
+        then: no secret value or signed URL appears in output
+      - story_id: worker-runtime/story/preflight-worker-capacity-and-connectivity
+        given: available disk is below the calculated requirement
+        when: preflight runs
+        then: startup fails before downloading artifacts
+      - story_id: worker-runtime/story/preflight-worker-capacity-and-connectivity
+        given: a required endpoint or authorized operation is unavailable
+        when: preflight runs
+        then: the typed failure names the boundary and remains safe to log
+    error_handling:
+      - condition: test_fixture_invalid
+        error: TestContractError
+        recovery: Fail the suite before exercising production behavior
+        retryable: false
+      - condition: expected_failure_not_observed
+        error: AssertionError
+        recovery: Report the discriminating scenario and captured safe evidence
+        retryable: false
+      - condition: environment_unavailable
+        error: TestEnvironmentError
+        recovery: Mark the environment-dependent case blocked, not passed
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/4
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - OCI/Docker build engine
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/4
+      provides:
+        - Table-driven unit coverage for Reproducible Worker Image domain
+          contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - worker-runtime.reproducible-worker-image.5.started
+        - worker-runtime.reproducible-worker-image.5.succeeded
+        - worker-runtime.reproducible-worker-image.5.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S5-T01
+        level: integration
+        given: the same source and locks are built in a clean environment
+        when: release metadata is compared
+        then: the dependency and revision manifest is identical
+      - id: S5-T02
+        level: integration
+        given: a Docker layer or build argument contains a runtime secret
+        when: release scanning runs
+        then: publication fails and identifies the unsafe source
+      - id: S5-T03
+        level: integration
+        given: required bucket, release, or secret reference is absent
+        when: configuration loads
+        then: startup fails before network or filesystem mutation
+      - id: S5-T04
+        level: integration
+        given: configuration is valid
+        when: sanitized diagnostics are emitted
+        then: no secret value or signed URL appears in output
+      - id: S5-T05
+        level: integration
+        given: available disk is below the calculated requirement
+        when: preflight runs
+        then: startup fails before downloading artifacts
+      - id: S5-T06
+        level: integration
+        given: a required endpoint or authorized operation is unavailable
+        when: preflight runs
+        then: the typed failure names the boundary and remains safe to log
+      - id: S5-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Reproducible Worker Image runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Promoted OCI images and release manifests are retained by digest. Build
+        workspaces and unverified caches are disposable and cleaned after the
+        build; unpromoted images follow bounded registry retention.
+  - name: supervised-readiness-6-spec
+    title: Worker lifecycle state machine Specification
+    status: approved
+    format: full
+    capability: worker-runtime
+    feature: supervised-readiness
+    slice: 6
+    source_story_ids:
+      - worker-runtime/story/gate-comfy-startup-on-hydration
+    purpose: Implement Worker lifecycle state machine as the domain contract that
+      explicit configuring, preflighting, hydrating, starting, validating,
+      ready, draining, failed, and stopped states.
+    layer_assignment:
+      - component: WorkerLifecycleStateMachinePolicy
+        layer: domain
+        responsibility: Explicit configuring, preflighting, hydrating, starting,
+          validating, ready, draining, failed, and stopped states
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: WorkerLifecycleStateMachinePolicy
+        kind: policy_or_domain_service
+        signature: "async def execute(self, request: WorkerLifecycleStateMachineRequest,
+          context: OperationContext) -> WorkerLifecycleStateMachineResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WorkerLifecycleStateMachineError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WorkerLifecycleStateMachineRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WorkerLifecycleStateMachineResult
+        shape: frozen dataclass or Pydantic model
+        fields: Explicit configuring, preflighting, hydrating, starting, validating,
+          ready, draining, failed, and stopped states,Legal transitions,
+          deadlines, cancellation, and typed terminal reasons
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/gate-comfy-startup-on-hydration
+        given: hydration or materialization fails
+        when: startup state advances
+        then: ComfyUI is not started and the worker never reports ready
+      - story_id: worker-runtime/story/gate-comfy-startup-on-hydration
+        given: all prerequisites succeed
+        when: ComfyUI starts
+        then: the process receives only approved local paths and non-secret job/runtime
+          settings
+    error_handling:
+      - condition: invalid_state_transition
+        error: WorkerStateError
+        recovery: Fail closed and retain the prior truthful state
+        retryable: false
+      - condition: comfy_exit_or_timeout
+        error: ComfyUnavailable
+        recovery: Apply bounded restart policy or terminate unready
+        retryable: true
+      - condition: workflow_dependency_missing
+        error: WorkflowUnavailable
+        recovery: Keep readiness false until a matching release is deployed
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/5
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/5
+      provides:
+        - Explicit configuring, preflighting, hydrating, starting, validating,
+          ready, draining, failed, and stopped states
+        - Legal transitions, deadlines, cancellation, and typed terminal reasons
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - worker-runtime.supervised-readiness.6.started
+        - worker-runtime.supervised-readiness.6.succeeded
+        - worker-runtime.supervised-readiness.6.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S6-T01
+        level: unit
+        given: hydration or materialization fails
+        when: startup state advances
+        then: ComfyUI is not started and the worker never reports ready
+      - id: S6-T02
+        level: unit
+        given: all prerequisites succeed
+        when: ComfyUI starts
+        then: the process receives only approved local paths and non-secret job/runtime
+          settings
+      - id: S6-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Worker lifecycle state machine runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.
+  - name: supervised-readiness-7-spec
+    title: ComfyUI process supervisor Specification
+    status: approved
+    format: full
+    capability: worker-runtime
+    feature: supervised-readiness
+    slice: 7
+    source_story_ids:
+      - worker-runtime/story/validate-comfy-health-and-workflow
+    purpose: Implement ComfyUI process supervisor as the service contract that
+      injected process runner that starts comfyui only after verified hydration
+      and observes exit/restart policy.
+    layer_assignment:
+      - component: ComfyUIProcessSupervisorService
+        layer: service
+        responsibility: Injected process runner that starts ComfyUI only after verified
+          hydration and observes exit/restart policy
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ComfyUIProcessSupervisorService
+        kind: application_service
+        signature: "async def execute(self, request: ComfyUIProcessSupervisorRequest,
+          context: OperationContext) -> ComfyUIProcessSupervisorResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ComfyUIProcessSupervisorError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ComfyUIProcessSupervisorRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ComfyUIProcessSupervisorResult
+        shape: frozen dataclass or Pydantic model
+        fields: Injected process runner that starts ComfyUI only after verified
+          hydration and observes exit/restart policy,Admission control, drain,
+          cancellation deadline, and bounded shutdown
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/validate-comfy-health-and-workflow
+        given: ComfyUI listens but a required node or model is missing
+        when: workflow validation runs
+        then: readiness remains false and startup fails with the missing dependency
+      - story_id: worker-runtime/story/validate-comfy-health-and-workflow
+        given: health and workflow validation succeed within deadline
+        when: the readiness endpoint is queried
+        then: it reports ready and includes only safe release/status metadata
+    error_handling:
+      - condition: invalid_state_transition
+        error: WorkerStateError
+        recovery: Fail closed and retain the prior truthful state
+        retryable: false
+      - condition: comfy_exit_or_timeout
+        error: ComfyUnavailable
+        recovery: Apply bounded restart policy or terminate unready
+        retryable: true
+      - condition: workflow_dependency_missing
+        error: WorkflowUnavailable
+        recovery: Keep readiness false until a matching release is deployed
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/6
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - ComfyUI local HTTP API
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/6
+      provides:
+        - Injected process runner that starts ComfyUI only after verified
+          hydration and observes exit/restart policy
+        - Admission control, drain, cancellation deadline, and bounded shutdown
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: COMFY_HOST
+        type: string
+        default: 127.0.0.1
+        secret: false
+        validation: loopback unless an authenticated proxy boundary is configured
+      - name: COMFY_PORT
+        type: integer
+        default: 8188
+        secret: false
+        validation: 1..65535
+      - name: COMFY_STARTUP_TIMEOUT_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - worker-runtime.supervised-readiness.7.started
+        - worker-runtime.supervised-readiness.7.succeeded
+        - worker-runtime.supervised-readiness.7.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S7-T01
+        level: contract
+        given: ComfyUI listens but a required node or model is missing
+        when: workflow validation runs
+        then: readiness remains false and startup fails with the missing dependency
+      - id: S7-T02
+        level: contract
+        given: health and workflow validation succeed within deadline
+        when: the readiness endpoint is queried
+        then: it reports ready and includes only safe release/status metadata
+      - id: S7-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: ComfyUI process supervisor runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.
+  - name: supervised-readiness-8-spec
+    title: Health workflow and readiness adapter Specification
+    status: approved
+    format: full
+    capability: worker-runtime
+    feature: supervised-readiness
+    slice: 8
+    source_story_ids:
+      - worker-runtime/story/drain-and-terminate-worker
+    purpose: Implement Health workflow and readiness adapter as the api contract
+      that local comfyui health/object-info/model validation adapter using
+      documented api routes.
+    layer_assignment:
+      - component: HealthWorkflowAndReadinessAdapterHandler
+        layer: api
+        responsibility: Local ComfyUI health/object-info/model validation adapter using
+          documented API routes
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: HealthWorkflowAndReadinessAdapterHandler
+        kind: api_handler
+        signature: "async def execute(self, request:
+          HealthWorkflowAndReadinessAdapterRequest, context: OperationContext)
+          -> HealthWorkflowAndReadinessAdapterResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: HealthWorkflowAndReadinessAdapterError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: HealthWorkflowAndReadinessAdapterRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: HealthWorkflowAndReadinessAdapterResult
+        shape: frozen dataclass or Pydantic model
+        fields: Local ComfyUI health/object-info/model validation adapter using
+          documented API routes,Authenticated readiness/liveness endpoints with
+          safe release context
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/drain-and-terminate-worker
+        given: termination arrives with no active jobs
+        when: the supervisor drains
+        then: readiness drops before the process exits
+      - story_id: worker-runtime/story/drain-and-terminate-worker
+        given: termination deadline expires during an active job
+        when: the supervisor cancels work
+        then: no result commit marker is created for incomplete output
+    error_handling:
+      - condition: invalid_state_transition
+        error: WorkerStateError
+        recovery: Fail closed and retain the prior truthful state
+        retryable: false
+      - condition: comfy_exit_or_timeout
+        error: ComfyUnavailable
+        recovery: Apply bounded restart policy or terminate unready
+        retryable: true
+      - condition: workflow_dependency_missing
+        error: WorkflowUnavailable
+        recovery: Keep readiness false until a matching release is deployed
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/6
+        - worker-runtime/slice/7
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - ComfyUI local HTTP API
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/6
+        - worker-runtime/slice/7
+      provides:
+        - Local ComfyUI health/object-info/model validation adapter using
+          documented API routes
+        - Authenticated readiness/liveness endpoints with safe release context
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: COMFY_HOST
+        type: string
+        default: 127.0.0.1
+        secret: false
+        validation: loopback unless an authenticated proxy boundary is configured
+      - name: COMFY_PORT
+        type: integer
+        default: 8188
+        secret: false
+        validation: 1..65535
+      - name: COMFY_STARTUP_TIMEOUT_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - worker-runtime.supervised-readiness.8.started
+        - worker-runtime.supervised-readiness.8.succeeded
+        - worker-runtime.supervised-readiness.8.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S8-T01
+        level: contract
+        given: termination arrives with no active jobs
+        when: the supervisor drains
+        then: readiness drops before the process exits
+      - id: S8-T02
+        level: contract
+        given: termination deadline expires during an active job
+        when: the supervisor cancels work
+        then: no result commit marker is created for incomplete output
+      - id: S8-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Health workflow and readiness adapter runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.
+  - name: supervised-readiness-9-spec
+    title: Wire Supervised Readiness Specification
+    status: approved
+    format: abbreviated
+    capability: worker-runtime
+    feature: supervised-readiness
+    slice: 9
+    source_story_ids:
+      - worker-runtime/story/gate-comfy-startup-on-hydration
+      - worker-runtime/story/validate-comfy-health-and-workflow
+      - worker-runtime/story/drain-and-terminate-worker
+    purpose: Implement Wire Supervised Readiness as the integration contract that
+      ioc composition of all supervised readiness components and adapters.
+    layer_assignment:
+      - component: compose_supervised_readiness
+        layer: integration
+        responsibility: IoC composition of all Supervised Readiness components and adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_supervised_readiness
+        kind: composition_root
+        signature: "def compose_supervised_readiness(dependencies:
+          SupervisedReadinessDependencies) -> SupervisedReadinessServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireSupervisedReadinessError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireSupervisedReadinessRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireSupervisedReadinessResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Supervised Readiness components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/gate-comfy-startup-on-hydration
+        given: hydration or materialization fails
+        when: startup state advances
+        then: ComfyUI is not started and the worker never reports ready
+      - story_id: worker-runtime/story/gate-comfy-startup-on-hydration
+        given: all prerequisites succeed
+        when: ComfyUI starts
+        then: the process receives only approved local paths and non-secret job/runtime
+          settings
+      - story_id: worker-runtime/story/validate-comfy-health-and-workflow
+        given: ComfyUI listens but a required node or model is missing
+        when: workflow validation runs
+        then: readiness remains false and startup fails with the missing dependency
+      - story_id: worker-runtime/story/validate-comfy-health-and-workflow
+        given: health and workflow validation succeed within deadline
+        when: the readiness endpoint is queried
+        then: it reports ready and includes only safe release/status metadata
+      - story_id: worker-runtime/story/drain-and-terminate-worker
+        given: termination arrives with no active jobs
+        when: the supervisor drains
+        then: readiness drops before the process exits
+      - story_id: worker-runtime/story/drain-and-terminate-worker
+        given: termination deadline expires during an active job
+        when: the supervisor cancels work
+        then: no result commit marker is created for incomplete output
+    error_handling:
+      - condition: invalid_state_transition
+        error: WorkerStateError
+        recovery: Fail closed and retain the prior truthful state
+        retryable: false
+      - condition: comfy_exit_or_timeout
+        error: ComfyUnavailable
+        recovery: Apply bounded restart policy or terminate unready
+        retryable: true
+      - condition: workflow_dependency_missing
+        error: WorkflowUnavailable
+        recovery: Keep readiness false until a matching release is deployed
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/6
+        - worker-runtime/slice/7
+        - worker-runtime/slice/8
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/6
+        - worker-runtime/slice/7
+        - worker-runtime/slice/8
+      provides:
+        - IoC composition of all Supervised Readiness components and adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: COMFY_HOST
+        type: string
+        default: 127.0.0.1
+        secret: false
+        validation: loopback unless an authenticated proxy boundary is configured
+      - name: COMFY_PORT
+        type: integer
+        default: 8188
+        secret: false
+        validation: 1..65535
+      - name: COMFY_STARTUP_TIMEOUT_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - worker-runtime.supervised-readiness.9.started
+        - worker-runtime.supervised-readiness.9.succeeded
+        - worker-runtime.supervised-readiness.9.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S9-T01
+        level: contract
+        given: hydration or materialization fails
+        when: startup state advances
+        then: ComfyUI is not started and the worker never reports ready
+      - id: S9-T02
+        level: contract
+        given: all prerequisites succeed
+        when: ComfyUI starts
+        then: the process receives only approved local paths and non-secret job/runtime
+          settings
+      - id: S9-T03
+        level: contract
+        given: ComfyUI listens but a required node or model is missing
+        when: workflow validation runs
+        then: readiness remains false and startup fails with the missing dependency
+      - id: S9-T04
+        level: contract
+        given: health and workflow validation succeed within deadline
+        when: the readiness endpoint is queried
+        then: it reports ready and includes only safe release/status metadata
+      - id: S9-T05
+        level: contract
+        given: termination arrives with no active jobs
+        when: the supervisor drains
+        then: readiness drops before the process exits
+      - id: S9-T06
+        level: contract
+        given: termination deadline expires during an active job
+        when: the supervisor cancels work
+        then: no result commit marker is created for incomplete output
+      - id: S9-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Supervised Readiness runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.
+  - name: supervised-readiness-10-spec
+    title: Test Supervised Readiness Specification
+    status: approved
+    format: abbreviated
+    capability: worker-runtime
+    feature: supervised-readiness
+    slice: 10
+    source_story_ids:
+      - worker-runtime/story/gate-comfy-startup-on-hydration
+      - worker-runtime/story/validate-comfy-health-and-workflow
+      - worker-runtime/story/drain-and-terminate-worker
+    purpose: Implement Test Supervised Readiness as the integration contract that
+      table-driven unit coverage for supervised readiness domain contracts.
+    layer_assignment:
+      - component: test_supervised_readiness
+        layer: integration
+        responsibility: Table-driven unit coverage for Supervised Readiness domain contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_supervised_readiness
+        kind: test_suite
+        signature: "pytest suite: test_supervised_readiness"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestSupervisedReadinessError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestSupervisedReadinessRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestSupervisedReadinessResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Supervised Readiness domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: worker-runtime/story/gate-comfy-startup-on-hydration
+        given: hydration or materialization fails
+        when: startup state advances
+        then: ComfyUI is not started and the worker never reports ready
+      - story_id: worker-runtime/story/gate-comfy-startup-on-hydration
+        given: all prerequisites succeed
+        when: ComfyUI starts
+        then: the process receives only approved local paths and non-secret job/runtime
+          settings
+      - story_id: worker-runtime/story/validate-comfy-health-and-workflow
+        given: ComfyUI listens but a required node or model is missing
+        when: workflow validation runs
+        then: readiness remains false and startup fails with the missing dependency
+      - story_id: worker-runtime/story/validate-comfy-health-and-workflow
+        given: health and workflow validation succeed within deadline
+        when: the readiness endpoint is queried
+        then: it reports ready and includes only safe release/status metadata
+      - story_id: worker-runtime/story/drain-and-terminate-worker
+        given: termination arrives with no active jobs
+        when: the supervisor drains
+        then: readiness drops before the process exits
+      - story_id: worker-runtime/story/drain-and-terminate-worker
+        given: termination deadline expires during an active job
+        when: the supervisor cancels work
+        then: no result commit marker is created for incomplete output
+    error_handling:
+      - condition: invalid_state_transition
+        error: WorkerStateError
+        recovery: Fail closed and retain the prior truthful state
+        retryable: false
+      - condition: comfy_exit_or_timeout
+        error: ComfyUnavailable
+        recovery: Apply bounded restart policy or terminate unready
+        retryable: true
+      - condition: workflow_dependency_missing
+        error: WorkflowUnavailable
+        recovery: Keep readiness false until a matching release is deployed
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - worker-runtime/slice/9
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - worker-runtime/slice/9
+      provides:
+        - Table-driven unit coverage for Supervised Readiness domain contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes:
+        - GET /system_stats
+        - GET /object_info
+        - GET /models/{folder}
+        - POST /prompt
+        - GET /history/{prompt_id}
+      reference_documentation:
+        - https://docs.comfy.org/development/comfyui-server/comms_routes
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+      - name: COMFY_HOST
+        type: string
+        default: 127.0.0.1
+        secret: false
+        validation: loopback unless an authenticated proxy boundary is configured
+      - name: COMFY_PORT
+        type: integer
+        default: 8188
+        secret: false
+        validation: 1..65535
+      - name: COMFY_STARTUP_TIMEOUT_SECONDS
+        type: integer
+        default: 900
+        secret: false
+        validation: "> 0"
+    observability:
+      events:
+        - worker-runtime.supervised-readiness.10.started
+        - worker-runtime.supervised-readiness.10.succeeded
+        - worker-runtime.supervised-readiness.10.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S10-T01
+        level: integration
+        given: hydration or materialization fails
+        when: startup state advances
+        then: ComfyUI is not started and the worker never reports ready
+      - id: S10-T02
+        level: integration
+        given: all prerequisites succeed
+        when: ComfyUI starts
+        then: the process receives only approved local paths and non-secret job/runtime
+          settings
+      - id: S10-T03
+        level: integration
+        given: ComfyUI listens but a required node or model is missing
+        when: workflow validation runs
+        then: readiness remains false and startup fails with the missing dependency
+      - id: S10-T04
+        level: integration
+        given: health and workflow validation succeed within deadline
+        when: the readiness endpoint is queried
+        then: it reports ready and includes only safe release/status metadata
+      - id: S10-T05
+        level: integration
+        given: termination arrives with no active jobs
+        when: the supervisor drains
+        then: readiness drops before the process exits
+      - id: S10-T06
+        level: integration
+        given: termination deadline expires during an active job
+        when: the supervisor cancels work
+        then: no result commit marker is created for incomplete output
+      - id: S10-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Supervised Readiness runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Worker state and health evidence follow the operational diagnostic
+        retention policy. Process state, temporary workflows, and local model
+        cache are disposable and removed with the worker; durable job results
+        remain owned by the delivery capability.

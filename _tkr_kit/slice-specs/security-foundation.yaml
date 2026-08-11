@@ -1,0 +1,2079 @@
+capability: security-foundation
+slice_specs:
+  - name: least-privilege-credentials-1-spec
+    title: Credential boundary contracts Specification
+    status: approved
+    format: full
+    capability: security-foundation
+    feature: least-privilege-credentials
+    slice: 1
+    source_story_ids:
+      - security-foundation/story/provision-single-prefix-storage-keys
+    purpose: Implement Credential boundary contracts as the domain contract that
+      typed credential roles, bucket/prefix scope, allowed capabilities, and
+      forbidden-operation matrix.
+    layer_assignment:
+      - component: CredentialBoundaryContractsPolicy
+        layer: domain
+        responsibility: Typed credential roles, bucket/prefix scope, allowed
+          capabilities, and forbidden-operation matrix
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: CredentialBoundaryContractsPolicy
+        kind: policy_or_domain_service
+        signature: "async def execute(self, request: CredentialBoundaryContractsRequest,
+          context: OperationContext) -> CredentialBoundaryContractsResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: CredentialBoundaryContractsError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: CredentialBoundaryContractsRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: CredentialBoundaryContractsResult
+        shape: frozen dataclass or Pydantic model
+        fields: Typed credential roles, bucket/prefix scope, allowed capabilities, and
+          forbidden-operation matrix,Provider-neutral CredentialPolicy and
+          CredentialProbe interfaces
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/provision-single-prefix-storage-keys
+        given: a declared credential boundary
+        when: the operator provisions runtime keys
+        then: each key has one bucket/prefix and only its required capabilities
+      - story_id: security-foundation/story/provision-single-prefix-storage-keys
+        given: a provisioned runtime key
+        when: a forbidden prefix or operation is attempted
+        then: access is denied and the safe test result is recorded
+    error_handling:
+      - condition: credential_scope_invalid
+        error: CredentialScopeError
+        recovery: Refuse provisioning or startup; report the role and requested boundary
+          without key material
+        retryable: false
+      - condition: provider_capability_mismatch
+        error: ProviderCapabilityMismatch
+        recovery: Fail the probe and keep the credential inactive
+        retryable: false
+      - condition: secret_exposure_detected
+        error: SecretExposureError
+        recovery: Redact the value, fail the operation, and require rotation
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - product configuration, security policy, and injected platform ports
+      provides:
+        - Typed credential roles, bucket/prefix scope, allowed capabilities, and
+          forbidden-operation matrix
+        - Provider-neutral CredentialPolicy and CredentialProbe interfaces
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.least-privilege-credentials.1.started
+        - security-foundation.least-privilege-credentials.1.succeeded
+        - security-foundation.least-privilege-credentials.1.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S1-T01
+        level: unit
+        given: a declared credential boundary
+        when: the operator provisions runtime keys
+        then: each key has one bucket/prefix and only its required capabilities
+      - id: S1-T02
+        level: unit
+        given: a provisioned runtime key
+        when: a forbidden prefix or operation is attempted
+        then: access is denied and the safe test result is recorded
+      - id: S1-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Credential boundary contracts runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - name: least-privilege-credentials-2-spec
+    title: B2 key provisioning service Specification
+    status: approved
+    format: full
+    capability: security-foundation
+    feature: least-privilege-credentials
+    slice: 2
+    source_story_ids:
+      - security-foundation/story/rotate-runtime-secrets-without-rebuild
+    purpose: Implement B2 key provisioning service as the service contract that
+      backblaze-specific provisioning plan that emits separate single-prefix
+      application-key requests.
+    layer_assignment:
+      - component: B2KeyProvisioningServiceService
+        layer: service
+        responsibility: Backblaze-specific provisioning plan that emits separate
+          single-prefix application-key requests
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: B2KeyProvisioningServiceService
+        kind: application_service
+        signature: "async def execute(self, request: B2KeyProvisioningServiceRequest,
+          context: OperationContext) -> B2KeyProvisioningServiceResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: B2KeyProvisioningServiceError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: B2KeyProvisioningServiceRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: B2KeyProvisioningServiceResult
+        shape: frozen dataclass or Pydantic model
+        fields: Backblaze-specific provisioning plan that emits separate single-prefix
+          application-key requests,Rotation and revocation workflow with safe
+          verification receipts
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/rotate-runtime-secrets-without-rebuild
+        given: a deployed image and template
+        when: credential values are rotated
+        then: no image rebuild or workflow change is required
+      - story_id: security-foundation/story/rotate-runtime-secrets-without-rebuild
+        given: a superseded key
+        when: revocation completes
+        then: all subsequent authorization attempts with that key fail
+    error_handling:
+      - condition: credential_scope_invalid
+        error: CredentialScopeError
+        recovery: Refuse provisioning or startup; report the role and requested boundary
+          without key material
+        retryable: false
+      - condition: provider_capability_mismatch
+        error: ProviderCapabilityMismatch
+        recovery: Fail the probe and keep the credential inactive
+        retryable: false
+      - condition: secret_exposure_detected
+        error: SecretExposureError
+        recovery: Redact the value, fail the operation, and require rotation
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/1
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - rclone B2 backend or Backblaze B2 API adapter
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/1
+      provides:
+        - Backblaze-specific provisioning plan that emits separate single-prefix
+          application-key requests
+        - Rotation and revocation workflow with safe verification receipts
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.least-privilege-credentials.2.started
+        - security-foundation.least-privilege-credentials.2.succeeded
+        - security-foundation.least-privilege-credentials.2.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S2-T01
+        level: contract
+        given: a deployed image and template
+        when: credential values are rotated
+        then: no image rebuild or workflow change is required
+      - id: S2-T02
+        level: contract
+        given: a superseded key
+        when: revocation completes
+        then: all subsequent authorization attempts with that key fail
+      - id: S2-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: B2 key provisioning service runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - name: least-privilege-credentials-3-spec
+    title: Process secret isolation Specification
+    status: approved
+    format: full
+    capability: security-foundation
+    feature: least-privilege-credentials
+    slice: 3
+    source_story_ids:
+      - security-foundation/story/isolate-secrets-by-process-role
+    purpose: Implement Process secret isolation as the integration contract that
+      per-process environment allowlists for hydrator, comfyui, uploader, and
+      delivery roles.
+    layer_assignment:
+      - component: ProcessSecretIsolationAdapter
+        layer: integration
+        responsibility: Per-process environment allowlists for hydrator, ComfyUI,
+          uploader, and delivery roles
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ProcessSecretIsolationAdapter
+        kind: integration_adapter
+        signature: "async def execute(self, request: ProcessSecretIsolationRequest,
+          context: OperationContext) -> ProcessSecretIsolationResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ProcessSecretIsolationError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ProcessSecretIsolationRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ProcessSecretIsolationResult
+        shape: frozen dataclass or Pydantic model
+        fields: Per-process environment allowlists for hydrator, ComfyUI, uploader, and
+          delivery roles,RunPod secret-reference adapter and structured
+          redaction boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/isolate-secrets-by-process-role
+        given: the ComfyUI process environment
+        when: a custom node inspects available variables
+        then: no storage application key or signed URL is present
+      - story_id: security-foundation/story/isolate-secrets-by-process-role
+        given: a component attempts an operation outside its role
+        when: the provider authorizes the request
+        then: the request is denied by its credential capability or prefix restriction
+    error_handling:
+      - condition: credential_scope_invalid
+        error: CredentialScopeError
+        recovery: Refuse provisioning or startup; report the role and requested boundary
+          without key material
+        retryable: false
+      - condition: provider_capability_mismatch
+        error: ProviderCapabilityMismatch
+        recovery: Fail the probe and keep the credential inactive
+        retryable: false
+      - condition: secret_exposure_detected
+        error: SecretExposureError
+        recovery: Redact the value, fail the operation, and require rotation
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/1
+        - security-foundation/slice/2
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - RunPod platform/SDK
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/1
+        - security-foundation/slice/2
+      provides:
+        - Per-process environment allowlists for hydrator, ComfyUI, uploader,
+          and delivery roles
+        - RunPod secret-reference adapter and structured redaction boundary
+      documented_routes: []
+      reference_documentation:
+        - https://docs.runpod.io/pods/templates/secrets
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.least-privilege-credentials.3.started
+        - security-foundation.least-privilege-credentials.3.succeeded
+        - security-foundation.least-privilege-credentials.3.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S3-T01
+        level: contract
+        given: the ComfyUI process environment
+        when: a custom node inspects available variables
+        then: no storage application key or signed URL is present
+      - id: S3-T02
+        level: contract
+        given: a component attempts an operation outside its role
+        when: the provider authorizes the request
+        then: the request is denied by its credential capability or prefix restriction
+      - id: S3-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Process secret isolation runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - name: least-privilege-credentials-4-spec
+    title: Wire Least-Privilege Credentials Specification
+    status: approved
+    format: abbreviated
+    capability: security-foundation
+    feature: least-privilege-credentials
+    slice: 4
+    source_story_ids:
+      - security-foundation/story/provision-single-prefix-storage-keys
+      - security-foundation/story/rotate-runtime-secrets-without-rebuild
+      - security-foundation/story/isolate-secrets-by-process-role
+    purpose: Implement Wire Least-Privilege Credentials as the integration contract
+      that ioc composition of all least-privilege credentials components and
+      adapters.
+    layer_assignment:
+      - component: compose_least_privilege_credentials
+        layer: integration
+        responsibility: IoC composition of all Least-Privilege Credentials components
+          and adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_least_privilege_credentials
+        kind: composition_root
+        signature: "def compose_least_privilege_credentials(dependencies:
+          LeastPrivilegeCredentialsDependencies) ->
+          LeastPrivilegeCredentialsServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireLeastPrivilegeCredentialsError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireLeastPrivilegeCredentialsRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireLeastPrivilegeCredentialsResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Least-Privilege Credentials components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/provision-single-prefix-storage-keys
+        given: a declared credential boundary
+        when: the operator provisions runtime keys
+        then: each key has one bucket/prefix and only its required capabilities
+      - story_id: security-foundation/story/provision-single-prefix-storage-keys
+        given: a provisioned runtime key
+        when: a forbidden prefix or operation is attempted
+        then: access is denied and the safe test result is recorded
+      - story_id: security-foundation/story/rotate-runtime-secrets-without-rebuild
+        given: a deployed image and template
+        when: credential values are rotated
+        then: no image rebuild or workflow change is required
+      - story_id: security-foundation/story/rotate-runtime-secrets-without-rebuild
+        given: a superseded key
+        when: revocation completes
+        then: all subsequent authorization attempts with that key fail
+      - story_id: security-foundation/story/isolate-secrets-by-process-role
+        given: the ComfyUI process environment
+        when: a custom node inspects available variables
+        then: no storage application key or signed URL is present
+      - story_id: security-foundation/story/isolate-secrets-by-process-role
+        given: a component attempts an operation outside its role
+        when: the provider authorizes the request
+        then: the request is denied by its credential capability or prefix restriction
+    error_handling:
+      - condition: credential_scope_invalid
+        error: CredentialScopeError
+        recovery: Refuse provisioning or startup; report the role and requested boundary
+          without key material
+        retryable: false
+      - condition: provider_capability_mismatch
+        error: ProviderCapabilityMismatch
+        recovery: Fail the probe and keep the credential inactive
+        retryable: false
+      - condition: secret_exposure_detected
+        error: SecretExposureError
+        recovery: Redact the value, fail the operation, and require rotation
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/1
+        - security-foundation/slice/2
+        - security-foundation/slice/3
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/1
+        - security-foundation/slice/2
+        - security-foundation/slice/3
+      provides:
+        - IoC composition of all Least-Privilege Credentials components and
+          adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.least-privilege-credentials.4.started
+        - security-foundation.least-privilege-credentials.4.succeeded
+        - security-foundation.least-privilege-credentials.4.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S4-T01
+        level: contract
+        given: a declared credential boundary
+        when: the operator provisions runtime keys
+        then: each key has one bucket/prefix and only its required capabilities
+      - id: S4-T02
+        level: contract
+        given: a provisioned runtime key
+        when: a forbidden prefix or operation is attempted
+        then: access is denied and the safe test result is recorded
+      - id: S4-T03
+        level: contract
+        given: a deployed image and template
+        when: credential values are rotated
+        then: no image rebuild or workflow change is required
+      - id: S4-T04
+        level: contract
+        given: a superseded key
+        when: revocation completes
+        then: all subsequent authorization attempts with that key fail
+      - id: S4-T05
+        level: contract
+        given: the ComfyUI process environment
+        when: a custom node inspects available variables
+        then: no storage application key or signed URL is present
+      - id: S4-T06
+        level: contract
+        given: a component attempts an operation outside its role
+        when: the provider authorizes the request
+        then: the request is denied by its credential capability or prefix restriction
+      - id: S4-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Least-Privilege Credentials runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - name: least-privilege-credentials-5-spec
+    title: Test Least-Privilege Credentials Specification
+    status: approved
+    format: abbreviated
+    capability: security-foundation
+    feature: least-privilege-credentials
+    slice: 5
+    source_story_ids:
+      - security-foundation/story/provision-single-prefix-storage-keys
+      - security-foundation/story/rotate-runtime-secrets-without-rebuild
+      - security-foundation/story/isolate-secrets-by-process-role
+    purpose: Implement Test Least-Privilege Credentials as the integration contract
+      that table-driven unit coverage for least-privilege credentials domain
+      contracts.
+    layer_assignment:
+      - component: test_least_privilege_credentials
+        layer: integration
+        responsibility: Table-driven unit coverage for Least-Privilege Credentials
+          domain contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_least_privilege_credentials
+        kind: test_suite
+        signature: "pytest suite: test_least_privilege_credentials"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestLeastPrivilegeCredentialsError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestLeastPrivilegeCredentialsRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestLeastPrivilegeCredentialsResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Least-Privilege Credentials domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/provision-single-prefix-storage-keys
+        given: a declared credential boundary
+        when: the operator provisions runtime keys
+        then: each key has one bucket/prefix and only its required capabilities
+      - story_id: security-foundation/story/provision-single-prefix-storage-keys
+        given: a provisioned runtime key
+        when: a forbidden prefix or operation is attempted
+        then: access is denied and the safe test result is recorded
+      - story_id: security-foundation/story/rotate-runtime-secrets-without-rebuild
+        given: a deployed image and template
+        when: credential values are rotated
+        then: no image rebuild or workflow change is required
+      - story_id: security-foundation/story/rotate-runtime-secrets-without-rebuild
+        given: a superseded key
+        when: revocation completes
+        then: all subsequent authorization attempts with that key fail
+      - story_id: security-foundation/story/isolate-secrets-by-process-role
+        given: the ComfyUI process environment
+        when: a custom node inspects available variables
+        then: no storage application key or signed URL is present
+      - story_id: security-foundation/story/isolate-secrets-by-process-role
+        given: a component attempts an operation outside its role
+        when: the provider authorizes the request
+        then: the request is denied by its credential capability or prefix restriction
+    error_handling:
+      - condition: credential_scope_invalid
+        error: CredentialScopeError
+        recovery: Refuse provisioning or startup; report the role and requested boundary
+          without key material
+        retryable: false
+      - condition: provider_capability_mismatch
+        error: ProviderCapabilityMismatch
+        recovery: Fail the probe and keep the credential inactive
+        retryable: false
+      - condition: secret_exposure_detected
+        error: SecretExposureError
+        recovery: Redact the value, fail the operation, and require rotation
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/4
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/4
+      provides:
+        - Table-driven unit coverage for Least-Privilege Credentials domain
+          contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+        - https://rclone.org/b2/
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.least-privilege-credentials.5.started
+        - security-foundation.least-privilege-credentials.5.succeeded
+        - security-foundation.least-privilege-credentials.5.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S5-T01
+        level: integration
+        given: a declared credential boundary
+        when: the operator provisions runtime keys
+        then: each key has one bucket/prefix and only its required capabilities
+      - id: S5-T02
+        level: integration
+        given: a provisioned runtime key
+        when: a forbidden prefix or operation is attempted
+        then: access is denied and the safe test result is recorded
+      - id: S5-T03
+        level: integration
+        given: a deployed image and template
+        when: credential values are rotated
+        then: no image rebuild or workflow change is required
+      - id: S5-T04
+        level: integration
+        given: a superseded key
+        when: revocation completes
+        then: all subsequent authorization attempts with that key fail
+      - id: S5-T05
+        level: integration
+        given: the ComfyUI process environment
+        when: a custom node inspects available variables
+        then: no storage application key or signed URL is present
+      - id: S5-T06
+        level: integration
+        given: a component attempts an operation outside its role
+        when: the provider authorizes the request
+        then: the request is denied by its credential capability or prefix restriction
+      - id: S5-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Least-Privilege Credentials runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: bounded
+      detail: Credential policy, capability-probe receipts, and rotation metadata are
+        retained per environment. Secret values exist only in the provider
+        secret store and allowlisted process memory, never in plans, logs,
+        images, workflows, or artifacts. Superseded credentials are revoked and
+        removed after replacement verification.
+  - name: boundary-validation-and-provenance-6-spec
+    title: Boundary validation primitives Specification
+    status: approved
+    format: full
+    capability: security-foundation
+    feature: boundary-validation-and-provenance
+    slice: 6
+    source_story_ids:
+      - security-foundation/story/reject-unsafe-identifiers-and-paths
+    purpose: Implement Boundary validation primitives as the domain contract that
+      strict value objects for job ids, model-set ids, sha-256 digests, object
+      keys, and relative destinations.
+    layer_assignment:
+      - component: BoundaryValidationPrimitivesPolicy
+        layer: domain
+        responsibility: Strict value objects for job IDs, model-set IDs, SHA-256
+          digests, object keys, and relative destinations
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: BoundaryValidationPrimitivesPolicy
+        kind: policy_or_domain_service
+        signature: "async def execute(self, request:
+          BoundaryValidationPrimitivesRequest, context: OperationContext) ->
+          BoundaryValidationPrimitivesResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: BoundaryValidationPrimitivesError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: BoundaryValidationPrimitivesRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: BoundaryValidationPrimitivesResult
+        shape: frozen dataclass or Pydantic model
+        fields: Strict value objects for job IDs, model-set IDs, SHA-256 digests, object
+          keys, and relative destinations,Canonical path containment and
+          symlink-aware write-target checks
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/reject-unsafe-identifiers-and-paths
+        given: a digest containing separators or not exactly 64 hexadecimal characters
+        when: manifest validation runs
+        then: validation fails before a partial destination is constructed
+      - story_id: security-foundation/story/reject-unsafe-identifiers-and-paths
+        given: a job or manifest path that resolves outside its root
+        when: containment validation runs
+        then: the operation is rejected without creating, reading, or linking a file
+    error_handling:
+      - condition: invalid_boundary_value
+        error: BoundaryValidationError
+        recovery: Reject before filesystem, network, or process side effects
+        retryable: false
+      - condition: path_escape
+        error: PathContainmentError
+        recovery: Refuse the path and preserve the assigned root unchanged
+        retryable: false
+      - condition: provenance_or_approval_mismatch
+        error: ReleaseAssuranceError
+        recovery: Block release/readiness and name the missing or stale evidence
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/5
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/5
+      provides:
+        - Strict value objects for job IDs, model-set IDs, SHA-256 digests,
+          object keys, and relative destinations
+        - Canonical path containment and symlink-aware write-target checks
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.boundary-validation-and-provenance.6.started
+        - security-foundation.boundary-validation-and-provenance.6.succeeded
+        - security-foundation.boundary-validation-and-provenance.6.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S6-T01
+        level: unit
+        given: a digest containing separators or not exactly 64 hexadecimal characters
+        when: manifest validation runs
+        then: validation fails before a partial destination is constructed
+      - id: S6-T02
+        level: unit
+        given: a job or manifest path that resolves outside its root
+        when: containment validation runs
+        then: the operation is rejected without creating, reading, or linking a file
+      - id: S6-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Boundary validation primitives runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.
+  - name: boundary-validation-and-provenance-7-spec
+    title: Release provenance manifest Specification
+    status: approved
+    format: full
+    capability: security-foundation
+    feature: boundary-validation-and-provenance
+    slice: 7
+    source_story_ids:
+      - security-foundation/story/verify-executable-artifact-provenance
+    purpose: Implement Release provenance manifest as the data contract that
+      versioned schema covering image, python lock, comfyui, custom nodes,
+      workflow, manifest, models, and verification evidence.
+    layer_assignment:
+      - component: ReleaseProvenanceManifestPort
+        layer: data
+        responsibility: Versioned schema covering image, Python lock, ComfyUI, custom
+          nodes, workflow, manifest, models, and verification evidence
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ReleaseProvenanceManifestPort
+        kind: schema_or_repository_port
+        signature: "async def execute(self, request: ReleaseProvenanceManifestRequest,
+          context: OperationContext) -> ReleaseProvenanceManifestResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ReleaseProvenanceManifestError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ReleaseProvenanceManifestRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ReleaseProvenanceManifestResult
+        shape: frozen dataclass or Pydantic model
+        fields: Versioned schema covering image, Python lock, ComfyUI, custom nodes,
+          workflow, manifest, models, and verification evidence,Deterministic
+          serialization and digest verification
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/verify-executable-artifact-provenance
+        given: a dependency or custom-node revision differs from the release manifest
+        when: release verification runs
+        then: promotion fails and names the drifting component
+      - story_id: security-foundation/story/verify-executable-artifact-provenance
+        given: a healthy worker
+        when: its version endpoint is queried
+        then: the response identifies the approved release without credentials or
+          sensitive configuration
+    error_handling:
+      - condition: invalid_boundary_value
+        error: BoundaryValidationError
+        recovery: Reject before filesystem, network, or process side effects
+        retryable: false
+      - condition: path_escape
+        error: PathContainmentError
+        recovery: Refuse the path and preserve the assigned root unchanged
+        retryable: false
+      - condition: provenance_or_approval_mismatch
+        error: ReleaseAssuranceError
+        recovery: Block release/readiness and name the missing or stale evidence
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/6
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/6
+      provides:
+        - Versioned schema covering image, Python lock, ComfyUI, custom nodes,
+          workflow, manifest, models, and verification evidence
+        - Deterministic serialization and digest verification
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.boundary-validation-and-provenance.7.started
+        - security-foundation.boundary-validation-and-provenance.7.succeeded
+        - security-foundation.boundary-validation-and-provenance.7.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S7-T01
+        level: unit
+        given: a dependency or custom-node revision differs from the release manifest
+        when: release verification runs
+        then: promotion fails and names the drifting component
+      - id: S7-T02
+        level: unit
+        given: a healthy worker
+        when: its version endpoint is queried
+        then: the response identifies the approved release without credentials or
+          sensitive configuration
+      - id: S7-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Release provenance manifest runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.
+  - name: boundary-validation-and-provenance-8-spec
+    title: Release assurance gate Specification
+    status: approved
+    format: full
+    capability: security-foundation
+    feature: boundary-validation-and-provenance
+    slice: 8
+    source_story_ids:
+      - security-foundation/story/gate-release-on-license-and-territory
+    purpose: Implement Release assurance gate as the service contract that release
+      evaluation for provenance completeness, license approval, deployment use,
+      and territory.
+    layer_assignment:
+      - component: ReleaseAssuranceGateService
+        layer: service
+        responsibility: Release evaluation for provenance completeness, license
+          approval, deployment use, and territory
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: ReleaseAssuranceGateService
+        kind: application_service
+        signature: "async def execute(self, request: ReleaseAssuranceGateRequest,
+          context: OperationContext) -> ReleaseAssuranceGateResult"
+        async: true
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: ReleaseAssuranceGateError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: ReleaseAssuranceGateRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: ReleaseAssuranceGateResult
+        shape: frozen dataclass or Pydantic model
+        fields: Release evaluation for provenance completeness, license approval,
+          deployment use, and territory,Typed stale-evidence and policy-failure
+          reports
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/gate-release-on-license-and-territory
+        given: a public or commercial release without current approval
+        when: the release gate runs
+        then: promotion is blocked with the missing evidence requirement
+      - story_id: security-foundation/story/gate-release-on-license-and-territory
+        given: a model or intended territory changes
+        when: an earlier approval is evaluated
+        then: the approval is treated as stale and must be renewed
+    error_handling:
+      - condition: invalid_boundary_value
+        error: BoundaryValidationError
+        recovery: Reject before filesystem, network, or process side effects
+        retryable: false
+      - condition: path_escape
+        error: PathContainmentError
+        recovery: Refuse the path and preserve the assigned root unchanged
+        retryable: false
+      - condition: provenance_or_approval_mismatch
+        error: ReleaseAssuranceError
+        recovery: Block release/readiness and name the missing or stale evidence
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/6
+        - security-foundation/slice/7
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/6
+        - security-foundation/slice/7
+      provides:
+        - Release evaluation for provenance completeness, license approval,
+          deployment use, and territory
+        - Typed stale-evidence and policy-failure reports
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.boundary-validation-and-provenance.8.started
+        - security-foundation.boundary-validation-and-provenance.8.succeeded
+        - security-foundation.boundary-validation-and-provenance.8.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S8-T01
+        level: contract
+        given: a public or commercial release without current approval
+        when: the release gate runs
+        then: promotion is blocked with the missing evidence requirement
+      - id: S8-T02
+        level: contract
+        given: a model or intended territory changes
+        when: an earlier approval is evaluated
+        then: the approval is treated as stale and must be renewed
+      - id: S8-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Release assurance gate runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.
+  - name: boundary-validation-and-provenance-9-spec
+    title: Wire Boundary Validation and Provenance Specification
+    status: approved
+    format: abbreviated
+    capability: security-foundation
+    feature: boundary-validation-and-provenance
+    slice: 9
+    source_story_ids:
+      - security-foundation/story/reject-unsafe-identifiers-and-paths
+      - security-foundation/story/verify-executable-artifact-provenance
+      - security-foundation/story/gate-release-on-license-and-territory
+    purpose: Implement Wire Boundary Validation and Provenance as the integration
+      contract that ioc composition of all boundary validation and provenance
+      components and adapters.
+    layer_assignment:
+      - component: compose_boundary_validation_and_provenance
+        layer: integration
+        responsibility: IoC composition of all Boundary Validation and Provenance
+          components and adapters
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: compose_boundary_validation_and_provenance
+        kind: composition_root
+        signature: "def compose_boundary_validation_and_provenance(dependencies:
+          BoundaryValidationAndProvenanceDependencies) ->
+          BoundaryValidationAndProvenanceServices"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: WireBoundaryValidationAndProvenanceError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: WireBoundaryValidationAndProvenanceRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: WireBoundaryValidationAndProvenanceResult
+        shape: frozen dataclass or Pydantic model
+        fields: IoC composition of all Boundary Validation and Provenance components and
+          adapters,End-to-end feature path exposed through the capability's
+          public service boundary
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/reject-unsafe-identifiers-and-paths
+        given: a digest containing separators or not exactly 64 hexadecimal characters
+        when: manifest validation runs
+        then: validation fails before a partial destination is constructed
+      - story_id: security-foundation/story/reject-unsafe-identifiers-and-paths
+        given: a job or manifest path that resolves outside its root
+        when: containment validation runs
+        then: the operation is rejected without creating, reading, or linking a file
+      - story_id: security-foundation/story/verify-executable-artifact-provenance
+        given: a dependency or custom-node revision differs from the release manifest
+        when: release verification runs
+        then: promotion fails and names the drifting component
+      - story_id: security-foundation/story/verify-executable-artifact-provenance
+        given: a healthy worker
+        when: its version endpoint is queried
+        then: the response identifies the approved release without credentials or
+          sensitive configuration
+      - story_id: security-foundation/story/gate-release-on-license-and-territory
+        given: a public or commercial release without current approval
+        when: the release gate runs
+        then: promotion is blocked with the missing evidence requirement
+      - story_id: security-foundation/story/gate-release-on-license-and-territory
+        given: a model or intended territory changes
+        when: an earlier approval is evaluated
+        then: the approval is treated as stale and must be renewed
+    error_handling:
+      - condition: invalid_boundary_value
+        error: BoundaryValidationError
+        recovery: Reject before filesystem, network, or process side effects
+        retryable: false
+      - condition: path_escape
+        error: PathContainmentError
+        recovery: Refuse the path and preserve the assigned root unchanged
+        retryable: false
+      - condition: provenance_or_approval_mismatch
+        error: ReleaseAssuranceError
+        recovery: Block release/readiness and name the missing or stale evidence
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/6
+        - security-foundation/slice/7
+        - security-foundation/slice/8
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/6
+        - security-foundation/slice/7
+        - security-foundation/slice/8
+      provides:
+        - IoC composition of all Boundary Validation and Provenance components
+          and adapters
+        - End-to-end feature path exposed through the capability's public
+          service boundary
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.boundary-validation-and-provenance.9.started
+        - security-foundation.boundary-validation-and-provenance.9.succeeded
+        - security-foundation.boundary-validation-and-provenance.9.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S9-T01
+        level: contract
+        given: a digest containing separators or not exactly 64 hexadecimal characters
+        when: manifest validation runs
+        then: validation fails before a partial destination is constructed
+      - id: S9-T02
+        level: contract
+        given: a job or manifest path that resolves outside its root
+        when: containment validation runs
+        then: the operation is rejected without creating, reading, or linking a file
+      - id: S9-T03
+        level: contract
+        given: a dependency or custom-node revision differs from the release manifest
+        when: release verification runs
+        then: promotion fails and names the drifting component
+      - id: S9-T04
+        level: contract
+        given: a healthy worker
+        when: its version endpoint is queried
+        then: the response identifies the approved release without credentials or
+          sensitive configuration
+      - id: S9-T05
+        level: contract
+        given: a public or commercial release without current approval
+        when: the release gate runs
+        then: promotion is blocked with the missing evidence requirement
+      - id: S9-T06
+        level: contract
+        given: a model or intended territory changes
+        when: an earlier approval is evaluated
+        then: the approval is treated as stale and must be renewed
+      - id: S9-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Wire Boundary Validation and Provenance runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.
+  - name: boundary-validation-and-provenance-10-spec
+    title: Test Boundary Validation and Provenance Specification
+    status: approved
+    format: abbreviated
+    capability: security-foundation
+    feature: boundary-validation-and-provenance
+    slice: 10
+    source_story_ids:
+      - security-foundation/story/reject-unsafe-identifiers-and-paths
+      - security-foundation/story/verify-executable-artifact-provenance
+      - security-foundation/story/gate-release-on-license-and-territory
+    purpose: Implement Test Boundary Validation and Provenance as the integration
+      contract that table-driven unit coverage for boundary validation and
+      provenance domain contracts.
+    layer_assignment:
+      - component: test_boundary_validation_and_provenance
+        layer: integration
+        responsibility: Table-driven unit coverage for Boundary Validation and
+          Provenance domain contracts
+      - component: injected ports/adapters
+        layer: integration
+        responsibility: Provide filesystem, object storage, process, clock,
+          authorization, media, and telemetry effects without coupling domain
+          policy to providers
+    interfaces:
+      - name: test_boundary_validation_and_provenance
+        kind: test_suite
+        signature: "pytest suite: test_boundary_validation_and_provenance"
+        async: false
+        ownership: The feature composition root constructs the implementation and
+          injects all side-effecting ports.
+      - name: TestBoundaryValidationAndProvenanceError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries allowlisted diagnostic context only; cause chains are logged
+          through structural redaction.
+    data_models:
+      - name: TestBoundaryValidationAndProvenanceRequest
+        shape: immutable Pydantic model
+        fields: Only normalized identifiers, typed parameters, and already-authorized
+          references required by this operation.
+        validation: forbid unknown fields; reject control characters and unsafe paths at
+          construction
+      - name: TestBoundaryValidationAndProvenanceResult
+        shape: frozen dataclass or Pydantic model
+        fields: Table-driven unit coverage for Boundary Validation and Provenance domain
+          contracts,Integration, failure-injection, security, and acceptance
+          coverage for all linked stories
+        validation: must be complete before return; no secret, signed URL token, full
+          prompt, or user filename fields
+      - name: OperationContext
+        shape: frozen dataclass
+        fields:
+          - release_id
+          - worker_id
+          - correlation_id
+          - job_id?
+          - attempt_id?
+          - deadline
+        validation: safe identifiers only; cancellation/deadline propagated to every
+          async adapter
+    behavior:
+      - story_id: security-foundation/story/reject-unsafe-identifiers-and-paths
+        given: a digest containing separators or not exactly 64 hexadecimal characters
+        when: manifest validation runs
+        then: validation fails before a partial destination is constructed
+      - story_id: security-foundation/story/reject-unsafe-identifiers-and-paths
+        given: a job or manifest path that resolves outside its root
+        when: containment validation runs
+        then: the operation is rejected without creating, reading, or linking a file
+      - story_id: security-foundation/story/verify-executable-artifact-provenance
+        given: a dependency or custom-node revision differs from the release manifest
+        when: release verification runs
+        then: promotion fails and names the drifting component
+      - story_id: security-foundation/story/verify-executable-artifact-provenance
+        given: a healthy worker
+        when: its version endpoint is queried
+        then: the response identifies the approved release without credentials or
+          sensitive configuration
+      - story_id: security-foundation/story/gate-release-on-license-and-territory
+        given: a public or commercial release without current approval
+        when: the release gate runs
+        then: promotion is blocked with the missing evidence requirement
+      - story_id: security-foundation/story/gate-release-on-license-and-territory
+        given: a model or intended territory changes
+        when: an earlier approval is evaluated
+        then: the approval is treated as stale and must be renewed
+    error_handling:
+      - condition: invalid_boundary_value
+        error: BoundaryValidationError
+        recovery: Reject before filesystem, network, or process side effects
+        retryable: false
+      - condition: path_escape
+        error: PathContainmentError
+        recovery: Refuse the path and preserve the assigned root unchanged
+        retryable: false
+      - condition: provenance_or_approval_mismatch
+        error: ReleaseAssuranceError
+        recovery: Block release/readiness and name the missing or stale evidence
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - security-foundation/slice/9
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - pytest
+      inversion_of_control: All side effects are Protocol dependencies supplied by the
+        capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - security-foundation/slice/9
+      provides:
+        - Table-driven unit coverage for Boundary Validation and Provenance
+          domain contracts
+        - Integration, failure-injection, security, and acceptance coverage for
+          all linked stories
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+      - name: SCHEMA_VERSION
+        type: string
+        default: "1"
+        secret: false
+        validation: supported version only
+    observability:
+      events:
+        - security-foundation.boundary-validation-and-provenance.10.started
+        - security-foundation.boundary-validation-and-provenance.10.succeeded
+        - security-foundation.boundary-validation-and-provenance.10.failed
+      required_fields:
+        - event
+        - release_id
+        - worker_id
+        - correlation_id
+        - duration_ms
+        - outcome
+        - error_code?
+        - job_id?
+        - attempt_id?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. Emit state changes and adapter failures
+        once at the owning boundary; preserve exception cause without
+        serializing unsafe payloads.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; never rebuild
+        paths from unchecked strings.
+      - No global clients or ambient credentials; process and adapter roles
+        receive the minimum dependency set.
+      - Fail closed on identity, authorization, checksum, provenance, readiness,
+        and commit uncertainty.
+    test_scenarios:
+      - id: S10-T01
+        level: integration
+        given: a digest containing separators or not exactly 64 hexadecimal characters
+        when: manifest validation runs
+        then: validation fails before a partial destination is constructed
+      - id: S10-T02
+        level: integration
+        given: a job or manifest path that resolves outside its root
+        when: containment validation runs
+        then: the operation is rejected without creating, reading, or linking a file
+      - id: S10-T03
+        level: integration
+        given: a dependency or custom-node revision differs from the release manifest
+        when: release verification runs
+        then: promotion fails and names the drifting component
+      - id: S10-T04
+        level: integration
+        given: a healthy worker
+        when: its version endpoint is queried
+        then: the response identifies the approved release without credentials or
+          sensitive configuration
+      - id: S10-T05
+        level: integration
+        given: a public or commercial release without current approval
+        when: the release gate runs
+        then: promotion is blocked with the missing evidence requirement
+      - id: S10-T06
+        level: integration
+        given: a model or intended territory changes
+        when: an earlier approval is evaluated
+        then: the approval is treated as stale and must be renewed
+      - id: S10-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: Test Boundary Validation and Provenance runs
+        then: the recovery and retryability contract is observed and no forbidden
+          completion or side effect occurs
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Structured events cover entry, success, failure, and material state
+        transitions without sensitive fields.
+      - Unit and adapter-contract tests pass; integration coverage exercises the
+        linked stories.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only for application events; provider output is captured,
+        classified, and redacted.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for scenario tables; fakes implement the same
+        Protocols as production adapters.
+    data_lifecycle:
+      kind: immutable
+      detail: Release provenance, license and territory review, digests, and gate
+        evidence are retained per immutable release. A correction creates a new
+        release record; rejected unsafe inputs are not persisted beyond
+        allowlisted security diagnostics.

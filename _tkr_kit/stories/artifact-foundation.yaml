@@ -1,0 +1,203 @@
+capability: artifact-foundation
+stories:
+  - name: publish-content-addressed-model-blobs
+    status: planned
+    display_name: Publish content-addressed model blobs
+    feature: immutable-artifact-catalog
+    actor: Artifact publisher
+    intent: upload verified model artifacts under immutable SHA-256 keys without
+      conflicting content
+    preconditions:
+      - The publisher has a write credential unavailable to runtime workers.
+      - The local source file and expected artifact role are declared.
+    trigger_action: An approved model file is added to a model set
+    steps:
+      - actor: Artifact publisher
+        action: streams the local file through size and SHA-256 calculation
+        system_response: the canonical digest and byte count are produced
+      - actor: Artifact publisher
+        action: checks the content-addressed remote key
+        system_response: an identical existing blob is reused and a conflict is rejected
+      - actor: Artifact publisher
+        action: uploads and remotely verifies a missing blob
+        system_response: the immutable blob becomes eligible for manifest publication
+    acceptance_criteria:
+      - given: an existing digest key with different bytes or metadata
+        when: publication is attempted
+        then: the publisher fails without overwriting the object
+      - given: a new model artifact
+        when: upload and verification complete
+        then: the remote blob is addressable by its verified SHA-256 identity
+    slice_ids:
+      - artifact-foundation/slice/1
+      - artifact-foundation/slice/4
+      - artifact-foundation/slice/5
+  - name: publish-pinned-model-set-manifest
+    status: planned
+    display_name: Publish pinned model-set manifest
+    feature: immutable-artifact-catalog
+    actor: Release operator
+    intent: publish a model-set manifest whose identity independently pins every
+      workflow and model artifact
+    preconditions:
+      - Every referenced blob has a verified digest and size.
+      - The workflow and custom-node compatibility requirements are known.
+    trigger_action: All artifacts for a model-set version are verified
+    steps:
+      - actor: Release operator
+        action: builds the canonical manifest
+        system_response: entries bind artifact role, immutable key, SHA-256, size,
+          destination, and workflow dependencies
+      - actor: System
+        action: validates uniqueness, safe destinations, and referential completeness
+        system_response: invalid or ambiguous rows block publication
+      - actor: Release operator
+        action: publishes the manifest and records its digest or immutable version
+          externally
+        system_response: workers can resolve the named release without trusting a
+          mutable latest key
+    acceptance_criteria:
+      - given: a manifest references a missing blob or unsafe destination
+        when: publication validation runs
+        then: the manifest is not published
+      - given: a published model-set version
+        when: its external identity is resolved
+        then: the exact canonical manifest bytes and all artifact identities are
+          reproducible
+    slice_ids:
+      - artifact-foundation/slice/2
+      - artifact-foundation/slice/4
+      - artifact-foundation/slice/5
+  - name: resolve-approved-artifact-release
+    status: planned
+    display_name: Resolve approved artifact release
+    feature: immutable-artifact-catalog
+    actor: Worker supervisor
+    intent: resolve a configured release name to an immutable manifest and workflow
+      identity before hydration
+    preconditions:
+      - The configured release reference is allowlisted.
+      - The release identity is pinned in worker configuration or the image
+        release manifest.
+    trigger_action: Worker startup selects a model set
+    steps:
+      - actor: Worker supervisor
+        action: fetches the release object using read-only credentials
+        system_response: the bytes are downloaded to a temporary local path
+      - actor: Worker supervisor
+        action: verifies the manifest's independent digest or provider version
+        system_response: mutable-path substitution is detected
+      - actor: Worker supervisor
+        action: parses and validates the manifest
+        system_response: only a complete approved release enters hydration
+    acceptance_criteria:
+      - given: a mutable object at the expected name is replaced
+        when: worker startup verifies the pinned identity
+        then: startup fails before model downloads begin
+      - given: an approved release reference
+        when: resolution succeeds
+        then: the worker records the immutable manifest and workflow identities in
+          structured startup context
+    slice_ids:
+      - artifact-foundation/slice/3
+      - artifact-foundation/slice/4
+      - artifact-foundation/slice/5
+  - name: hydrate-and-atomically-promote-blobs
+    status: planned
+    display_name: Hydrate and atomically promote blobs
+    feature: deterministic-cache-hydration
+    actor: Worker supervisor
+    intent: download missing artifacts to partial files and expose them only after
+      complete verification
+    preconditions:
+      - The manifest is approved and parsed.
+      - Available disk capacity satisfies the preflight calculation.
+    trigger_action: The approved manifest contains a digest absent from the verified cache
+    steps:
+      - actor: Worker supervisor
+        action: allocates a unique partial path and downloads the blob
+        system_response: the final content-addressed path remains absent
+      - actor: Worker supervisor
+        action: verifies byte count and SHA-256
+        system_response: a mismatch deletes or quarantines only the partial artifact
+      - actor: Worker supervisor
+        action: atomically renames the verified partial
+        system_response: the final cache key becomes visible as an immutable blob
+    acceptance_criteria:
+      - given: a download is interrupted or has a checksum mismatch
+        when: verification finishes
+        then: no final cache blob exists and cleanup behavior is recorded
+      - given: a valid download completes
+        when: promotion occurs
+        then: readers observe either no blob or the complete verified blob, never a
+          partial state
+    slice_ids:
+      - artifact-foundation/slice/6
+      - artifact-foundation/slice/9
+      - artifact-foundation/slice/10
+  - name: materialize-safe-comfy-model-links
+    status: planned
+    display_name: Materialize safe ComfyUI model links
+    feature: deterministic-cache-hydration
+    actor: Worker supervisor
+    intent: map verified cache blobs into declared ComfyUI model locations without
+      path escape or unsafe replacement
+    preconditions:
+      - Every destination is a normalized ComfyUI-relative path.
+      - The model root and cache root are distinct declared directories.
+    trigger_action: All blobs for an approved manifest are verified
+    steps:
+      - actor: Worker supervisor
+        action: resolves each destination under the model root
+        system_response: containment and existing-target rules are enforced
+      - actor: Worker supervisor
+        action: creates or replaces the managed symlink atomically
+        system_response: the link targets the expected verified cache blob
+      - actor: Worker supervisor
+        action: audits the materialized model tree
+        system_response: unexpected files, directories, or targets block readiness
+    acceptance_criteria:
+      - given: a destination is absolute, empty, trailing parent, or escapes through a
+          symlink
+        when: materialization is attempted
+        then: the operation fails before the model tree changes
+      - given: a valid destination already has the correct managed link
+        when: materialization repeats
+        then: the operation is idempotent and leaves the link unchanged
+    slice_ids:
+      - artifact-foundation/slice/7
+      - artifact-foundation/slice/9
+      - artifact-foundation/slice/10
+  - name: reuse-and-evict-bounded-cache
+    status: planned
+    display_name: Reuse and evict bounded cache
+    feature: deterministic-cache-hydration
+    actor: Platform operator
+    intent: reuse verified warm artifacts and reclaim only unreferenced cache
+      content under a declared capacity policy
+    preconditions:
+      - The selected manifest's required digest set is known.
+      - Cache capacity, high-water mark, and partial-file retention rules are
+        configured.
+    trigger_action: Hydration preflight evaluates the local cache
+    steps:
+      - actor: Worker supervisor
+        action: verifies required existing blobs
+        system_response: cache hits are reused and corrupt entries are treated as misses
+      - actor: Worker supervisor
+        action: calculates required free capacity
+        system_response: whole unreferenced blobs are selected by the configured eviction policy
+      - actor: Worker supervisor
+        action: evicts safe candidates and hydrates misses
+        system_response: active or selected-manifest blobs remain protected
+    acceptance_criteria:
+      - given: all required blobs are present and verified
+        when: hydration runs
+        then: zero model bytes are downloaded
+      - given: capacity is insufficient and no safe candidate exists
+        when: preflight completes
+        then: startup fails before partial downloads consume remaining disk
+    slice_ids:
+      - artifact-foundation/slice/8
+      - artifact-foundation/slice/9
+      - artifact-foundation/slice/10

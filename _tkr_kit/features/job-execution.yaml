@@ -1,0 +1,55 @@
+capability: job-execution
+features:
+  - name: validated-job-intake
+    status: planned
+    display_name: Validated Job Intake
+    user_story: As an authorized application, I want to submit a versioned
+      video-generation request and receive deterministic validation before GPU
+      work begins.
+    acceptance_criteria:
+      - Unsupported fields, workflows, model sets, media types, sizes, and
+        unsafe identifiers are rejected inline before download or GPU
+        allocation.
+      - Repeated idempotency keys return the existing outcome or attempt
+        according to a documented state machine.
+      - Inputs can only be read from authorized object references and land
+        beneath the server-owned workspace.
+      - Validated requests serialize canonically for hashing and audit
+        correlation.
+    scope_in:
+      - Define strict request schemas for text-to-video, image-to-video, and
+        reference-to-video jobs with bounded prompts, generation parameters,
+        workflow selection, and idempotency key.
+      - Authorize the request and derive a server-owned job ID and workspace
+        rather than trusting user filenames or paths.
+      - Acquire declared input objects into the job workspace with size,
+        media-type, digest, and ownership checks.
+    scope_out:
+      - An end-user prompt editor or gallery UI.
+      - Executing arbitrary workflow JSON supplied in a request.
+  - name: deterministic-comfy-execution
+    status: planned
+    display_name: Deterministic ComfyUI Execution
+    user_story: As a job orchestrator, I want to bind a validated request to a
+      pinned ComfyUI workflow and exact output files so success and failure are
+      unambiguous.
+    acceptance_criteria:
+      - Every execution references the pinned workflow digest, model-set
+        identity, and normalized parameters.
+      - Timeouts, cancellations, node failures, and missing outputs produce
+        typed terminal or retryable results.
+      - Only files attributable to the current prompt/job enter the local result
+        set.
+      - A successful result passes media validation and includes deterministic
+        digest, size, workflow, model, and parameter metadata.
+    scope_in:
+      - Transform a validated request into the pinned API workflow without
+        allowing undeclared node or model substitution.
+      - Submit to ComfyUI, track the prompt identifier, poll bounded
+        history/events, support cancellation, and classify timeout or node
+        failures.
+      - Discover exact job-owned media outputs, validate audio/video tracks,
+        compute size and SHA-256, and produce reproducibility metadata.
+    scope_out:
+      - Scanning and synchronizing the full ComfyUI output directory.
+      - Treating a browser UI notification as job completion.

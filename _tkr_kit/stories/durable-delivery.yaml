@@ -1,0 +1,203 @@
+capability: durable-delivery
+stories:
+  - name: allocate-immutable-result-attempt
+    status: planned
+    display_name: Allocate immutable result attempt
+    feature: verified-result-commit
+    actor: Result service
+    intent: assign an upload attempt namespace that cannot overwrite a completed
+      result or mix concurrent retries
+    preconditions:
+      - The job and attempt identities are server-owned.
+      - The output credential is restricted to the output namespace.
+    trigger_action: A validated local result enters durable delivery
+    steps:
+      - actor: Result service
+        action: resolves the job's commit state
+        system_response: an existing completed result is returned and never reopened
+      - actor: Result service
+        action: allocates or resumes the documented attempt identity
+        system_response: the remote prefix is unique and immutable after commit
+      - actor: Result service
+        action: records upload state without a completion marker
+        system_response: consumers continue to observe in-progress
+    acceptance_criteria:
+      - given: a completed job is delivered again
+        when: attempt allocation runs
+        then: the existing committed result is returned without remote mutation
+      - given: concurrent upload retries target the same job
+        when: attempt allocation runs
+        then: they converge safely or receive distinct attempts that cannot mix
+          artifacts
+    slice_ids:
+      - durable-delivery/slice/1
+      - durable-delivery/slice/4
+      - durable-delivery/slice/5
+  - name: upload-and-verify-all-result-artifacts
+    status: planned
+    display_name: Upload and verify all result artifacts
+    feature: verified-result-commit
+    actor: Result uploader
+    intent: transfer media and metadata and prove every required remote object
+      matches before commit
+    preconditions:
+      - Local artifacts have validated roles, sizes, and SHA-256 digests.
+      - The upload adapter can observe provider-supported remote size and
+        checksum metadata.
+    trigger_action: An immutable result attempt has an exact local result set
+    steps:
+      - actor: Result uploader
+        action: uploads video, workflow, generation, and supporting metadata
+        system_response: each destination is derived from the immutable attempt prefix
+      - actor: Result uploader
+        action: lists or heads every required remote object and compares size and
+          supported checksum
+        system_response: missing or mismatched objects keep the attempt uncommitted
+      - actor: Result uploader
+        action: records verified remote object identities and versions
+        system_response: the commit builder has a complete evidence set
+    acceptance_criteria:
+      - given: video upload is absent or mismatched while metadata matches
+        when: verification runs
+        then: the attempt fails and result.json is not uploaded
+      - given: all required artifacts match
+        when: verification completes
+        then: each result entry has local SHA-256, byte count, remote key, and immutable
+          provider identity
+    slice_ids:
+      - durable-delivery/slice/2
+      - durable-delivery/slice/4
+      - durable-delivery/slice/5
+  - name: publish-result-commit-marker-last
+    status: planned
+    display_name: Publish result commit marker last
+    feature: verified-result-commit
+    actor: Result service
+    intent: make completion consumer-visible only after the verified artifact set is
+      durably described
+    preconditions:
+      - The result manifest passes its versioned schema.
+      - The immutable attempt has no existing conflicting commit marker.
+    trigger_action: Remote verification succeeds for every required artifact
+    steps:
+      - actor: Result service
+        action: builds canonical result.json from verified evidence
+        system_response: the manifest names job, attempt, workflow, model set,
+          parameters, objects, sizes, digests, and versions
+      - actor: Result service
+        action: uploads result.json as the final object using idempotent conflict rules
+        system_response: a matching retry succeeds and a different payload fails
+      - actor: Result service
+        action: marks the job completed
+        system_response: consumers may now resolve the committed result
+    acceptance_criteria:
+      - given: any artifact verification is incomplete
+        when: commit publication is requested
+        then: publication is refused and consumers cannot observe completed
+      - given: an identical commit upload is retried
+        when: the result service compares canonical content
+        then: the operation is idempotent without creating a divergent result
+    slice_ids:
+      - durable-delivery/slice/3
+      - durable-delivery/slice/4
+      - durable-delivery/slice/5
+  - name: authorize-private-result-lookup
+    status: planned
+    display_name: Authorize private result lookup
+    feature: private-result-access-and-retention
+    actor: Authorized application user
+    intent: retrieve job state and committed result metadata without learning
+      unauthorized job existence
+    preconditions:
+      - The application has authenticated the caller.
+      - Job ownership or explicit access policy is available.
+    trigger_action: The user requests a job result
+    steps:
+      - actor: Result API
+        action: authorizes the caller before storage lookup details are exposed
+        system_response: unauthorized requests receive a non-enumerating response
+      - actor: Result API
+        action: resolves job and commit state
+        system_response: not-found, in-progress, failed, expired, and completed are
+          mapped to stable domain outcomes
+      - actor: Result API
+        action: returns sanitized committed metadata
+        system_response: storage credentials and internal provider errors remain hidden
+    acceptance_criteria:
+      - given: a caller lacks access to an existing job
+        when: result lookup runs
+        then: the response does not disclose job existence or metadata
+      - given: an authorized completed job is requested
+        when: lookup succeeds
+        then: the response matches the committed result manifest and contains no storage
+          credential
+    slice_ids:
+      - durable-delivery/slice/6
+      - durable-delivery/slice/9
+      - durable-delivery/slice/10
+  - name: issue-short-lived-download-link
+    status: planned
+    display_name: Issue short-lived download link
+    feature: private-result-access-and-retention
+    actor: Authorized application user
+    intent: download a private committed video using a narrowly scoped expiring
+      authorization
+    preconditions:
+      - The result manifest references an immutable verified video object.
+      - The delivery service owns a read/share credential unavailable to workers
+        and clients.
+    trigger_action: The user requests download access to an authorized completed result
+    steps:
+      - actor: Delivery service
+        action: rechecks authorization and result state
+        system_response: expired or revoked access is rejected
+      - actor: Delivery service
+        action: creates a signed link with the shortest configured TTL
+        system_response: the link is returned only to the authorized caller
+      - actor: Telemetry layer
+        action: records a redacted issuance event
+        system_response: the URL token is never logged or persisted
+    acceptance_criteria:
+      - given: an authorization is revoked before link issuance
+        when: the download request runs
+        then: no signed link is created
+      - given: a signed link exceeds its TTL
+        when: the client attempts download
+        then: the provider rejects access without exposing reusable credentials
+    slice_ids:
+      - durable-delivery/slice/7
+      - durable-delivery/slice/9
+      - durable-delivery/slice/10
+  - name: enforce-object-lifecycle-policy
+    status: planned
+    display_name: Enforce object lifecycle policy
+    feature: private-result-access-and-retention
+    actor: Platform operator
+    intent: remove expired inputs, failed attempts, scratch outputs, hidden
+      versions, and abandoned uploads while retaining selected deliverables
+    preconditions:
+      - Every object class has a retention purpose and period.
+      - Committed deliverables are distinguishable from scratch and failed
+        attempts.
+    trigger_action: Lifecycle policy is provisioned, changed, or audited
+    steps:
+      - actor: Platform operator
+        action: publishes prefix/object-class lifecycle rules
+        system_response: the configuration is versioned and reviewable
+      - actor: Lifecycle verifier
+        action: tests representative timestamped fixtures and unfinished uploads
+        system_response: expected expiration or preservation is observed
+      - actor: Operator
+        action: reviews lifecycle metrics and exceptions
+        system_response: unexpected accumulation or deletion risk creates an actionable alert
+    acceptance_criteria:
+      - given: a failed attempt exceeds its retention period
+        when: lifecycle processing runs
+        then: attempt objects are deleted without affecting committed deliverables
+      - given: a selected deliverable remains within its retention policy
+        when: lifecycle processing runs
+        then: the video and commit manifest remain available
+    slice_ids:
+      - durable-delivery/slice/8
+      - durable-delivery/slice/9
+      - durable-delivery/slice/10

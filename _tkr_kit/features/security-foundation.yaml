@@ -1,0 +1,50 @@
+capability: security-foundation
+features:
+  - name: least-privilege-credentials
+    status: planned
+    display_name: Least-Privilege Credentials
+    user_story: As a platform operator, I want each process to receive only the
+      storage and platform credentials it needs so a compromised component
+      cannot cross a trust boundary.
+    acceptance_criteria:
+      - Every key has one bucket/prefix and an explicit capability set.
+      - Credential rotation requires no image rebuild.
+      - Secret-bearing values are structurally redacted from logs and
+        diagnostics.
+      - A credential misuse test proves forbidden reads and writes fail.
+    scope_in:
+      - Design separate B2 application keys/remotes for model reads, input
+        reads, output writes, and authorized delivery reads.
+      - Inject and rotate credentials through RunPod Secrets without persisting
+        them to images, workflows, shell history, or rclone.conf.
+      - Isolate credentials by process so ComfyUI and custom nodes cannot read
+        uploader or delivery credentials.
+    scope_out:
+      - Implementing the caller application's identity provider.
+      - Sharing one broad credential across disjoint prefixes.
+  - name: boundary-validation-and-provenance
+    status: planned
+    display_name: Boundary Validation and Provenance
+    user_story: As a security reviewer, I want every external identifier, path, and
+      executable artifact validated and attributable so malformed input and
+      supply-chain drift fail closed.
+    acceptance_criteria:
+      - Traversal, malformed digest, control-character, and ambiguous-path cases
+        are rejected before side effects.
+      - Every executable artifact resolves to an immutable version and
+        verification command.
+      - License and deployment-territory approval is required before public or
+        commercial release.
+      - Validation errors carry safe field context without echoing secrets or
+        sensitive prompt data.
+    scope_in:
+      - Validate job IDs, model-set IDs, digests, manifest rows, object keys,
+        and local destinations before filesystem or object-store access.
+      - Normalize local paths and assert containment beneath declared roots,
+        including symlink-aware checks where writes occur.
+      - Record and verify provenance for image digest, Python dependencies,
+        ComfyUI revision, custom nodes, workflow, manifest, model blobs, and
+        MiniMax license approval.
+    scope_out:
+      - Permitting arbitrary user-authored ComfyUI workflows.
+      - Treating mutable object names as sufficient provenance.
