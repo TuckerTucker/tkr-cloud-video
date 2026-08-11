@@ -1,7 +1,7 @@
 capability: operations-and-scale
 features:
   - name: observability-and-cost-control
-    status: planned
+    status: done
     display_name: Observability and Cost Control
     user_story: As an operator, I want correlated telemetry and measured
       cost/performance so I can diagnose failures and choose storage/runtime
@@ -26,7 +26,7 @@ features:
       - Logging secrets, signed URLs, full prompts, or user filenames.
       - Selecting a provider from list price without regional measurements.
   - name: serverless-release
-    status: planned
+    status: done
     display_name: Serverless Release
     user_story: As a release operator, I want to promote the proven Interactive Pod
       contract to RunPod Serverless with automated acceptance and rollback

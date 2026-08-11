@@ -1,7 +1,7 @@
 capability: durable-delivery
 features:
   - name: verified-result-commit
-    status: planned
+    status: done
     display_name: Verified Result Commit
     user_story: As a result consumer, I want completion to mean every referenced
       artifact is durable and verified so I never observe a false-positive
@@ -26,7 +26,7 @@ features:
       - Overwriting completed artifacts in place.
       - Using existence of video.mp4 alone as completion.
   - name: private-result-access-and-retention
-    status: planned
+    status: done
     display_name: Private Result Access and Retention
     user_story: As an authorized application user, I want private result lookup and
       short-lived downloads while expired inputs and scratch data disappear

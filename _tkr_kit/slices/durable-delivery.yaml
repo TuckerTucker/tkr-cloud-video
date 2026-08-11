@@ -20,7 +20,7 @@ slices:
     number: 1
     layer: domain
     feature: verified-result-commit
-    status: blocked
+    status: done
     paths:
       - src/tkr_cloud_video/delivery/contracts.py
       - schemas/result.schema.json
@@ -52,7 +52,7 @@ slices:
     number: 2
     layer: service
     feature: verified-result-commit
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/delivery/uploader.py
   - delivers:
@@ -77,7 +77,7 @@ slices:
     number: 3
     layer: service
     feature: verified-result-commit
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/delivery/commit.py
   - delivers:
@@ -104,7 +104,7 @@ slices:
     number: 4
     layer: integration
     feature: verified-result-commit
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/durable_delivery/composition.py
   - delivers:
@@ -129,7 +129,7 @@ slices:
     number: 5
     layer: integration
     feature: verified-result-commit
-    status: planned
+    status: done
     paths:
       - tests/durable_delivery/test_verified_result_commit.py
   - delivers:
@@ -152,7 +152,7 @@ slices:
     number: 6
     layer: domain
     feature: private-result-access-and-retention
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/delivery/access_policy.py
   - delivers:
@@ -176,7 +176,7 @@ slices:
     number: 7
     layer: api
     feature: private-result-access-and-retention
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/delivery/api.py
       - src/tkr_cloud_video/delivery/signed_links.py
@@ -202,7 +202,7 @@ slices:
     number: 8
     layer: integration
     feature: private-result-access-and-retention
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/delivery/lifecycle.py
       - config/lifecycle.yaml
@@ -231,7 +231,7 @@ slices:
     number: 9
     layer: integration
     feature: private-result-access-and-retention
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/durable_delivery/composition.py
   - delivers:
@@ -257,6 +257,6 @@ slices:
     number: 10
     layer: integration
     feature: private-result-access-and-retention
-    status: planned
+    status: done
     paths:
       - tests/durable_delivery/test_private_result_access_and_retention.py

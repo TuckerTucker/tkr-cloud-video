@@ -1,7 +1,7 @@
 capability: security-foundation
 stories:
   - name: provision-single-prefix-storage-keys
-    status: planned
+    status: done
     display_name: Provision single-prefix storage keys
     feature: least-privilege-credentials
     actor: Platform operator
@@ -36,7 +36,7 @@ stories:
       - security-foundation/slice/4
       - security-foundation/slice/5
   - name: rotate-runtime-secrets-without-rebuild
-    status: planned
+    status: done
     display_name: Rotate runtime secrets without rebuild
     feature: least-privilege-credentials
     actor: Platform operator
@@ -70,7 +70,7 @@ stories:
       - security-foundation/slice/4
       - security-foundation/slice/5
   - name: isolate-secrets-by-process-role
-    status: planned
+    status: done
     display_name: Isolate secrets by process role
     feature: least-privilege-credentials
     actor: Security reviewer
@@ -104,7 +104,7 @@ stories:
       - security-foundation/slice/4
       - security-foundation/slice/5
   - name: reject-unsafe-identifiers-and-paths
-    status: planned
+    status: done
     display_name: Reject unsafe identifiers and paths
     feature: boundary-validation-and-provenance
     actor: Worker supervisor
@@ -137,7 +137,7 @@ stories:
       - security-foundation/slice/9
       - security-foundation/slice/10
   - name: verify-executable-artifact-provenance
-    status: planned
+    status: done
     display_name: Verify executable artifact provenance
     feature: boundary-validation-and-provenance
     actor: Release operator
@@ -172,7 +172,7 @@ stories:
       - security-foundation/slice/9
       - security-foundation/slice/10
   - name: gate-release-on-license-and-territory
-    status: planned
+    status: done
     display_name: Gate release on license and territory
     feature: boundary-validation-and-provenance
     actor: Release reviewer

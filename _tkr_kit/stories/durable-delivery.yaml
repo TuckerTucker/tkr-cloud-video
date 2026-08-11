@@ -1,7 +1,7 @@
 capability: durable-delivery
 stories:
   - name: allocate-immutable-result-attempt
-    status: planned
+    status: done
     display_name: Allocate immutable result attempt
     feature: verified-result-commit
     actor: Result service
@@ -34,7 +34,7 @@ stories:
       - durable-delivery/slice/4
       - durable-delivery/slice/5
   - name: upload-and-verify-all-result-artifacts
-    status: planned
+    status: done
     display_name: Upload and verify all result artifacts
     feature: verified-result-commit
     actor: Result uploader
@@ -69,7 +69,7 @@ stories:
       - durable-delivery/slice/4
       - durable-delivery/slice/5
   - name: publish-result-commit-marker-last
-    status: planned
+    status: done
     display_name: Publish result commit marker last
     feature: verified-result-commit
     actor: Result service
@@ -102,7 +102,7 @@ stories:
       - durable-delivery/slice/4
       - durable-delivery/slice/5
   - name: authorize-private-result-lookup
-    status: planned
+    status: done
     display_name: Authorize private result lookup
     feature: private-result-access-and-retention
     actor: Authorized application user
@@ -136,7 +136,7 @@ stories:
       - durable-delivery/slice/9
       - durable-delivery/slice/10
   - name: issue-short-lived-download-link
-    status: planned
+    status: done
     display_name: Issue short-lived download link
     feature: private-result-access-and-retention
     actor: Authorized application user
@@ -169,7 +169,7 @@ stories:
       - durable-delivery/slice/9
       - durable-delivery/slice/10
   - name: enforce-object-lifecycle-policy
-    status: planned
+    status: done
     display_name: Enforce object lifecycle policy
     feature: private-result-access-and-retention
     actor: Platform operator

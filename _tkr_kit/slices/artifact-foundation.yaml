@@ -20,7 +20,7 @@ slices:
     number: 1
     layer: data
     feature: immutable-artifact-catalog
-    status: blocked
+    status: done
     paths:
       - src/tkr_cloud_video/artifacts/models.py
       - schemas/model-set-manifest.schema.json
@@ -51,7 +51,7 @@ slices:
     number: 2
     layer: service
     feature: immutable-artifact-catalog
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/artifacts/publisher.py
   - delivers:
@@ -76,7 +76,7 @@ slices:
     number: 3
     layer: service
     feature: immutable-artifact-catalog
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/artifacts/resolver.py
   - delivers:
@@ -103,7 +103,7 @@ slices:
     number: 4
     layer: integration
     feature: immutable-artifact-catalog
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/artifact_foundation/composition.py
   - delivers:
@@ -129,7 +129,7 @@ slices:
     number: 5
     layer: integration
     feature: immutable-artifact-catalog
-    status: planned
+    status: done
     paths:
       - tests/artifact_foundation/test_immutable_artifact_catalog.py
   - delivers:
@@ -152,7 +152,7 @@ slices:
     number: 6
     layer: data
     feature: deterministic-cache-hydration
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/artifacts/cache.py
   - delivers:
@@ -176,7 +176,7 @@ slices:
     number: 7
     layer: service
     feature: deterministic-cache-hydration
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/artifacts/hydrator.py
   - delivers:
@@ -201,7 +201,7 @@ slices:
     number: 8
     layer: integration
     feature: deterministic-cache-hydration
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/artifacts/materializer.py
       - src/tkr_cloud_video/artifacts/eviction.py
@@ -230,7 +230,7 @@ slices:
     number: 9
     layer: integration
     feature: deterministic-cache-hydration
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/artifact_foundation/composition.py
   - delivers:
@@ -256,6 +256,6 @@ slices:
     number: 10
     layer: integration
     feature: deterministic-cache-hydration
-    status: planned
+    status: done
     paths:
       - tests/artifact_foundation/test_deterministic_cache_hydration.py

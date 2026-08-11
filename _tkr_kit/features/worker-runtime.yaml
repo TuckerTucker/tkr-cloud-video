@@ -1,7 +1,7 @@
 capability: worker-runtime
 features:
   - name: reproducible-worker-image
-    status: planned
+    status: done
     display_name: Reproducible Worker Image
     user_story: As a platform operator, I want a pinned worker image and validated
       runtime configuration so new Pods start identically without manual
@@ -29,7 +29,7 @@ features:
       - Embedding frequently changing model weights or plaintext credentials in
         the image.
   - name: supervised-readiness
-    status: planned
+    status: done
     display_name: Supervised Readiness
     user_story: As a scheduler, I want truthful readiness and liveness signals so
       jobs reach only workers whose exact ComfyUI workflow and models are

@@ -1,7 +1,7 @@
 capability: job-execution
 features:
   - name: validated-job-intake
-    status: planned
+    status: done
     display_name: Validated Job Intake
     user_story: As an authorized application, I want to submit a versioned
       video-generation request and receive deterministic validation before GPU
@@ -28,7 +28,7 @@ features:
       - An end-user prompt editor or gallery UI.
       - Executing arbitrary workflow JSON supplied in a request.
   - name: deterministic-comfy-execution
-    status: planned
+    status: done
     display_name: Deterministic ComfyUI Execution
     user_story: As a job orchestrator, I want to bind a validated request to a
       pinned ComfyUI workflow and exact output files so success and failure are

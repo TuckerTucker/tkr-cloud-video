@@ -22,7 +22,7 @@ slices:
     number: 1
     layer: domain
     feature: validated-job-intake
-    status: blocked
+    status: done
     paths:
       - src/tkr_cloud_video/jobs/contracts.py
       - schemas/generation-request.schema.json
@@ -57,7 +57,7 @@ slices:
     number: 2
     layer: service
     feature: validated-job-intake
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/jobs/identity.py
       - src/tkr_cloud_video/jobs/workspace.py
@@ -84,7 +84,7 @@ slices:
     number: 3
     layer: integration
     feature: validated-job-intake
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/jobs/input_staging.py
   - delivers:
@@ -112,7 +112,7 @@ slices:
     number: 4
     layer: integration
     feature: validated-job-intake
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/job_execution/composition.py
   - delivers:
@@ -138,7 +138,7 @@ slices:
     number: 5
     layer: integration
     feature: validated-job-intake
-    status: planned
+    status: done
     paths:
       - tests/job_execution/test_validated_job_intake.py
   - delivers:
@@ -160,7 +160,7 @@ slices:
     number: 6
     layer: domain
     feature: deterministic-comfy-execution
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/jobs/workflow_binder.py
   - delivers:
@@ -183,7 +183,7 @@ slices:
     number: 7
     layer: service
     feature: deterministic-comfy-execution
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/jobs/comfy_client.py
       - src/tkr_cloud_video/jobs/executor.py
@@ -208,7 +208,7 @@ slices:
     number: 8
     layer: service
     feature: deterministic-comfy-execution
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/jobs/results.py
       - src/tkr_cloud_video/jobs/media_validation.py
@@ -236,7 +236,7 @@ slices:
     number: 9
     layer: integration
     feature: deterministic-comfy-execution
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/job_execution/composition.py
   - delivers:
@@ -261,6 +261,6 @@ slices:
     number: 10
     layer: integration
     feature: deterministic-comfy-execution
-    status: planned
+    status: done
     paths:
       - tests/job_execution/test_deterministic_comfy_execution.py

@@ -67,7 +67,7 @@ product:
     - Make retry, partial-file cleanup, and duplicate-job behavior explicit.
     - Use current Wasabi pricing and fair-use constraints in provider
       comparisons.
-  status: planned
+  status: done
   name: tkr-cloud-video
   implementation_architecture:
     primary_language: Python 3.11 or newer, constrained by the selected ComfyUI and

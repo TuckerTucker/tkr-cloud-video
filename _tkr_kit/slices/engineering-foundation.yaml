@@ -38,7 +38,7 @@ slices:
       - bootstrap documentation
     title: Locked Python project skeleton
     layer: data
-    status: planned
+    status: done
   - number: 2
     feature: reproducible-python-foundation
     delivers:
@@ -74,7 +74,7 @@ slices:
       - structured logging boundary
     title: Shared runtime contracts
     layer: domain
-    status: planned
+    status: done
   - number: 3
     feature: reproducible-python-foundation
     delivers:
@@ -113,7 +113,7 @@ slices:
       - matching CI workflow
     title: Deterministic quality gates
     layer: integration
-    status: planned
+    status: done
   - number: 4
     feature: reproducible-python-foundation
     delivers:
@@ -150,7 +150,7 @@ slices:
       - public package exports
     title: Wire Reproducible Python Foundation
     layer: integration
-    status: planned
+    status: done
   - number: 5
     feature: reproducible-python-foundation
     delivers:
@@ -185,4 +185,4 @@ slices:
       - boundary readiness evidence
     title: Test Reproducible Python Foundation
     layer: integration
-    status: planned
+    status: done

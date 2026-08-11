@@ -1,7 +1,7 @@
 capability: engineering-foundation
 features:
   - name: reproducible-python-foundation
-    status: planned
+    status: done
     display_name: Reproducible Python Foundation
     user_story: As an implementation engineer, I want a locked, typed, testable
       Python foundation with shared runtime contracts so every product slice can

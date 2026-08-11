@@ -1,7 +1,7 @@
 capability: artifact-foundation
 stories:
   - name: publish-content-addressed-model-blobs
-    status: planned
+    status: done
     display_name: Publish content-addressed model blobs
     feature: immutable-artifact-catalog
     actor: Artifact publisher
@@ -33,7 +33,7 @@ stories:
       - artifact-foundation/slice/4
       - artifact-foundation/slice/5
   - name: publish-pinned-model-set-manifest
-    status: planned
+    status: done
     display_name: Publish pinned model-set manifest
     feature: immutable-artifact-catalog
     actor: Release operator
@@ -69,7 +69,7 @@ stories:
       - artifact-foundation/slice/4
       - artifact-foundation/slice/5
   - name: resolve-approved-artifact-release
-    status: planned
+    status: done
     display_name: Resolve approved artifact release
     feature: immutable-artifact-catalog
     actor: Worker supervisor
@@ -103,7 +103,7 @@ stories:
       - artifact-foundation/slice/4
       - artifact-foundation/slice/5
   - name: hydrate-and-atomically-promote-blobs
-    status: planned
+    status: done
     display_name: Hydrate and atomically promote blobs
     feature: deterministic-cache-hydration
     actor: Worker supervisor
@@ -136,7 +136,7 @@ stories:
       - artifact-foundation/slice/9
       - artifact-foundation/slice/10
   - name: materialize-safe-comfy-model-links
-    status: planned
+    status: done
     display_name: Materialize safe ComfyUI model links
     feature: deterministic-cache-hydration
     actor: Worker supervisor
@@ -169,7 +169,7 @@ stories:
       - artifact-foundation/slice/9
       - artifact-foundation/slice/10
   - name: reuse-and-evict-bounded-cache
-    status: planned
+    status: done
     display_name: Reuse and evict bounded cache
     feature: deterministic-cache-hydration
     actor: Platform operator

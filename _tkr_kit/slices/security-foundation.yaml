@@ -13,7 +13,7 @@ slices:
     number: 1
     layer: domain
     feature: least-privilege-credentials
-    status: blocked
+    status: done
     paths:
       - src/tkr_cloud_video/security/credentials.py
     data_lifecycle:
@@ -43,7 +43,7 @@ slices:
     number: 2
     layer: service
     feature: least-privilege-credentials
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/security/b2_keys.py
     data_lifecycle:
@@ -69,7 +69,7 @@ slices:
     number: 3
     layer: integration
     feature: least-privilege-credentials
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/security/process_secrets.py
       - scripts/entrypoint.sh
@@ -99,7 +99,7 @@ slices:
     number: 4
     layer: integration
     feature: least-privilege-credentials
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/security_foundation/composition.py
     data_lifecycle:
@@ -126,7 +126,7 @@ slices:
     number: 5
     layer: integration
     feature: least-privilege-credentials
-    status: planned
+    status: done
     paths:
       - tests/security_foundation/test_least_privilege_credentials.py
     data_lifecycle:
@@ -150,7 +150,7 @@ slices:
     number: 6
     layer: domain
     feature: boundary-validation-and-provenance
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/security/validation.py
     data_lifecycle:
@@ -174,7 +174,7 @@ slices:
     number: 7
     layer: data
     feature: boundary-validation-and-provenance
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/security/provenance.py
       - schemas/release-manifest.schema.json
@@ -199,7 +199,7 @@ slices:
     number: 8
     layer: service
     feature: boundary-validation-and-provenance
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/security/release_gate.py
     data_lifecycle:
@@ -227,7 +227,7 @@ slices:
     number: 9
     layer: integration
     feature: boundary-validation-and-provenance
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/security_foundation/composition.py
     data_lifecycle:
@@ -253,7 +253,7 @@ slices:
     number: 10
     layer: integration
     feature: boundary-validation-and-provenance
-    status: planned
+    status: done
     paths:
       - tests/security_foundation/test_boundary_validation_and_provenance.py
     data_lifecycle:

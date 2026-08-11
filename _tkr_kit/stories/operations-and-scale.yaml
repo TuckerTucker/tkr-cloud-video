@@ -1,7 +1,7 @@
 capability: operations-and-scale
 stories:
   - name: emit-correlated-structured-events
-    status: planned
+    status: done
     display_name: Emit correlated structured events
     feature: observability-and-cost-control
     actor: Platform operator
@@ -34,7 +34,7 @@ stories:
       - operations-and-scale/slice/4
       - operations-and-scale/slice/5
   - name: alert-on-health-security-and-capacity
-    status: planned
+    status: done
     display_name: Alert on health, security, and capacity
     feature: observability-and-cost-control
     actor: On-call operator
@@ -68,7 +68,7 @@ stories:
       - operations-and-scale/slice/4
       - operations-and-scale/slice/5
   - name: benchmark-cold-warm-and-provider-cost
-    status: planned
+    status: done
     display_name: Benchmark cold, warm, and provider cost
     feature: observability-and-cost-control
     actor: Platform operator
@@ -105,7 +105,7 @@ stories:
       - operations-and-scale/slice/4
       - operations-and-scale/slice/5
   - name: prove-interactive-pod-acceptance
-    status: planned
+    status: done
     display_name: Prove Interactive Pod acceptance
     feature: serverless-release
     actor: Release operator
@@ -139,7 +139,7 @@ stories:
       - operations-and-scale/slice/9
       - operations-and-scale/slice/10
   - name: run-contract-compatible-serverless-handler
-    status: planned
+    status: done
     display_name: Run contract-compatible Serverless handler
     feature: serverless-release
     actor: Authorized application
@@ -173,7 +173,7 @@ stories:
       - operations-and-scale/slice/9
       - operations-and-scale/slice/10
   - name: exercise-rollout-failure-and-rollback
-    status: planned
+    status: done
     display_name: Exercise rollout, failure, and rollback
     feature: serverless-release
     actor: On-call operator

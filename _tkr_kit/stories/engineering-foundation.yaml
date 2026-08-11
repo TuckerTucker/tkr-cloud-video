@@ -1,7 +1,7 @@
 capability: engineering-foundation
 stories:
   - name: bootstrap-reproducible-python-project
-    status: planned
+    status: done
     display_name: Bootstrap a reproducible Python project
     feature: reproducible-python-foundation
     actor: Implementation engineer
@@ -38,7 +38,7 @@ stories:
       - engineering-foundation/slice/4
       - engineering-foundation/slice/5
   - name: consume-shared-runtime-contracts
-    status: planned
+    status: done
     display_name: Consume shared runtime contracts
     feature: reproducible-python-foundation
     actor: Capability implementer
@@ -79,7 +79,7 @@ stories:
       - engineering-foundation/slice/4
       - engineering-foundation/slice/5
   - name: run-identical-local-and-ci-gates
-    status: planned
+    status: done
     display_name: Run identical local and CI gates
     feature: reproducible-python-foundation
     actor: Implementation engineer

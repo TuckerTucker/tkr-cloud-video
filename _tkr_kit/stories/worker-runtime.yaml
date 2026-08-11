@@ -1,7 +1,7 @@
 capability: worker-runtime
 stories:
   - name: build-pinned-worker-image
-    status: planned
+    status: done
     display_name: Build pinned worker image
     feature: reproducible-worker-image
     actor: Release operator
@@ -34,7 +34,7 @@ stories:
       - worker-runtime/slice/4
       - worker-runtime/slice/5
   - name: validate-runtime-configuration
-    status: planned
+    status: done
     display_name: Validate runtime configuration
     feature: reproducible-worker-image
     actor: Worker supervisor
@@ -69,7 +69,7 @@ stories:
       - worker-runtime/slice/4
       - worker-runtime/slice/5
   - name: preflight-worker-capacity-and-connectivity
-    status: planned
+    status: done
     display_name: Preflight worker capacity and connectivity
     feature: reproducible-worker-image
     actor: Worker supervisor
@@ -103,7 +103,7 @@ stories:
       - worker-runtime/slice/4
       - worker-runtime/slice/5
   - name: gate-comfy-startup-on-hydration
-    status: planned
+    status: done
     display_name: Gate ComfyUI startup on hydration
     feature: supervised-readiness
     actor: Worker supervisor
@@ -136,7 +136,7 @@ stories:
       - worker-runtime/slice/9
       - worker-runtime/slice/10
   - name: validate-comfy-health-and-workflow
-    status: planned
+    status: done
     display_name: Validate ComfyUI health and workflow
     feature: supervised-readiness
     actor: Worker supervisor
@@ -168,7 +168,7 @@ stories:
       - worker-runtime/slice/9
       - worker-runtime/slice/10
   - name: drain-and-terminate-worker
-    status: planned
+    status: done
     display_name: Drain and terminate worker
     feature: supervised-readiness
     actor: Platform operator

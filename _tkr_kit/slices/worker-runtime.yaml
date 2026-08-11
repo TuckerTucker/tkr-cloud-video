@@ -14,7 +14,7 @@ slices:
     number: 1
     layer: data
     feature: reproducible-worker-image
-    status: blocked
+    status: done
     paths:
       - src/tkr_cloud_video/runtime/build_manifest.py
       - schemas/worker-release.schema.json
@@ -46,7 +46,7 @@ slices:
     number: 2
     layer: integration
     feature: reproducible-worker-image
-    status: planned
+    status: done
     paths:
       - Dockerfile
       - docker/
@@ -72,7 +72,7 @@ slices:
     number: 3
     layer: service
     feature: reproducible-worker-image
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/runtime/config.py
       - src/tkr_cloud_video/runtime/preflight.py
@@ -99,7 +99,7 @@ slices:
     number: 4
     layer: integration
     feature: reproducible-worker-image
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/worker_runtime/composition.py
     data_lifecycle:
@@ -123,7 +123,7 @@ slices:
     number: 5
     layer: integration
     feature: reproducible-worker-image
-    status: planned
+    status: done
     paths:
       - tests/worker_runtime/test_reproducible_worker_image.py
     data_lifecycle:
@@ -145,7 +145,7 @@ slices:
     number: 6
     layer: domain
     feature: supervised-readiness
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/runtime/lifecycle.py
     data_lifecycle:
@@ -168,7 +168,7 @@ slices:
     number: 7
     layer: service
     feature: supervised-readiness
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/runtime/supervisor.py
     data_lifecycle:
@@ -193,7 +193,7 @@ slices:
     number: 8
     layer: api
     feature: supervised-readiness
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/runtime/comfy_health.py
       - src/tkr_cloud_video/runtime/health_api.py
@@ -221,7 +221,7 @@ slices:
     number: 9
     layer: integration
     feature: supervised-readiness
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/worker_runtime/composition.py
     data_lifecycle:
@@ -246,7 +246,7 @@ slices:
     number: 10
     layer: integration
     feature: supervised-readiness
-    status: planned
+    status: done
     paths:
       - tests/worker_runtime/test_supervised_readiness.py
     data_lifecycle:

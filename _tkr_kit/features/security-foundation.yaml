@@ -1,7 +1,7 @@
 capability: security-foundation
 features:
   - name: least-privilege-credentials
-    status: planned
+    status: done
     display_name: Least-Privilege Credentials
     user_story: As a platform operator, I want each process to receive only the
       storage and platform credentials it needs so a compromised component
@@ -23,7 +23,7 @@ features:
       - Implementing the caller application's identity provider.
       - Sharing one broad credential across disjoint prefixes.
   - name: boundary-validation-and-provenance
-    status: planned
+    status: done
     display_name: Boundary Validation and Provenance
     user_story: As a security reviewer, I want every external identifier, path, and
       executable artifact validated and attributable so malformed input and

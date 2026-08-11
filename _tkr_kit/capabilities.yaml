@@ -1,7 +1,7 @@
 capabilities:
   - name: security-foundation
     layer: domain
-    status: deferred
+    status: done
     display_name: Security Foundation
     description: Defines enforceable trust boundaries, least-privilege credentials,
       input containment, private access, and supply-chain policy shared by every
@@ -60,7 +60,7 @@ capabilities:
       boundary-readiness evidence.
   - name: artifact-foundation
     layer: data
-    status: deferred
+    status: done
     display_name: Artifact Foundation
     description: Owns the immutable object layout, manifests, workflow/model
       provenance, and deterministic local NVMe hydration used to reconstruct a
@@ -114,7 +114,7 @@ capabilities:
       boundary-readiness evidence.
   - name: worker-runtime
     layer: service
-    status: deferred
+    status: done
     display_name: Worker Runtime
     description: Builds and supervises the pinned RunPod/ComfyUI runtime, turning
       verified artifacts into a health-checked worker with truthful readiness.
@@ -170,7 +170,7 @@ capabilities:
       boundary-readiness evidence.
   - name: job-execution
     layer: service
-    status: deferred
+    status: done
     display_name: Job Execution
     description: Defines the validated job contract and deterministic wrapper that
       stages inputs, invokes ComfyUI, tracks execution, and yields an exact
@@ -226,7 +226,7 @@ capabilities:
       boundary-readiness evidence.
   - name: durable-delivery
     layer: integration
-    status: deferred
+    status: done
     display_name: Durable Delivery
     description: Commits generated media and reproducibility metadata to private
       object storage and exposes completed results without false-positive
@@ -281,7 +281,7 @@ capabilities:
       boundary-readiness evidence.
   - name: operations-and-scale
     layer: infra
-    status: deferred
+    status: done
     display_name: Operations and Scale
     description: Makes the platform observable and operable, validates
       cost/performance assumptions, and promotes the proven Interactive Pod
@@ -344,7 +344,7 @@ capabilities:
       boundary-readiness evidence.
   - name: engineering-foundation
     layer: infra
-    status: planned
+    status: done
     display_name: Engineering Foundation
     description: Establishes the reproducible Python project, shared runtime
       contracts, local and CI quality gates, and live execution boundaries

@@ -1,7 +1,7 @@
 capability: artifact-foundation
 features:
   - name: immutable-artifact-catalog
-    status: planned
+    status: done
     display_name: Immutable Artifact Catalog
     user_story: As a release operator, I want a versioned catalog of exact workflows
       and model blobs so any approved worker can reproduce the same MiniMax H3
@@ -27,7 +27,7 @@ features:
       - Model conversion, quantization, or training.
       - Publishing unverified artifacts directly from a running GPU worker.
   - name: deterministic-cache-hydration
-    status: planned
+    status: done
     display_name: Deterministic Cache Hydration
     user_story: As a worker supervisor, I want to hydrate only the selected verified
       artifacts into local NVMe so model loading is fast, deterministic, and

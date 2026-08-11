@@ -18,7 +18,7 @@ slices:
     number: 1
     layer: domain
     feature: observability-and-cost-control
-    status: blocked
+    status: done
     paths:
       - src/tkr_cloud_video/operations/events.py
     blocked_reason: Cross-capability prerequisites are not expressible as slice depends_on
@@ -51,7 +51,7 @@ slices:
     number: 2
     layer: service
     feature: observability-and-cost-control
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/operations/logging.py
       - src/tkr_cloud_video/operations/metrics.py
@@ -77,7 +77,7 @@ slices:
     number: 3
     layer: integration
     feature: observability-and-cost-control
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/operations/alerts.py
       - src/tkr_cloud_video/operations/benchmarks.py
@@ -106,7 +106,7 @@ slices:
     number: 4
     layer: integration
     feature: observability-and-cost-control
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/operations_and_scale/composition.py
   - delivers:
@@ -131,7 +131,7 @@ slices:
     number: 5
     layer: integration
     feature: observability-and-cost-control
-    status: planned
+    status: done
     paths:
       - tests/operations_and_scale/test_observability_and_cost_control.py
   - delivers:
@@ -154,7 +154,7 @@ slices:
     number: 6
     layer: domain
     feature: serverless-release
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/release/acceptance.py
   - delivers:
@@ -177,7 +177,7 @@ slices:
     number: 7
     layer: api
     feature: serverless-release
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/release/runpod_handler.py
   - delivers:
@@ -202,7 +202,7 @@ slices:
     number: 8
     layer: integration
     feature: serverless-release
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/release/rollout.py
       - docs/runbooks/
@@ -229,7 +229,7 @@ slices:
     number: 9
     layer: integration
     feature: serverless-release
-    status: planned
+    status: done
     paths:
       - src/tkr_cloud_video/operations_and_scale/composition.py
   - delivers:
@@ -253,6 +253,6 @@ slices:
     number: 10
     layer: integration
     feature: serverless-release
-    status: planned
+    status: done
     paths:
       - tests/operations_and_scale/test_serverless_release.py

@@ -1,7 +1,7 @@
 capability: job-execution
 stories:
   - name: validate-versioned-generation-request
-    status: planned
+    status: done
     display_name: Validate versioned generation request
     feature: validated-job-intake
     actor: Authorized application
@@ -35,7 +35,7 @@ stories:
       - job-execution/slice/4
       - job-execution/slice/5
   - name: allocate-idempotent-job-workspace
-    status: planned
+    status: done
     display_name: Allocate idempotent job workspace
     feature: validated-job-intake
     actor: Job service
@@ -70,7 +70,7 @@ stories:
       - job-execution/slice/4
       - job-execution/slice/5
   - name: stage-and-verify-job-inputs
-    status: planned
+    status: done
     display_name: Stage and verify job inputs
     feature: validated-job-intake
     actor: Job service
@@ -103,7 +103,7 @@ stories:
       - job-execution/slice/4
       - job-execution/slice/5
   - name: bind-request-to-pinned-workflow
-    status: planned
+    status: done
     display_name: Bind request to pinned workflow
     feature: deterministic-comfy-execution
     actor: Job orchestrator
@@ -137,7 +137,7 @@ stories:
       - job-execution/slice/9
       - job-execution/slice/10
   - name: supervise-comfy-prompt-execution
-    status: planned
+    status: done
     display_name: Supervise ComfyUI prompt execution
     feature: deterministic-comfy-execution
     actor: Job orchestrator
@@ -170,7 +170,7 @@ stories:
       - job-execution/slice/9
       - job-execution/slice/10
   - name: validate-exact-local-result-set
-    status: planned
+    status: done
     display_name: Validate exact local result set
     feature: deterministic-comfy-execution
     actor: Job orchestrator
