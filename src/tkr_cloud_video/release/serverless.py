@@ -29,7 +29,7 @@ from tkr_cloud_video.job_execution.composition import (
     JobDependencies,
     compose_job_execution,
 )
-from tkr_cloud_video.release.runpod_handler import RunPodHandler
+from tkr_cloud_video.release.runpod_handler import HandlerResponse, RunPodHandler
 from tkr_cloud_video.security.process_secrets import (
     ProcessEnvironmentBuilder,
     ProcessRole,
@@ -59,9 +59,12 @@ class ServerlessDeployment:
         return self.worker.services.lifecycle.ready
 
     async def handle(self, event: object) -> dict[str, object]:
-        """Run the canonical handler and return an SDK-serializable mapping."""
+        """Reject invalid input before startup, then run the canonical handler."""
+        validated = self.handler.validate(event)
+        if isinstance(validated, HandlerResponse):
+            return asdict(validated)
         await self.ensure_started()
-        return asdict(await self.handler.handle(event))
+        return asdict(await self.handler.handle_request(validated))
 
 
 def compose_serverless_deployment(

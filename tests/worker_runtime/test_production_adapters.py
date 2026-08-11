@@ -756,9 +756,10 @@ async def test_serverless_composition_starts_once_and_rejects_invalid_envelope(
 
     monkeypatch.setattr(deployment.worker.services.supervisor, "start", start)
 
-    assert await deployment.ensure_started() is True
     response = await deployment.handle({})
     assert response["error_code"] == "invalid_envelope"
+    assert starts == 0
+    assert await deployment.ensure_started() is True
     assert starts == 1
     serialized = repr(deployment.worker.comfy_environment)
     assert not any(

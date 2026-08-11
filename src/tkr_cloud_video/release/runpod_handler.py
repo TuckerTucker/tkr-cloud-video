@@ -37,14 +37,17 @@ class RunPodHandler:
         """Initialize with the shared application use case."""
         self._application = application
 
-    async def handle(self, event: object) -> HandlerResponse:
-        """Validate before application work and return only safe references."""
+    def validate(self, event: object) -> GenerationRequest | HandlerResponse:
+        """Return a typed request or a stable validation response."""
         if not isinstance(event, dict) or "input" not in event:
             return HandlerResponse(False, error_code="invalid_envelope")
         try:
-            request = parse_generation_request(event["input"])
+            return parse_generation_request(event["input"])
         except ValidationError:
             return HandlerResponse(False, error_code="invalid_request")
+
+    async def handle_request(self, request: GenerationRequest) -> HandlerResponse:
+        """Submit one validated request and return only safe references."""
         try:
             job_id, reference = await self._application.submit(request)
         except AppError as error:
@@ -52,3 +55,10 @@ class RunPodHandler:
                 False, error_code=error.code, retryable=error.retryable
             )
         return HandlerResponse(True, job_id, reference)
+
+    async def handle(self, event: object) -> HandlerResponse:
+        """Validate before application work and return only safe references."""
+        validated = self.validate(event)
+        if isinstance(validated, HandlerResponse):
+            return validated
+        return await self.handle_request(validated)
