@@ -108,10 +108,10 @@ def test_repository_root_discovery_from_nested_path() -> None:
     assert (root / "pyproject.toml").is_file()
 
 
-def test_serverless_cli_registers_fitness_and_async_handler(
+def test_serverless_cli_registers_only_async_handler(
     monkeypatch: object,
 ) -> None:
-    """The production command delegates startup and handling to the pinned SDK."""
+    """Long-lived startup runs on the pinned SDK handler event loop."""
 
     class Deployment:
         async def ensure_started(self) -> bool:
@@ -121,12 +121,7 @@ def test_serverless_cli_registers_fitness_and_async_handler(
             return {"ok": True}
 
     class Sdk:
-        check: object | None = None
         config: dict[str, object] | None = None
-
-        def register_fitness_check(self, check: object) -> object:
-            self.check = check
-            return check
 
         def start(self, config: dict[str, object]) -> None:
             self.config = config
@@ -143,7 +138,6 @@ def test_serverless_cli_registers_fitness_and_async_handler(
     )
 
     assert main(["serverless"]) == 0
-    assert Module.serverless.check is not None
     assert Module.serverless.config is not None
     assert "handler" in Module.serverless.config
 

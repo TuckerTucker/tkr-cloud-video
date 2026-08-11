@@ -35,10 +35,6 @@ from tkr_cloud_video.worker import compose_worker_application
 class RunPodServerlessSdk(Protocol):
     """Narrow official SDK surface used by the process entrypoint."""
 
-    def register_fitness_check(self, check: object) -> object:
-        """Register one startup readiness check."""
-        ...
-
     def start(self, config: dict[str, object]) -> None:
         """Start the RunPod worker loop."""
         ...
@@ -134,13 +130,12 @@ def run_worker() -> int:
 
 
 def run_serverless() -> int:
-    """Register the async deployment with the pinned official RunPod SDK."""
+    """Run the async deployment on the pinned official RunPod SDK."""
     sink = default_event_sink()
     try:
         deployment = compose_serverless_deployment(os.environ, sink)
         runpod = importlib.import_module("runpod")
         sdk = cast(RunPodServerlessSdk, runpod.serverless)
-        sdk.register_fitness_check(deployment.ensure_started)
         sdk.start({"handler": deployment.handle})
     except Exception as error:
         code = (

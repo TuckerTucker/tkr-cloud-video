@@ -40,7 +40,7 @@ from tkr_cloud_video.worker import WorkerApplication, compose_worker_application
 
 @dataclass
 class ServerlessDeployment:
-    """Lazily start one worker, then serve the shared typed handler."""
+    """Start one worker on the SDK job loop, then serve the typed handler."""
 
     worker: WorkerApplication
     handler: RunPodHandler
@@ -50,7 +50,7 @@ class ServerlessDeployment:
         self._startup_lock = asyncio.Lock()
 
     async def ensure_started(self) -> bool:
-        """Hydrate and validate once before accepting Serverless work."""
+        """Hydrate and validate once on the long-lived SDK job event loop."""
         async with self._startup_lock:
             if not self.worker.services.lifecycle.ready:
                 await self.worker.services.supervisor.start(
