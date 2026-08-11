@@ -1,0 +1,13 @@
+*
+!Dockerfile
+!README.md
+!pyproject.toml
+!uv.lock
+!requirements/
+!requirements/**
+!schemas/
+!schemas/**
+!scripts/
+!scripts/entrypoint.sh
+!src/
+!src/**
