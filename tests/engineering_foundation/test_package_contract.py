@@ -29,7 +29,7 @@ def test_runtime_dependencies_are_constrained_and_locked_once() -> None:
 
     assert dependencies == [
         "pydantic>=2.12.5,<3",
-        "runpod==1.11.0",
+        "runpod==1.7.10",
         "structlog>=25.5.0,<26",
     ]
     assert lock.count('name = "runpod"') >= 1
