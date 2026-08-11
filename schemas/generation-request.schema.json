@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tkr.example/schemas/generation-request.schema.json",
+  "title": "tkr-cloud-video generation request",
+  "oneOf": [
+    { "$ref": "#/$defs/textToVideo" },
+    { "$ref": "#/$defs/imageToVideo" },
+    { "$ref": "#/$defs/referenceToVideo" }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["mode", "workflow_id", "model_set_id", "prompt", "seed"],
+      "properties": {
+        "schema_version": { "const": "1" },
+        "mode": { "type": "string" },
+        "workflow_id": { "type": "string" },
+        "model_set_id": { "type": "string" },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "seed": { "type": "integer", "minimum": 0 },
+        "width": { "type": "integer", "minimum": 256, "maximum": 2048, "multipleOf": 16 },
+        "height": { "type": "integer", "minimum": 256, "maximum": 2048, "multipleOf": 16 },
+        "frames": { "type": "integer", "minimum": 1, "maximum": 721 },
+        "fps": { "type": "integer", "minimum": 1, "maximum": 60 }
+      }
+    },
+    "input": {
+      "type": "object", "additionalProperties": false,
+      "required": ["object_key"],
+      "properties": { "object_key": { "type": "string" }, "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" } }
+    },
+    "textToVideo": { "allOf": [{ "$ref": "#/$defs/base" }, { "properties": { "mode": { "const": "text-to-video" } }, "additionalProperties": false }] },
+    "imageToVideo": { "allOf": [{ "$ref": "#/$defs/base" }, { "required": ["image"], "properties": { "mode": { "const": "image-to-video" }, "image": { "$ref": "#/$defs/input" } }, "additionalProperties": false }] },
+    "referenceToVideo": { "allOf": [{ "$ref": "#/$defs/base" }, { "required": ["references"], "properties": { "mode": { "const": "reference-to-video" }, "references": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "$ref": "#/$defs/input" } } }, "additionalProperties": false }] }
+  }
+}

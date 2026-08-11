@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tkr.example/schemas/worker-release.schema.json",
+  "title": "tkr-cloud-video immutable worker build manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "image_digest",
+    "python_lock_digest",
+    "comfyui_revision",
+    "custom_node_revisions",
+    "tool_versions",
+    "built_at"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "image_digest": { "type": "string", "pattern": "^(sha256:)?[0-9a-f]{64}$" },
+    "python_lock_digest": { "type": "string", "pattern": "^(sha256:)?[0-9a-f]{64}$" },
+    "comfyui_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "custom_node_revisions": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{40}$" }
+    },
+    "tool_versions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "built_at": { "type": "string", "format": "date-time" }
+  }
+}

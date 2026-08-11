@@ -1,0 +1,8 @@
+version: "1"
+rules:
+  input: 7
+  failed-attempt: 14
+  scratch: 2
+  deliverable: 365
+  hidden-version: 30
+  multipart: 2

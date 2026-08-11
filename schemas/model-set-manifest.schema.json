@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tkr.example/schemas/model-set-manifest.schema.json",
+  "title": "tkr-cloud-video model set manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "model_set_id", "created_at", "provenance_digest", "license_approval_id", "artifacts"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "model_set_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "provenance_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "license_approval_id": { "type": "string" },
+    "artifacts": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "role", "object_key", "sha256", "size_bytes", "destination", "dependencies"],
+        "properties": {
+          "name": { "type": "string" },
+          "role": { "enum": ["model", "workflow"] },
+          "object_key": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "destination": { "type": "string" },
+          "dependencies": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "bindings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["source", "node_id", "input_name"],
+              "properties": {
+                "source": { "enum": ["prompt", "seed", "width", "height", "frames", "fps", "input_0", "input_1", "input_2", "input_3", "output_prefix"] },
+                "node_id": { "type": "string" },
+                "input_name": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

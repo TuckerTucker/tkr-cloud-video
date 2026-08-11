@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tkr.example/schemas/result.schema.json",
+  "title": "tkr-cloud-video committed result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "job_id", "attempt_id", "workflow_digest", "model_set_id", "request_hash", "committed_at", "artifacts"],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "job_id": { "type": "string" },
+    "attempt_id": { "type": "string" },
+    "workflow_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "model_set_id": { "type": "string" },
+    "request_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "committed_at": { "type": "string", "format": "date-time" },
+    "artifacts": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["role", "remote_key", "size_bytes", "sha256", "provider_version_id"],
+        "properties": {
+          "role": { "enum": ["video", "workflow", "generation"] },
+          "remote_key": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "provider_version_id": { "type": "string" }
+        }
+      }
+    }
+  }
+}

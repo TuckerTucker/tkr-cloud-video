@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tkr-cloud-video"
+version = "0.1.0"
+description = "Secure, reproducible cloud video generation on disposable GPU workers."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "TKR" }]
+dependencies = [
+  "pydantic>=2.12.5,<3",
+  "runpod==1.11.0",
+  "structlog>=25.5.0,<26",
+]
+
+[project.scripts]
+tkr-cloud-video = "tkr_cloud_video.cli:main"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.19.1,<2",
+  "pytest>=9.0.2,<10",
+  "pytest-asyncio>=1.3.0,<2",
+  "pytest-cov>=7.0.0,<8",
+  "ruff>=0.14.14,<0.15",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tkr_cloud_video"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "D", "ANN", "S", "RUF"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ANN", "D", "S101"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+source = ["tkr_cloud_video"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+  '\.\.\.',
+]
