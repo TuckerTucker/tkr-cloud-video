@@ -6,7 +6,14 @@ import hashlib
 import json
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
 from tkr_cloud_video.core.context import validate_identifier
 from tkr_cloud_video.core.errors import AppError
@@ -50,10 +57,10 @@ class RequestBase(BaseModel):
     model_set_id: str
     prompt: str = Field(min_length=1, max_length=4000)
     seed: int = Field(ge=0, le=18_446_744_073_709_551_615)
-    width: int = Field(default=1280, ge=256, le=2048, multiple_of=16)
-    height: int = Field(default=720, ge=256, le=2048, multiple_of=16)
-    frames: int = Field(default=81, ge=1, le=721)
-    fps: int = Field(default=24, ge=1, le=60)
+    width: int = Field(default=864, ge=256, le=1344, multiple_of=32)
+    height: int = Field(default=480, ge=256, le=1344, multiple_of=32)
+    frames: int = Field(default=73, ge=5, le=362)
+    fps: Literal[24] = 24
 
     @field_validator("workflow_id")
     @classmethod
@@ -72,6 +79,21 @@ class RequestBase(BaseModel):
             return str(ModelSetId(value))
         except AppError as error:
             raise ValueError("invalid model-set identifier") from error
+
+    @field_validator("frames")
+    @classmethod
+    def validate_frame_grid(cls, value: int) -> int:
+        """Require MiniMax H3's native 17k+5 temporal grid."""
+        if (value - 5) % 17 != 0:
+            raise ValueError("frames must satisfy MiniMax H3's 17k+5 grid")
+        return value
+
+    @model_validator(mode="after")
+    def validate_native_canvas(self) -> RequestBase:
+        """Keep requests within MiniMax H3's supported native canvas."""
+        if min(self.width, self.height) > 768 or max(self.width, self.height) > 1344:
+            raise ValueError("resolution exceeds MiniMax H3's native canvas")
+        return self
 
     def canonical_bytes(self) -> bytes:
         """Serialize a deterministic normalized request."""

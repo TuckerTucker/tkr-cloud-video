@@ -54,7 +54,10 @@ def test_request_modes_are_strict_and_canonical(mode: str) -> None:
     [
         {"unknown": True},
         {"width": 257},
+        {"width": 1024, "height": 1024},
         {"frames": 0},
+        {"frames": 81},
+        {"fps": 30},
         {"prompt": ""},
         {"workflow_id": "../unsafe"},
     ],
@@ -66,6 +69,15 @@ def test_request_rejects_unknown_or_out_of_range_fields(
     payload = {**request_payload(), **change}
     with pytest.raises(ValidationError):
         parse_generation_request(payload)
+
+
+def test_request_defaults_match_minimax_h3_native_grid() -> None:
+    """The zero-decision request defaults are executable by MiniMax H3."""
+    request = parse_generation_request(request_payload())
+
+    assert (request.width, request.height) == (864, 480)
+    assert (request.frames - 5) % 17 == 0
+    assert request.fps == 24
 
 
 @pytest.mark.asyncio

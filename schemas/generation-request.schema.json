@@ -18,10 +18,10 @@
         "model_set_id": { "type": "string" },
         "prompt": { "type": "string", "minLength": 1, "maxLength": 4000 },
         "seed": { "type": "integer", "minimum": 0 },
-        "width": { "type": "integer", "minimum": 256, "maximum": 2048, "multipleOf": 16 },
-        "height": { "type": "integer", "minimum": 256, "maximum": 2048, "multipleOf": 16 },
-        "frames": { "type": "integer", "minimum": 1, "maximum": 721 },
-        "fps": { "type": "integer", "minimum": 1, "maximum": 60 }
+        "width": { "type": "integer", "minimum": 256, "maximum": 1344, "multipleOf": 32, "default": 864 },
+        "height": { "type": "integer", "minimum": 256, "maximum": 1344, "multipleOf": 32, "default": 480 },
+        "frames": { "type": "integer", "minimum": 5, "maximum": 362, "default": 73, "description": "MiniMax H3 requires a 17k+5 frame count." },
+        "fps": { "const": 24, "default": 24 }
       }
     },
     "input": {
