@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from tkr_cloud_video.core.context import validate_identifier
+from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
 from tkr_cloud_video.security.validation import ModelSetId, Sha256Digest
 
 
@@ -21,6 +22,8 @@ class WorkerSettings(BaseModel):
     model_set_id: str
     manifest_digest: str
     bucket_name: str
+    b2_s3_endpoint: str = B2_S3_ENDPOINT
+    b2_s3_region: str = B2_S3_REGION
     rclone_remote_name: str = "tkr"
     model_prefix: str = "models/"
     model_key_id_secret_reference: str = "B2_MODEL_KEY_ID"  # noqa: S105
@@ -106,6 +109,8 @@ WORKER_ENVIRONMENT_FIELDS = {
     "TKR_MODEL_SET_ID": "model_set_id",
     "TKR_MANIFEST_DIGEST": "manifest_digest",
     "TKR_B2_BUCKET_NAME": "bucket_name",
+    "TKR_B2_S3_ENDPOINT": "b2_s3_endpoint",
+    "TKR_B2_S3_REGION": "b2_s3_region",
     "TKR_RCLONE_REMOTE_NAME": "rclone_remote_name",
     "TKR_MODEL_PREFIX": "model_prefix",
     "TKR_MODEL_KEY_ID_SECRET_REFERENCE": "model_key_id_secret_reference",

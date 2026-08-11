@@ -107,6 +107,8 @@ def compose_serverless_deployment(
             settings.rclone_remote_name,
             settings.bucket_name,
             settings.input_prefix,
+            settings.b2_s3_endpoint,
+            settings.b2_s3_region,
         ),
     )
     output_client = RcloneB2Client(
@@ -119,6 +121,8 @@ def compose_serverless_deployment(
             settings.rclone_remote_name,
             settings.bucket_name,
             settings.output_prefix,
+            settings.b2_s3_endpoint,
+            settings.b2_s3_region,
         ),
     )
     media = FfprobeMediaInspector()

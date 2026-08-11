@@ -26,6 +26,7 @@ from tkr_cloud_video.artifacts.streaming_publisher import StreamingArtifactPubli
 from tkr_cloud_video.bootstrap import DoctorResult, run_doctor
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.core.logging import configure_logging, default_event_sink
+from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
 from tkr_cloud_video.release.catalog import prepare_model_set
 from tkr_cloud_video.release.serverless import compose_serverless_deployment
 from tkr_cloud_video.worker import compose_worker_application
@@ -208,7 +209,13 @@ def run_release_publish(
             RcloneB2Client(
                 SubprocessCommandExecutor(),
                 credentials,
-                RcloneLocation("tkr-publisher", bucket_name, "models/"),
+                RcloneLocation(
+                    "tkr-publisher",
+                    bucket_name,
+                    "models/",
+                    os.environ.get("TKR_B2_S3_ENDPOINT", B2_S3_ENDPOINT),
+                    os.environ.get("TKR_B2_S3_REGION", B2_S3_REGION),
+                ),
                 executable=executable,
             )
         )

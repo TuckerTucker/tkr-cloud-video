@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass, field
+from io import StringIO
 from pathlib import Path
 from typing import Any
 from urllib.error import URLError
@@ -19,6 +20,13 @@ from tkr_cloud_video.adapters.comfy import (
     UrllibJsonTransport,
 )
 from tkr_cloud_video.adapters.media import FfprobeInputInspector, FfprobeMediaInspector
+from tkr_cloud_video.adapters.metadata_mapper import (
+    MAXIMUM_MAPPER_INPUT_CHARACTERS,
+    allowlisted_metadata,
+)
+from tkr_cloud_video.adapters.metadata_mapper import (
+    run as run_metadata_mapper,
+)
 from tkr_cloud_video.adapters.process import (
     CommandExecutor,
     CommandResult,
@@ -132,10 +140,95 @@ async def test_rclone_upload_is_immutable_verified_and_secret_isolated() -> None
     assert "models/blobs/object" in command_text
     assert "--immutable" in command_text
     assert "sha256=" + "a" * 64 in command_text
+    assert "--metadata" in executor.calls[1][0]
+    assert executor.calls[1][1]["RCLONE_CONFIG_TKR_TYPE"] == "s3"
+    assert executor.calls[1][1]["RCLONE_CONFIG_TKR_PROVIDER"] == "Other"
+    assert executor.calls[1][1]["RCLONE_CONFIG_TKR_NO_CHECK_BUCKET"] == "true"
     assert "key-id-marker" not in command_text
     assert "application-key-marker" not in command_text
     assert "key-id-marker" not in repr(credentials)
     assert "application-key-marker" not in repr(credentials)
+
+
+@pytest.mark.asyncio
+async def test_rclone_normalizes_remote_name_for_environment_configuration() -> None:
+    """The target and environment use the same shell-safe remote section."""
+    executor = RecordingExecutor([metadata()])
+    client = RcloneB2Client(
+        executor,
+        RcloneCredentials("key", "application"),
+        RcloneLocation("tkr-publisher", "bucket", "models/"),
+    )
+
+    assert await client.head("blobs/object") is not None
+
+    arguments, environment, _ = executor.calls[0]
+    assert "tkr_publisher:bucket/models/blobs/object" in arguments
+    assert "RCLONE_CONFIG_TKR_PUBLISHER_TYPE" in environment
+
+
+@pytest.mark.asyncio
+async def test_rclone_url_upload_uses_seekable_isolated_http_remote() -> None:
+    """Remote publication uses ranged HTTPS input with bounded retries."""
+    executor = RecordingExecutor([missing(), CommandResult(b"", b""), metadata()])
+    client = RcloneB2Client(
+        executor,
+        RcloneCredentials("key-id-marker", "application-key-marker"),
+        RcloneLocation("tkr-publisher", "bucket", "models/"),
+    )
+    source_url = (
+        "https://huggingface.co/Comfy-Org/MiniMax-H3/resolve/"
+        "0123456789abcdef0123456789abcdef01234567/model.safetensors"
+    )
+
+    result = await client.put_url("blobs/object", source_url, "a" * 64, 4)
+
+    assert result.sha256 == "a" * 64
+    arguments, environment, _ = executor.calls[1]
+    assert arguments[1] == "copyto"
+    assert (
+        "tkr_publisher_source:Comfy-Org/MiniMax-H3/resolve/"
+        "0123456789abcdef0123456789abcdef01234567/model.safetensors"
+    ) in arguments
+    assert source_url not in arguments
+    assert "--retries" in arguments
+    assert "--metadata-mapper" in arguments
+    assert environment["RCLONE_CONFIG_TKR_PUBLISHER_SOURCE_TYPE"] == "http"
+    assert (
+        environment["RCLONE_CONFIG_TKR_PUBLISHER_SOURCE_URL"]
+        == "https://huggingface.co"
+    )
+    assert "key-id-marker" not in repr(arguments)
+    assert "application-key-marker" not in repr(arguments)
+
+
+def test_metadata_mapper_discards_every_source_field() -> None:
+    """Only later operator-controlled metadata may reach object storage."""
+    payload = {
+        "Metadata": {
+            "content-disposition": "unsafe upstream value",
+            "authorization": "must-not-propagate",
+        },
+        "Remote": "model.safetensors",
+    }
+
+    digest = "a" * 64
+    assert allowlisted_metadata(payload, digest) == {"Metadata": {"sha256": digest}}
+
+    output = StringIO()
+    run_metadata_mapper(StringIO(json.dumps(payload)), output, digest)
+    assert json.loads(output.getvalue()) == {"Metadata": {"sha256": digest}}
+
+    with pytest.raises(ValueError, match="must be an object"):
+        allowlisted_metadata([], digest)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="canonical"):
+        allowlisted_metadata(payload, "not-a-digest")
+    with pytest.raises(ValueError, match="exceeds"):
+        run_metadata_mapper(
+            StringIO("x" * (MAXIMUM_MAPPER_INPUT_CHARACTERS + 1)),
+            StringIO(),
+            digest,
+        )
 
 
 @pytest.mark.asyncio
@@ -147,6 +240,53 @@ async def test_rclone_missing_and_metadata_failure_are_distinct() -> None:
         RcloneLocation("tkr", "bucket", "models/"),
     )
     assert await missing_client.head("blobs/object") is None
+
+    virtual_directory_client = RcloneB2Client(
+        RecordingExecutor(
+            [
+                CommandResult(
+                    json.dumps(
+                        {
+                            "Path": "",
+                            "Name": "",
+                            "Size": -1,
+                            "MimeType": "inode/directory",
+                            "IsDir": True,
+                        }
+                    ).encode(),
+                    b"",
+                )
+            ]
+        ),
+        RcloneCredentials("key", "application"),
+        RcloneLocation("tkr", "bucket", "models/"),
+    )
+    assert await virtual_directory_client.head("blobs/object") is None
+
+    with pytest.raises(ValueError, match="Canadian Backblaze S3 region"):
+        RcloneLocation(
+            "tkr",
+            "bucket",
+            "models/",
+            "https://untrusted.example.com",
+            "ca-east-006",
+        )
+    with pytest.raises(ValueError, match="Canadian Backblaze S3 region"):
+        RcloneLocation(
+            "tkr",
+            "bucket",
+            "models/",
+            "https://s3.us-west-004.backblazeb2.com",
+            "us-west-004",
+        )
+    with pytest.raises(ValueError, match="Canadian Backblaze S3 region"):
+        RcloneLocation(
+            "tkr",
+            "bucket",
+            "models/",
+            "https://s3.ca-east-006.backblazeb2.com",
+            "ca-west-001",
+        )
 
     invalid_client = RcloneB2Client(
         RecordingExecutor(

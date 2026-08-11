@@ -237,6 +237,8 @@ def compose_worker_application(
             settings.rclone_remote_name,
             settings.bucket_name,
             settings.model_prefix,
+            settings.b2_s3_endpoint,
+            settings.b2_s3_region,
         ),
     )
     store = ArtifactRcloneStore(client)

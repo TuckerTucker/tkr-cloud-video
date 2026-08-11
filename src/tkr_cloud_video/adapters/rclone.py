@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from tkr_cloud_video.adapters.process import CommandExecutor
 from tkr_cloud_video.artifacts.publisher import ObjectMetadata
 from tkr_cloud_video.core.context import validate_identifier
 from tkr_cloud_video.core.errors import AppError
+from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
 from tkr_cloud_video.delivery.uploader import RemoteMetadata
 from tkr_cloud_video.security.validation import ObjectKey, Sha256Digest
 
@@ -36,11 +38,28 @@ class RcloneLocation:
     remote_name: str
     bucket_name: str
     base_prefix: str
+    endpoint: str = B2_S3_ENDPOINT
+    region: str = B2_S3_REGION
 
     def __post_init__(self) -> None:
         """Reject command syntax and non-normalized object namespaces."""
         validate_identifier(self.remote_name, "resource_id")
         validate_identifier(self.bucket_name, "resource_id")
+        validate_identifier(self.region, "resource_id")
+        parsed_endpoint = urlparse(self.endpoint)
+        expected_hostname = f"s3.{self.region}.backblazeb2.com"
+        if (
+            parsed_endpoint.scheme != "https"
+            or not self.region.startswith("ca-")
+            or parsed_endpoint.hostname != expected_hostname
+            or parsed_endpoint.path not in {"", "/"}
+            or parsed_endpoint.params
+            or parsed_endpoint.query
+            or parsed_endpoint.fragment
+        ):
+            raise ValueError(
+                "endpoint must match its reviewed Canadian Backblaze S3 region"
+            )
         if (
             not self.base_prefix
             or self.base_prefix.startswith("/")
@@ -60,7 +79,7 @@ class RcloneObjectEvidence:
 
 
 class RcloneB2Client:
-    """Minimal immutable object operations with no configuration file."""
+    """Minimal immutable B2 operations through its S3-compatible API."""
 
     def __init__(
         self,
@@ -79,12 +98,22 @@ class RcloneB2Client:
         self._executable = executable
 
     def _environment(self) -> dict[str, str]:
-        remote = self._location.remote_name.upper().replace("-", "_")
+        remote = self._normalized_remote_name().upper()
         return {
-            f"RCLONE_CONFIG_{remote}_TYPE": "b2",
-            f"RCLONE_CONFIG_{remote}_ACCOUNT": self._credentials.key_id,
-            f"RCLONE_CONFIG_{remote}_KEY": self._credentials.application_key,
+            f"RCLONE_CONFIG_{remote}_TYPE": "s3",
+            f"RCLONE_CONFIG_{remote}_PROVIDER": "Other",
+            f"RCLONE_CONFIG_{remote}_ACCESS_KEY_ID": self._credentials.key_id,
+            f"RCLONE_CONFIG_{remote}_SECRET_ACCESS_KEY": (
+                self._credentials.application_key
+            ),
+            f"RCLONE_CONFIG_{remote}_ENDPOINT": self._location.endpoint,
+            f"RCLONE_CONFIG_{remote}_REGION": self._location.region,
+            f"RCLONE_CONFIG_{remote}_NO_CHECK_BUCKET": "true",
         }
+
+    def _normalized_remote_name(self) -> str:
+        """Return the environment-compatible rclone configuration section."""
+        return self._location.remote_name.replace("-", "_")
 
     def _target(self, key: str | None = None) -> str:
         suffix = self._location.base_prefix
@@ -95,11 +124,17 @@ class RcloneB2Client:
                 if logical_key.startswith(self._location.base_prefix)
                 else suffix + logical_key
             )
-        return f"{self._location.remote_name}:{self._location.bucket_name}/{suffix}"
+        return f"{self._normalized_remote_name()}:{self._location.bucket_name}/{suffix}"
 
     def _arguments(self, *arguments: str) -> tuple[str, ...]:
         """Add the fixed empty config path so ambient files are never read."""
         return (self._executable, *arguments, "--config", "/dev/null")
+
+    @staticmethod
+    def _metadata_mapper_command(sha256: str) -> str:
+        """Return the isolated mapper command in rclone's CSV-like syntax."""
+        executable = '"' + sys.executable.replace('"', '""') + '"'
+        return f"{executable} -m tkr_cloud_video.adapters.metadata_mapper {sha256}"
 
     async def probe(self) -> bool:
         """Prove only list access at the configured namespace."""
@@ -128,6 +163,12 @@ class RcloneB2Client:
                 return None
             raise
         payload = _json_object(result.stdout)
+        # rclone represents an absent B2 object whose virtual parent exists as
+        # a directory stat instead of returning a not-found exit status. B2
+        # has no materialized directories, and callers only pass validated
+        # object keys here, so this sentinel is the provider's absence result.
+        if payload.get("IsDir") is True:
+            return None
         metadata = payload.get("Metadata", {})
         if not isinstance(metadata, dict):
             metadata = {}
@@ -165,6 +206,7 @@ class RcloneB2Client:
                 "rcat",
                 self._target(key),
                 "--immutable",
+                "--metadata",
                 "--metadata-set",
                 f"sha256={digest}",
             ),
@@ -184,11 +226,22 @@ class RcloneB2Client:
     async def put_url(
         self, key: str, url: str, sha256: str, size_bytes: int
     ) -> RcloneObjectEvidence:
-        """Stream a pinned HTTPS source into one immutable B2 object."""
+        """Stream a seekable pinned HTTPS source into one immutable B2 object."""
         digest = str(Sha256Digest(sha256))
         parsed = urlparse(url)
-        if parsed.scheme != "https" or parsed.hostname != "huggingface.co":
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname != "huggingface.co"
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port is not None
+            or parsed.query
+            or parsed.fragment
+        ):
             raise ValueError("artifact URL must use the approved Hugging Face host")
+        source_path = parsed.path.lstrip("/")
+        if not source_path or source_path.endswith("/"):
+            raise ValueError("artifact URL must identify one source object")
         if size_bytes < 1:
             raise ValueError("artifact size must be positive")
         if await self.head(key) is not None:
@@ -197,17 +250,32 @@ class RcloneB2Client:
                 "Immutable object already exists.",
                 context={"operation": "put_object"},
             )
+        source_remote = f"{self._normalized_remote_name()}_source"
+        source_environment_prefix = source_remote.upper()
+        environment = {
+            **self._environment(),
+            f"RCLONE_CONFIG_{source_environment_prefix}_TYPE": "http",
+            f"RCLONE_CONFIG_{source_environment_prefix}_URL": (
+                "https://huggingface.co"
+            ),
+        }
         await self._executor.run(
             self._arguments(
-                "copyurl",
-                url,
+                "copyto",
+                f"{source_remote}:{source_path}",
                 self._target(key),
                 "--immutable",
-                "--no-clobber",
-                "--metadata-set",
-                f"sha256={digest}",
+                "--metadata",
+                "--metadata-mapper",
+                self._metadata_mapper_command(digest),
+                "--retries",
+                "10",
+                "--low-level-retries",
+                "20",
+                "--retries-sleep",
+                "5s",
             ),
-            self._environment(),
+            environment,
             timeout_seconds=14_400,
         )
         evidence = await self.head(key)
