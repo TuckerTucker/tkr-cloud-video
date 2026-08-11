@@ -104,6 +104,14 @@ class ArtifactPublisher:
                 reused += 1
             else:
                 uploaded += 1
+        return await self.publish_manifest(manifest, reused, uploaded)
+
+    async def publish_manifest(
+        self, manifest: ModelSetManifest, reused: int, uploaded: int
+    ) -> PublicationReceipt:
+        """Publish the commit-like manifest after every blob is verified."""
+        if reused < 0 or uploaded < 0:
+            raise ValueError("publication counts cannot be negative")
         content = manifest.canonical_bytes()
         digest = str(manifest.digest())
         key = f"manifests/sha256/{digest}.json"

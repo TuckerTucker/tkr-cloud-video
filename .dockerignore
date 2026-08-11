@@ -7,6 +7,8 @@
 !requirements/**
 !schemas/
 !schemas/**
+!release-assets/
+!release-assets/**
 !scripts/
 !scripts/entrypoint.sh
 !src/

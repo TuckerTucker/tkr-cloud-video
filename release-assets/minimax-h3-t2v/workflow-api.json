@@ -1,0 +1,116 @@
+{
+  "6": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_h3_fl2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "9": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "denoise": 1.0,
+      "model": ["6", 0],
+      "scheduler": "simple",
+      "steps": 20
+    }
+  },
+  "10": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["14", 0],
+      "vae": ["11", 0]
+    }
+  },
+  "11": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_fp16.safetensors"
+    }
+  },
+  "13": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+      "device": "default",
+      "type": "minimax"
+    }
+  },
+  "14": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "guider": ["16", 0],
+      "latent_image": ["104", 1],
+      "noise": ["15", 0],
+      "sampler": ["17", 0],
+      "sigmas": ["9", 0]
+    }
+  },
+  "15": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 0
+    }
+  },
+  "16": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "conditioning": ["104", 0],
+      "model": ["6", 0]
+    }
+  },
+  "17": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "res_multistep"
+    }
+  },
+  "23": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": ["14", 0],
+      "vae": ["24", 0]
+    }
+  },
+  "24": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    }
+  },
+  "91": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "audio": ["23", 0],
+      "bit_depth": 8,
+      "fps": 24,
+      "images": ["10", 0]
+    }
+  },
+  "92": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "codec": {
+        "codec": "h264",
+        "encoding": {
+          "crf": 23.0,
+          "encoding": "re-encode"
+        }
+      },
+      "filename_prefix": "tkr-cloud-video/unbound",
+      "format": "mp4",
+      "video": ["91", 0]
+    }
+  },
+  "104": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "clip": ["13", 0],
+      "height": 480,
+      "length": 73,
+      "prompt": "Unbound release workflow",
+      "vae": ["11", 0],
+      "width": 864
+    }
+  }
+}

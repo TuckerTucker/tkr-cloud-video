@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,7 +23,11 @@ from tkr_cloud_video.artifacts.publisher import (
     ObjectMetadata,
 )
 from tkr_cloud_video.artifacts.resolver import ApprovedReleaseResolver
+from tkr_cloud_video.artifacts.streaming_publisher import StreamingArtifactPublisher
+from tkr_cloud_video.release.catalog import prepare_model_set
 from tkr_cloud_video.security.validation import ObjectKey, Sha256Digest
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass
@@ -51,6 +56,25 @@ class MemoryStore(ArtifactStore):
     async def get(self, key: str) -> bytes:
         """Return exact object bytes."""
         return self.objects[key]
+
+
+@dataclass
+class StreamingMemoryStore(MemoryStore):
+    """Streaming store fake that records URL transfers without large buffers."""
+
+    url_writes: list[str] = field(default_factory=list)
+
+    async def put_url(
+        self, key: str, url: str, sha256: str, size_bytes: int
+    ) -> ObjectMetadata:
+        """Record independently pinned metadata as a completed stream."""
+        assert url.startswith("https://huggingface.co/")
+        assert key not in self.metadata
+        metadata = ObjectMetadata(size_bytes, sha256, f"stream-{len(self.writes) + 1}")
+        self.metadata[key] = metadata
+        self.writes.append(key)
+        self.url_writes.append(url)
+        return metadata
 
 
 def entry(name: str, role: ArtifactRole, content: bytes) -> ArtifactEntry:
@@ -201,3 +225,57 @@ async def test_resolver_rejects_mutated_manifest_or_missing_reference(
         await resolver.resolve(
             ObjectKey(receipt.manifest_key), Sha256Digest(receipt.manifest_digest)
         )
+
+
+def test_reviewed_h3_catalog_prepares_a_bound_deterministic_manifest() -> None:
+    """The checked-in release catalog resolves only pinned models and API JSON."""
+    prepared = prepare_model_set(
+        ROOT / "release-assets/minimax-h3-t2v/catalog.json", "approval-1"
+    )
+
+    assert prepared.manifest.model_set_id == "minimax-h3-t2v-int8-20260809"
+    assert len(prepared.manifest.artifacts) == 5
+    assert prepared.manifest.provenance_digest == prepared.catalog.provenance_digest()
+    workflow = prepared.manifest.artifacts[-1]
+    assert workflow.role is ArtifactRole.WORKFLOW
+    assert {binding.source.value for binding in workflow.bindings} == {
+        "prompt",
+        "seed",
+        "width",
+        "height",
+        "frames",
+        "fps",
+        "output_prefix",
+    }
+
+
+def test_reviewed_h3_catalog_rejects_source_revision_drift(tmp_path: Path) -> None:
+    """A changed origin cannot silently retain URLs pinned to another revision."""
+    source = ROOT / "release-assets/minimax-h3-t2v"
+    catalog_document = json.loads((source / "catalog.json").read_text())
+    catalog_document["source"]["revision"] = "b" * 40
+    (tmp_path / "catalog.json").write_text(json.dumps(catalog_document))
+    (tmp_path / "workflow-api.json").write_bytes(
+        (source / "workflow-api.json").read_bytes()
+    )
+
+    with pytest.raises(ValidationError, match="revision differs"):
+        prepare_model_set(tmp_path / "catalog.json", "approval-1")
+
+
+@pytest.mark.asyncio
+async def test_streaming_publication_never_buffers_remote_model_content() -> None:
+    """URL-backed models stream before the local workflow and manifest commit."""
+    prepared = prepare_model_set(
+        ROOT / "release-assets/minimax-h3-t2v/catalog.json", "approval-1"
+    )
+    store = StreamingMemoryStore()
+    publisher = StreamingArtifactPublisher(store)
+
+    receipt = await publisher.publish(prepared.manifest, prepared.sources)
+    repeated = await publisher.publish(prepared.manifest, prepared.sources)
+
+    assert len(store.url_writes) == 4
+    assert receipt.uploaded_blobs == 5
+    assert repeated.reused_blobs == 5
+    assert store.writes[-1] == receipt.manifest_key

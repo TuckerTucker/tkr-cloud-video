@@ -44,6 +44,7 @@ RUN uv sync --frozen --no-dev --no-cache --inexact \
     && ffprobe -version
 
 COPY schemas ./schemas
+COPY release-assets ./release-assets
 COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod 0555 /entrypoint.sh \
     && groupadd --gid 65532 tkr-worker \

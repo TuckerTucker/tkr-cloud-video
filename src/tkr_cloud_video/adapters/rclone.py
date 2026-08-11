@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from tkr_cloud_video.adapters.process import CommandExecutor
 from tkr_cloud_video.artifacts.publisher import ObjectMetadata
@@ -180,6 +181,48 @@ class RcloneB2Client:
             )
         return evidence
 
+    async def put_url(
+        self, key: str, url: str, sha256: str, size_bytes: int
+    ) -> RcloneObjectEvidence:
+        """Stream a pinned HTTPS source into one immutable B2 object."""
+        digest = str(Sha256Digest(sha256))
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or parsed.hostname != "huggingface.co":
+            raise ValueError("artifact URL must use the approved Hugging Face host")
+        if size_bytes < 1:
+            raise ValueError("artifact size must be positive")
+        if await self.head(key) is not None:
+            raise AppError(
+                "immutable_object_exists",
+                "Immutable object already exists.",
+                context={"operation": "put_object"},
+            )
+        await self._executor.run(
+            self._arguments(
+                "copyurl",
+                url,
+                self._target(key),
+                "--immutable",
+                "--no-clobber",
+                "--metadata-set",
+                f"sha256={digest}",
+            ),
+            self._environment(),
+            timeout_seconds=14_400,
+        )
+        evidence = await self.head(key)
+        if (
+            evidence is None
+            or evidence.sha256 != digest
+            or evidence.size_bytes != size_bytes
+        ):
+            raise AppError(
+                "remote_verification_failed",
+                "Streamed object failed remote size or digest verification.",
+                context={"operation": "put_object"},
+            )
+        return evidence
+
     async def get(self, key: str) -> bytes | None:
         """Read one exact private object, returning None only when absent."""
         try:
@@ -225,6 +268,13 @@ class ArtifactRcloneStore:
     async def put(self, key: str, content: bytes, sha256: str) -> ObjectMetadata:
         """Create and verify one immutable artifact object."""
         evidence = await self._client.put(key, content, sha256)
+        return ObjectMetadata(evidence.size_bytes, evidence.sha256, evidence.version_id)
+
+    async def put_url(
+        self, key: str, url: str, sha256: str, size_bytes: int
+    ) -> ObjectMetadata:
+        """Stream and verify one approved HTTPS artifact source."""
+        evidence = await self._client.put_url(key, url, sha256, size_bytes)
         return ObjectMetadata(evidence.size_bytes, evidence.sha256, evidence.version_id)
 
     async def get(self, key: str) -> bytes:
