@@ -51,6 +51,9 @@ Required non-secret variables are `TKR_RELEASE_ID`, `TKR_WORKER_ID`,
 `TKR_MODEL_SET_ID`, `TKR_MANIFEST_DIGEST`, and `TKR_B2_BUCKET_NAME`. RunPod must
 inject model, input, and output key IDs/application keys as separate
 `B2_MODEL_*`, `B2_INPUT_*`, and `B2_OUTPUT_*` secrets.
+The Backblaze S3-compatible endpoint and region default to the reviewed Canadian
+bucket location; `TKR_B2_S3_ENDPOINT` and `TKR_B2_S3_REGION` can override them
+only as a matching pair for an explicitly reviewed Canadian Backblaze region.
 Optional `TKR_*_ROOT`, prefix, port, capacity-safety, and timeout variables use
 the container defaults defined by `runtime/config.py`. ComfyUI receives a fresh
 environment containing none of the B2 values.
