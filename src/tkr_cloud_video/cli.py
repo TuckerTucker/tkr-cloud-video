@@ -28,6 +28,9 @@ from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.core.logging import configure_logging, default_event_sink
 from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
 from tkr_cloud_video.release.catalog import prepare_model_set
+from tkr_cloud_video.release.runpod_runtime import (
+    normalize_runpod_runtime_environment,
+)
 from tkr_cloud_video.release.serverless import compose_serverless_deployment
 from tkr_cloud_video.worker import compose_worker_application
 
@@ -133,6 +136,7 @@ def run_serverless() -> int:
     """Run the async deployment on the pinned official RunPod SDK."""
     sink = default_event_sink()
     try:
+        normalize_runpod_runtime_environment(os.environ)
         deployment = compose_serverless_deployment(os.environ, sink)
         runpod = importlib.import_module("runpod")
         sdk = cast(RunPodServerlessSdk, runpod.serverless)

@@ -13,6 +13,7 @@ from tkr_cloud_video.delivery.uploader import RemoteMetadata
 from tkr_cloud_video.release.runpod_runtime import (
     RunPodRuntimeDiagnostic,
     RunPodRuntimeDiagnosticPublisher,
+    normalize_runpod_runtime_environment,
 )
 
 
@@ -55,6 +56,72 @@ def runtime_environment() -> dict[str, str]:
         "RUNPOD_WEBHOOK_POST_OUTPUT": "https://example/done/$RUNPOD_POD_ID/$ID",
         "RUNPOD_AI_API_KEY": "must-not-persist",
     }
+
+
+def test_runtime_normalization_is_inert_outside_runpod() -> None:
+    """Local execution never invents provider configuration."""
+    environment = {"HOSTNAME": "local-container"}
+
+    assert normalize_runpod_runtime_environment(environment) is None
+    assert environment == {"HOSTNAME": "local-container"}
+
+
+@pytest.mark.parametrize("use_documented_identity", [False, True])
+def test_runtime_normalization_resolves_every_webhook_from_one_identity(
+    use_documented_identity: bool,
+) -> None:
+    """All SDK transports share the documented ID or container fallback."""
+    environment = runtime_environment()
+    expected = "pod-1" if use_documented_identity else "container-1"
+    if not use_documented_identity:
+        environment.pop("RUNPOD_POD_ID")
+    for name in (
+        "RUNPOD_WEBHOOK_PING",
+        "RUNPOD_WEBHOOK_POST_STREAM",
+    ):
+        environment[name] = f"https://example/{name}/$RUNPOD_POD_ID"
+
+    assert normalize_runpod_runtime_environment(environment) == expected
+    assert environment["RUNPOD_POD_ID"] == expected
+    assert all(
+        expected in environment[name] and "$RUNPOD_POD_ID" not in environment[name]
+        for name in (
+            "RUNPOD_WEBHOOK_GET_JOB",
+            "RUNPOD_WEBHOOK_PING",
+            "RUNPOD_WEBHOOK_POST_OUTPUT",
+            "RUNPOD_WEBHOOK_POST_STREAM",
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("change", "error_code"),
+    [
+        ({"RUNPOD_POD_ID": "unsafe/id"}, "runpod_worker_identity_invalid"),
+        ({"RUNPOD_WEBHOOK_PING": None}, "runpod_webhook_missing"),
+        (
+            {"RUNPOD_WEBHOOK_PING": "https://example/ping"},
+            "runpod_webhook_identity_missing",
+        ),
+    ],
+)
+def test_runtime_normalization_fails_closed_on_identity_drift(
+    change: dict[str, str | None], error_code: str
+) -> None:
+    """Malformed identities and inconsistent webhooks stop SDK startup."""
+    environment = runtime_environment()
+    environment["RUNPOD_WEBHOOK_PING"] = "https://example/ping/$RUNPOD_POD_ID"
+    environment["RUNPOD_WEBHOOK_POST_STREAM"] = "https://example/stream/$RUNPOD_POD_ID"
+    for name, value in change.items():
+        if value is None:
+            environment.pop(name, None)
+        else:
+            environment[name] = value
+
+    with pytest.raises(AppError) as captured:
+        normalize_runpod_runtime_environment(environment)
+
+    assert captured.value.code == error_code
 
 
 def test_runtime_diagnostic_is_opt_in_and_contains_only_safe_evidence() -> None:

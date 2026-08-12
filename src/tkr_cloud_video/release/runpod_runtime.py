@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 
 from tkr_cloud_video.core.context import validate_identifier
+from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.delivery.uploader import ResultStore
 
 RUNTIME_DIAGNOSTIC_ENVIRONMENT = "TKR_RUNTIME_DIAGNOSTIC_ID"
@@ -18,6 +19,67 @@ _WEBHOOK_VARIABLES = (
     "RUNPOD_WEBHOOK_POST_OUTPUT",
     "RUNPOD_WEBHOOK_POST_STREAM",
 )
+
+
+def normalize_runpod_runtime_environment(
+    environment: MutableMapping[str, str],
+) -> str | None:
+    """Resolve one stable worker identity before importing the RunPod SDK.
+
+    RunPod's SDK reads its worker identity at module import time and otherwise
+    generates a random UUID. Deployed workers must instead use the provider's
+    pod identity, falling back to the container hostname used by the runtime
+    when the documented variable is absent. Every webhook is resolved from the
+    same identity so queue intake, heartbeats, and results cannot drift.
+
+    Args:
+        environment: Mutable process environment used by the SDK import.
+
+    Returns:
+        The resolved deployed worker identity, or ``None`` for local execution.
+
+    Raises:
+        AppError: If a deployed worker lacks a safe, consistent identity.
+
+    """
+    if "RUNPOD_WEBHOOK_GET_JOB" not in environment:
+        return None
+    worker_id = environment.get("RUNPOD_POD_ID") or environment.get("HOSTNAME")
+    if worker_id is None:
+        raise AppError(
+            "runpod_worker_identity_missing",
+            "RunPod worker identity is unavailable.",
+        )
+    try:
+        validated_worker_id = validate_identifier(worker_id, "runpod_pod_id")
+    except AppError as error:
+        raise AppError(
+            "runpod_worker_identity_invalid",
+            "RunPod worker identity is invalid.",
+            cause=error,
+        ) from error
+
+    resolved_webhooks: dict[str, str] = {}
+    for name in _WEBHOOK_VARIABLES:
+        webhook = environment.get(name)
+        if webhook is None:
+            raise AppError(
+                "runpod_webhook_missing",
+                "A required RunPod worker webhook is unavailable.",
+                context={"field": name},
+            )
+        resolved = webhook.replace("$RUNPOD_POD_ID", validated_worker_id)
+        if validated_worker_id not in resolved:
+            raise AppError(
+                "runpod_webhook_identity_missing",
+                "A RunPod worker webhook lacks the resolved identity.",
+                context={"field": name},
+            )
+        resolved_webhooks[name] = resolved
+
+    environment["RUNPOD_POD_ID"] = validated_worker_id
+    environment.update(resolved_webhooks)
+    return validated_worker_id
 
 
 @dataclass(frozen=True, slots=True)
