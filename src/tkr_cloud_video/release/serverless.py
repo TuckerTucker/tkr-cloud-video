@@ -30,6 +30,10 @@ from tkr_cloud_video.job_execution.composition import (
     compose_job_execution,
 )
 from tkr_cloud_video.release.runpod_handler import HandlerResponse, RunPodHandler
+from tkr_cloud_video.release.runpod_runtime import (
+    RunPodRuntimeDiagnostic,
+    RunPodRuntimeDiagnosticPublisher,
+)
 from tkr_cloud_video.security.process_secrets import (
     ProcessEnvironmentBuilder,
     ProcessRole,
@@ -44,6 +48,7 @@ class ServerlessDeployment:
 
     worker: WorkerApplication
     handler: RunPodHandler
+    runtime_diagnostic: RunPodRuntimeDiagnosticPublisher | None = None
 
     def __post_init__(self) -> None:
         """Create a concurrency-safe one-time startup gate."""
@@ -60,6 +65,8 @@ class ServerlessDeployment:
 
     async def handle(self, event: object) -> dict[str, object]:
         """Reject invalid input before startup, then run the canonical handler."""
+        if self.runtime_diagnostic is not None:
+            await self.runtime_diagnostic.publish()
         validated = self.handler.validate(event)
         if isinstance(validated, HandlerResponse):
             return asdict(validated)
@@ -153,4 +160,14 @@ def compose_serverless_deployment(
         output_root=settings.output_root,
         generation_timeout_seconds=settings.generation_timeout_seconds,
     )
-    return ServerlessDeployment(worker, RunPodHandler(application))
+    runtime_diagnostic = RunPodRuntimeDiagnostic.from_environment(environment)
+    diagnostic_publisher = (
+        RunPodRuntimeDiagnosticPublisher(result_store, runtime_diagnostic)
+        if runtime_diagnostic is not None
+        else None
+    )
+    return ServerlessDeployment(
+        worker,
+        RunPodHandler(application),
+        diagnostic_publisher,
+    )
