@@ -40,8 +40,9 @@ jobs:
           platforms: linux/amd64
           push: true
           provenance: false
+          # GHCR rejects uppercase; github.repository preserves the owner's case.
           tags: |
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/tuckertucker/tkr-cloud-video:${{ github.sha }}
+            ghcr.io/tuckertucker/tkr-cloud-video:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
