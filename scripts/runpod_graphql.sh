@@ -6,13 +6,18 @@
 # returns it as `locations`, which makes this the verification path for the
 # reviewed Canadian placement.
 #
-# Usage: scripts/runpod_graphql.sh [endpoint-id]
+# Placement is judged against the territories a license approval covers, passed
+# in explicitly so the legal decision is visible at the call site rather than
+# assumed by this script.
+#
+# Usage: scripts/runpod_graphql.sh [endpoint-id] [granted-territories]
 set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO_ROOT"
 
 ENDPOINT_ID="${1:-176tpna3ogl94t}"
+GRANTED_TERRITORIES="${2:-CA}"
 
 export TKR_VAULT_PROJECT_TKR_CLOUD_VIDEO_PASSWORD
 if [ -z "${TKR_VAULT_PROJECT_TKR_CLOUD_VIDEO_PASSWORD:-}" ]; then
@@ -24,7 +29,38 @@ RUNPOD_API_KEY=$(
         --name RUNPOD_API_KEY --json 2>/dev/null \
         | python3 -c 'import json,sys; print(json.load(sys.stdin)["output"]["value"])'
 )
-export RUNPOD_API_KEY ENDPOINT_ID
+export RUNPOD_API_KEY ENDPOINT_ID GRANTED_TERRITORIES
+
+report_placement() {
+    OBSERVED_LOCATIONS="$1" .venv/bin/python -c '
+import os
+
+from tkr_cloud_video.security.territories import (
+    license_permitted_territories,
+    review_placement,
+)
+
+observed = [p for p in os.environ["OBSERVED_LOCATIONS"].split(",") if p]
+granted = [t for t in os.environ["GRANTED_TERRITORIES"].split(",") if t]
+review = review_placement(observed, granted)
+
+print("granted territories:", ",".join(granted))
+print("permitted regions  :", ",".join(review.permitted) or "none")
+if review.excluded:
+    print("OUTSIDE THE GRANT  :", ",".join(review.excluded))
+if review.unmapped:
+    print("UNREGISTERED REGION:", ",".join(review.unmapped))
+print(
+    "license permits (needs approval before use):",
+    ",".join(license_permitted_territories()),
+)
+raise SystemExit(0 if review.approved else 1)
+'
+}
+
+LOCATIONS_OUT=$(mktemp "${TMPDIR:-/tmp}/tkr-locations.XXXXXX")
+trap 'rm -f "$LOCATIONS_OUT"' EXIT HUP INT TERM
+export LOCATIONS_OUT
 
 python3 - <<'PY'
 import json, os, urllib.error, urllib.request
@@ -68,11 +104,8 @@ if current is None:
     raise SystemExit(1)
 
 print(json.dumps(current, indent=1))
-
-locations = current.get("locations") or ""
-outside = [part for part in locations.split(",") if part and not part.startswith("CA-")]
-if outside:
-    print("WARNING: non-Canadian placement permitted:", outside)
-    raise SystemExit(1)
-print("placement confined to Canadian data centres:", locations)
+with open(os.environ["LOCATIONS_OUT"], "w", encoding="utf-8") as handle:
+    handle.write((current.get("locations") or "").strip())
 PY
+
+report_placement "$(cat "$LOCATIONS_OUT")"
