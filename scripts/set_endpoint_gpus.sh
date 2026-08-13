@@ -32,10 +32,15 @@ headers = {
     "Content-Type": "application/json",
 }
 body = json.dumps({
+    # Ordered by rent preference. Every entry holds the 42.5 GB model set with
+    # room for activations; 48 GB and smaller cards are left out because the
+    # weights alone would leave nothing to generate in.
     "gpuTypeIds": [
         "NVIDIA RTX PRO 6000 Blackwell Server Edition",
         "NVIDIA B200",
+        "NVIDIA H200",
         "NVIDIA H100 80GB HBM3",
+        "NVIDIA A100 80GB PCIe",
     ],
     # CUDA minor-version compatibility carries the cu128 build on any 12.x
     # host, so the floor only has to exclude CUDA 11. Blackwell hosts report
