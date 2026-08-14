@@ -48,9 +48,27 @@ EUROPEAN_UNION_MEMBERS: Final[frozenset[str]] = frozenset(
     }
 )
 
+# States inside the European Economic Area that are not Union members. They
+# take part in the single market through the EEA Agreement and adopt the Union
+# law marked EEA-relevant, so they are the states where "the European Union"
+# has to be read as one thing or the other rather than left implicit.
+EEA_NON_UNION_STATES: Final[frozenset[str]] = frozenset({"IS", "LI", "NO"})
+
 # MiniMax H3 Community License Agreement (2026-08-02): "Excluded Territories"
 # means the European Union, the United Kingdom, the Republic of Korea and the
 # United States of America.
+#
+# "The European Union" is read as Union membership, which leaves the EEA states
+# above outside the exclusion. The agreement names the United Kingdom
+# separately, and the United Kingdom was a member until 2020, so its drafters
+# distinguish membership from geography rather than using the Union as a
+# shorthand for Europe.
+#
+# The reading is provisional. The exclusions track regulatory exposure, and
+# Union instruments of this kind are commonly EEA-relevant, which would reach
+# these states through the EEA Agreement. The license invites contact for
+# territory authorization, and a written answer replaces this reading rather
+# than arguing with it.
 LICENSE_EXCLUDED_TERRITORIES: Final[frozenset[str]] = (
     EUROPEAN_UNION_MEMBERS | frozenset({"GB", "KR", "US"})
 )

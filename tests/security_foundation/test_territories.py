@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from tkr_cloud_video.security.territories import (
+    EEA_NON_UNION_STATES,
     EUROPEAN_UNION_MEMBERS,
     LICENSE_EXCLUDED_TERRITORIES,
     license_permitted_territories,
@@ -63,12 +64,20 @@ def test_license_excludes_the_union_the_uk_korea_and_the_united_states() -> None
         assert member in LICENSE_EXCLUDED_TERRITORIES
 
 
-def test_iceland_and_norway_are_outside_the_union_exclusion() -> None:
-    """EEA states that are not Union members are not excluded by membership."""
-    assert "IS" not in EUROPEAN_UNION_MEMBERS
-    assert "NO" not in EUROPEAN_UNION_MEMBERS
-    assert "IS" not in LICENSE_EXCLUDED_TERRITORIES
-    assert "NO" not in LICENSE_EXCLUDED_TERRITORIES
+def test_eea_states_are_not_union_members() -> None:
+    """The EEA states named here are outside Union membership."""
+    assert not (EEA_NON_UNION_STATES & EUROPEAN_UNION_MEMBERS)
+
+
+def test_eea_non_union_states_are_read_outside_the_exclusion() -> None:
+    """The recorded reading of "the European Union" is membership.
+
+    Reversing it is a territory decision, not a refactor, so it fails here
+    rather than silently widening where the model may be served.
+    """
+    assert not (EEA_NON_UNION_STATES & LICENSE_EXCLUDED_TERRITORIES)
+    assert "IS" in license_permitted_territories()
+    assert "NO" in license_permitted_territories()
 
 
 def test_netherlands_is_excluded_as_a_union_member() -> None:
