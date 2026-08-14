@@ -29,6 +29,7 @@ from tkr_cloud_video.job_execution.composition import (
     JobDependencies,
     compose_job_execution,
 )
+from tkr_cloud_video.prompt_authoring.composition import compose_prompt_authoring
 from tkr_cloud_video.release.runpod_handler import HandlerResponse, RunPodHandler
 from tkr_cloud_video.release.runpod_runtime import (
     RunPodRuntimeDiagnostic,
@@ -155,6 +156,7 @@ def compose_serverless_deployment(
         worker.startup,
         result_store,
         clock,
+        compose_prompt_authoring(),
         principal_id=settings.principal_id,
         workspace_root=settings.workspace_root,
         output_root=settings.output_root,

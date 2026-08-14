@@ -26,6 +26,7 @@ from tkr_cloud_video.jobs.comfy_client import PromptState, PromptStatus
 from tkr_cloud_video.jobs.contracts import parse_generation_request
 from tkr_cloud_video.jobs.executor import Waiter
 from tkr_cloud_video.jobs.media_validation import MediaInfo
+from tkr_cloud_video.prompt_authoring.composition import compose_prompt_authoring
 from tkr_cloud_video.security.validation import Sha256Digest
 from tkr_cloud_video.worker import HydratedWorkflow
 
@@ -46,10 +47,12 @@ class GeneratingComfyClient:
     output_root: Path
     submissions: int = 0
     output: str | None = None
+    submitted: dict[str, Any] | None = None
 
     async def submit(self, workflow: dict[str, Any], client_id: str) -> str:
         """Materialize synthetic media as the prompt-owned provider side effect."""
         self.submissions += 1
+        self.submitted = workflow
         prefix = workflow["20"]["inputs"]["filename_prefix"]
         assert isinstance(prefix, str) and client_id.startswith("attempt-")
         relative = f"{prefix}.mp4"
@@ -144,6 +147,7 @@ async def test_generation_commits_exact_artifacts_and_duplicate_converges(
         Startup(approved_workflow()),  # type: ignore[arg-type]
         store,
         FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC)),
+        compose_prompt_authoring(),
         principal_id="runpod-endpoint",
         workspace_root=workspace_root,
         output_root=output_root,
@@ -209,6 +213,7 @@ async def test_absent_result_reading_as_empty_still_generates(tmp_path: Path) ->
         Startup(approved_workflow()),  # type: ignore[arg-type]
         store,
         FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC)),
+        compose_prompt_authoring(),
         principal_id="runpod-endpoint",
         workspace_root=workspace_root,
         output_root=output_root,
@@ -261,6 +266,7 @@ async def test_generation_record_states_the_trained_envelope(tmp_path: Path) -> 
         Startup(approved_workflow()),  # type: ignore[arg-type]
         store,
         FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC)),
+        compose_prompt_authoring(),
         principal_id="runpod-endpoint",
         workspace_root=workspace_root,
         output_root=output_root,
@@ -316,6 +322,7 @@ async def test_default_request_records_an_inside_envelope(tmp_path: Path) -> Non
         Startup(approved_workflow()),  # type: ignore[arg-type]
         store,
         FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC)),
+        compose_prompt_authoring(),
         principal_id="runpod-endpoint",
         workspace_root=workspace_root,
         output_root=output_root,
@@ -340,3 +347,82 @@ async def test_default_request_records_an_inside_envelope(tmp_path: Path) -> Non
     assert record["trained_envelope"]["trained_envelope_inside"] is True
     assert record["request"]["width"] == 1344
     assert record["request"]["frames"] == 124
+
+
+@pytest.mark.asyncio
+async def test_a_structured_prompt_reaches_generation_as_rendered_wire_text(
+    tmp_path: Path,
+) -> None:
+    """The application renders a structured prompt before binding it.
+
+    The prompt-authoring seam was proven only by tests that called
+    resolve_request_prompt themselves. Nothing asserted that the application
+    calls it, so the capability was unreachable in production and the first
+    live structured submission was refused as unrendered_prompt_submitted.
+    This drives the application, which is the only thing that could have caught
+    it: the request carries no `prompt` field at all.
+    """
+    workspace_root, output_root = tmp_path / "workspaces", tmp_path / "outputs"
+    workspace_root.mkdir()
+    output_root.mkdir()
+    client = GeneratingComfyClient(output_root)
+    jobs = compose_job_execution(
+        JobDependencies(
+            FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC), monotonic_value=0),
+            NoWait(),
+            client,
+            MemoryInputSource(b"unused"),
+            ImageInspector(),
+            Inspector(),
+            workspace_root,
+            1024,
+        )
+    )
+    store = MemoryResultStore()
+    application = CloudVideoApplication(
+        jobs,
+        Startup(approved_workflow()),  # type: ignore[arg-type]
+        store,
+        FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC)),
+        compose_prompt_authoring(),
+        principal_id="runpod-endpoint",
+        workspace_root=workspace_root,
+        output_root=output_root,
+        generation_timeout_seconds=60,
+    )
+
+    await application.submit(
+        parse_generation_request(
+            {
+                "mode": "text-to-video",
+                "workflow_id": "workflow-1",
+                "model_set_id": MODEL_SET_ID,
+                "seed": 42,
+                "structured_prompt": {
+                    "mode": "T2VA",
+                    "duration_seconds": 3.04,
+                    "shots": [
+                        {
+                            "number": 1,
+                            "style": "live-action",
+                            "description": "A wide shot frames a snow-covered forest.",
+                            "camera": {"motion": "Push In"},
+                        }
+                    ],
+                    "overall_soundscape": "Wind moves through the branches.",
+                    "non_diegetic_music": "A sparse sustained string pad.",
+                },
+            }
+        )
+    )
+
+    assert client.submitted is not None
+    bound_prompt = client.submitted["10"]["inputs"]["text"]
+    assert bound_prompt.startswith("integrated_multimodal_description:")
+    assert "overall_soundscape:" in bound_prompt
+    assert "non_diegetic_music:" in bound_prompt
+
+    key = next(k for k in store.objects if k.endswith("generation.bin"))
+    record = json.loads(store.objects[key])
+    assert record["prompt_provenance"]["prompt_grammar_revision"] == "h3-2026-08"
+    assert record["prompt_provenance"]["prompt_digest"]
