@@ -1,0 +1,224 @@
+capability: prompt-authoring
+stories:
+  - name: compose-a-mode-correct-h3-prompt
+    status: planned
+    display_name: Compose a mode-correct H3 prompt
+    feature: structured-prompt-contract
+    actor: Authorized application
+    intent: supply the sections and shots a chosen generation mode requires and
+      receive a structured prompt that is complete for that mode
+    preconditions:
+      - The caller is authenticated and authorized.
+      - The generation mode and requested clip duration are already validated.
+      - The pinned grammar revision is loaded.
+    trigger_action: The application composes a prompt for a declared generation mode
+    steps:
+      - actor: Authorized application
+        action: declares the generation mode and supplies its sections
+        system_response: the service selects the section set and field order that mode fixes
+      - actor: Prompt service
+        action: checks each section against the mode's required set
+        system_response: missing, unknown, and misordered sections are reported together
+      - actor: Prompt service
+        action: derives the keyframe alignment header for keyframe modes
+        system_response: the header carries two-decimal timing inside the requested duration
+    acceptance_criteria:
+      - given: a base-mode prompt omits non_diegetic_music entirely
+        when: composition runs
+        then: composition fails naming the absent section, because the absent-value
+          token is the only permitted way to express no music
+      - given: a full-reference prompt supplies its six sections out of order
+        when: composition runs
+        then: the composed model carries the fixed order and the reordering is not
+          silently accepted
+      - given: a first-and-last-frame prompt declares an eight-second clip
+        when: the alignment header is derived
+        then: the closing keyframe aligns to the eight-second mark formatted to exactly
+          two decimals
+    slice_ids:
+      - prompt-authoring/slice/2
+  - name: reject-a-structurally-invalid-prompt
+    status: planned
+    display_name: Reject a structurally invalid prompt
+    feature: structured-prompt-contract
+    actor: Prompt service
+    intent: refuse a prompt whose shot timeline or delimiters cannot be honoured,
+      before any input transfer or GPU allocation
+    preconditions:
+      - A structured prompt has been composed for a declared mode.
+      - The requested clip duration is known.
+    trigger_action: The job service validates a submitted prompt
+    steps:
+      - actor: Prompt service
+        action: walks the shot list in order
+        system_response: shot numbers must increase by one and cut times must strictly increase
+      - actor: Prompt service
+        action: compares every cut time against the requested duration
+        system_response: a cut at or past the end of the clip is rejected
+      - actor: Prompt service
+        action: scans delimiters and speaker identifiers
+        system_response: unbalanced dialogue tags and reused or skipped speaker ids are reported
+      - actor: Prompt service
+        action: returns the outcome
+        system_response: the response lists every field-scoped error plus the checks
+          this mode did not run
+    acceptance_criteria:
+      - given: a six-second clip declares a shot cutting at 00:07.000
+        when: validation runs
+        then: the prompt is rejected naming the shot and the duration bound, and no job
+          is created
+      - given: a shot opens a dialogue delimiter and never closes it
+        when: validation runs
+        then: the prompt is rejected naming the shot, and the error context carries no
+          dialogue text
+      - given: a prompt passes every applicable check
+        when: validation returns
+        then: the result enumerates the checks skipped as not applicable to the
+          submitted mode
+    slice_ids:
+      - prompt-authoring/slice/3
+  - name: resolve-reference-labels-across-sections
+    status: planned
+    display_name: Resolve reference labels across sections
+    feature: structured-prompt-contract
+    actor: Authorized application
+    intent: use subject, picture, video, and audio labels across a full-reference
+      prompt and be told when a label is dangling or unused
+    preconditions:
+      - The prompt declares the full-reference mode.
+      - Reference assets are already authorized and staged.
+    trigger_action: The application submits a full-reference prompt carrying reference labels
+    steps:
+      - actor: Prompt service
+        action: indexes every label defined in the definitions section
+        system_response: each label is bound to one definition and one reference role
+      - actor: Prompt service
+        action: resolves every label used in the later sections against that index
+        system_response: a label used without a definition is reported as dangling
+      - actor: Prompt service
+        action: reports definitions never used
+        system_response: an unused definition is reported so the reference set stays honest
+    acceptance_criteria:
+      - given: the detailed description cites a subject label that no definition
+          introduces
+        when: label resolution runs
+        then: the prompt is rejected naming the label and the section that used it
+      - given: the summary section introduces a label absent from the definitions
+        when: label resolution runs
+        then: the prompt is rejected, because only the definitions section may introduce
+          labels
+      - given: a defined audio label is bound to a target speaker identifier
+        when: the retention section is checked
+        then: the speaker identifier is absent from retention and the audio label
+          carries a relationship marker from the closed set
+    slice_ids:
+      - prompt-authoring/slice/3
+  - name: render-a-prompt-deterministically
+    status: planned
+    display_name: Render a prompt deterministically
+    feature: pinned-prompt-rendering
+    actor: Job service
+    intent: turn a validated structured prompt into the exact wire text the workflow
+      expects, identically on every run
+    preconditions:
+      - The structured prompt has passed validation.
+      - The pinned grammar revision is loaded.
+    trigger_action: The job service renders a validated prompt for submission
+    steps:
+      - actor: Job service
+        action: requests wire text for the validated prompt
+        system_response: sections are emitted in the mode's fixed order with the fixed
+          field names
+      - actor: Prompt renderer
+        action: emits camera motion, timing, and absent values
+        system_response: default amplitude and speed are omitted and absent values use
+          the defined token
+      - actor: Prompt renderer
+        action: returns wire text and its digest
+        system_response: identical input yields byte-identical output and an identical digest
+    acceptance_criteria:
+      - given: the same structured prompt is rendered in two separate processes
+        when: the outputs are compared
+        then: the wire text is byte-identical and both digests match
+      - given: a camera motion declares medium amplitude and normal speed
+        when: the shot is rendered
+        then: the modifiers are omitted rather than written out, matching the grammar's
+          declared default
+      - given: a prompt declares no non-diegetic music
+        when: the section is rendered
+        then: the defined absent-value token is emitted rather than an empty or missing
+          section
+    slice_ids:
+      - prompt-authoring/slice/6
+  - name: contain-untrusted-caller-text
+    status: planned
+    display_name: Contain untrusted caller text
+    feature: pinned-prompt-rendering
+    actor: Prompt renderer
+    intent: carry caller dialogue, lyrics, and on-screen text through to the wire
+      text verbatim without letting them act as grammar
+    preconditions:
+      - The structured prompt separates caller-supplied text from
+        service-authored description.
+    trigger_action: The renderer emits a section containing caller-supplied text
+    steps:
+      - actor: Prompt renderer
+        action: classifies each span as caller-supplied or service-authored
+        system_response: only service-authored spans may contain grammar tokens
+      - actor: Prompt renderer
+        action: inspects caller spans for grammar tokens, shot headers, and field names
+        system_response: a caller span carrying structure is rejected with a field-scoped error
+      - actor: Prompt renderer
+        action: emits the accepted caller span
+        system_response: the span appears byte for byte, including its original language
+          and punctuation
+    acceptance_criteria:
+      - given: caller dialogue contains a closing dialogue delimiter
+        when: rendering runs
+        then: the prompt is rejected and no wire text is produced
+      - given: caller dialogue contains text that reads as a shot header or a field name
+        when: rendering runs
+        then: the prompt is rejected, because a caller span may never open a shot or a
+          section
+      - given: caller on-screen text is supplied in a non-Latin script
+        when: rendering runs
+        then: the text appears in the wire text unchanged and untranslated
+      - given: a containment rejection is logged
+        when: the event is emitted
+        then: the event names the field and the rule and carries no caller text
+    slice_ids:
+      - prompt-authoring/slice/7
+  - name: pin-and-record-the-grammar-revision
+    status: planned
+    display_name: Pin and record the grammar revision
+    feature: pinned-prompt-rendering
+    actor: Platform operator
+    intent: know which prompt grammar every committed result was generated under,
+      and detect a revision change without re-reading prompts
+    preconditions:
+      - The grammar tables carry a revision identifier and a digest.
+      - The job already emits reproducibility metadata.
+    trigger_action: A job completes and its reproducibility metadata is assembled
+    steps:
+      - actor: Prompt service
+        action: binds the loaded grammar revision to the validated prompt
+        system_response: the revision and its digest travel with the prompt
+      - actor: Job service
+        action: adds the prompt digest and grammar revision to reproducibility metadata
+        system_response: the committed result records both without carrying the prompt body
+      - actor: Platform operator
+        action: compares recorded revisions across results
+        system_response: a grammar change is visible as a revision and digest difference
+    acceptance_criteria:
+      - given: a job commits successfully
+        when: the result manifest is read
+        then: it carries the prompt digest and the pinned grammar revision and digest
+      - given: the grammar tables change
+        when: the revision digest is recomputed
+        then: it differs from the previously recorded digest and the mismatch is
+          detectable at load
+      - given: a result manifest is inspected by an operator
+        when: its fields are read
+        then: no prompt body, dialogue, or caller filename is present
+    slice_ids:
+      - prompt-authoring/slice/8

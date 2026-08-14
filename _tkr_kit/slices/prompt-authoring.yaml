@@ -1,0 +1,284 @@
+capability: prompt-authoring
+slices:
+  - number: 1
+    feature: structured-prompt-contract
+    delivers:
+      - Frozen vocabulary tables for camera motion type, amplitude, and speed,
+        cut phrasing, retention relationship markers, and task-type prefixes,
+        each with its declared default
+      - A grammar revision identifier and content digest computed over the
+        tables, verified at load
+      - The published JSON Schema describing the structured H3 prompt for
+        external callers
+    depends_on: []
+    story_ids:
+      - prompt-authoring/story/compose-a-mode-correct-h3-prompt
+    files:
+      - src/tkr_cloud_video/prompting/__init__.py
+      - src/tkr_cloud_video/prompting/grammar.py
+      - schemas/h3-prompt.schema.json
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The tables are module-level frozen constants
+        shipped in the pinned image and versioned in git; nothing writes to them
+        at runtime.
+    paths:
+      - src/tkr_cloud_video/**
+      - schemas/**
+    title: Pinned prompt grammar tables
+    layer: data
+    status: in_progress
+  - number: 2
+    feature: structured-prompt-contract
+    delivers:
+      - Discriminated typed models for the four base modes and full-reference
+        mode, each declaring its required sections and fixed field order
+      - Shot, speaker, dialogue span, and reference-label value objects that
+        separate caller-supplied text from service-authored description
+      - Keyframe alignment header derivation bound to the requested clip
+        duration with two-decimal timing
+    depends_on:
+      - 1
+    story_ids:
+      - prompt-authoring/story/compose-a-mode-correct-h3-prompt
+    files:
+      - src/tkr_cloud_video/prompting/models.py
+      - src/tkr_cloud_video/prompting/alignment.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The grammar tables, typed models, validators, and
+        renderer are pure in-process values constructed per request and
+        discarded with the request; no writer exists that persists them.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Structured prompt models
+    layer: domain
+    status: planned
+  - number: 3
+    feature: structured-prompt-contract
+    delivers:
+      - Timeline checks for monotonic shot numbering, strictly increasing cut
+        times, and cut times inside the requested clip duration
+      - Reference-label resolution reporting dangling uses, unused definitions,
+        and labels introduced outside the definitions section
+      - Delimiter balance and speaker-identifier continuity checks, and typed
+        field-scoped errors whose context carries no prompt body
+      - A declared per-mode check inventory returned with every result, naming
+        the checks the submitted mode did not exercise
+    depends_on:
+      - 2
+    story_ids:
+      - prompt-authoring/story/reject-a-structurally-invalid-prompt
+      - prompt-authoring/story/resolve-reference-labels-across-sections
+    files:
+      - src/tkr_cloud_video/prompting/validation.py
+      - src/tkr_cloud_video/prompting/errors.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The grammar tables, typed models, validators, and
+        renderer are pure in-process values constructed per request and
+        discarded with the request; no writer exists that persists them.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Structural prompt validator
+    layer: domain
+    status: planned
+  - number: 4
+    feature: structured-prompt-contract
+    delivers:
+      - A composition root that constructs the validator over injected grammar
+        tables and clock
+      - Typed error registration and structlog event wiring with the prompt body
+        structurally excluded
+      - Grammar digest verification surfaced through the existing
+        credential-free diagnostic entrypoint
+    depends_on:
+      - 1
+      - 2
+      - 3
+    story_ids:
+      - prompt-authoring/story/reject-a-structurally-invalid-prompt
+    files:
+      - src/tkr_cloud_video/prompt_authoring/__init__.py
+      - src/tkr_cloud_video/prompt_authoring/composition.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The grammar tables, typed models, validators, and
+        renderer are pure in-process values constructed per request and
+        discarded with the request; no writer exists that persists them.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Wire Structured Prompt Contract
+    layer: integration
+    status: planned
+  - number: 5
+    feature: structured-prompt-contract
+    delivers:
+      - Table-driven unit tests per mode for section sets, field order, and
+        alignment timing
+      - "Discriminating validator tests: an out-of-duration cut, an unbalanced
+        delimiter, a dangling label, and an unused definition each fail before
+        the change and pass after"
+      - A check-inventory test proving a passing result enumerates the checks it
+        did not run
+    depends_on:
+      - 4
+    story_ids:
+      - prompt-authoring/story/compose-a-mode-correct-h3-prompt
+      - prompt-authoring/story/reject-a-structurally-invalid-prompt
+      - prompt-authoring/story/resolve-reference-labels-across-sections
+    files:
+      - tests/prompt_authoring/__init__.py
+      - tests/prompt_authoring/test_models.py
+      - tests/prompt_authoring/test_validation.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. Fixtures and rendered comparison text are built
+        inside a per-test temporary directory removed by the test runner; no
+        writer persists beyond the run.
+    paths:
+      - tests/**
+    title: Test Structured Prompt Contract
+    layer: integration
+    status: planned
+  - number: 6
+    feature: pinned-prompt-rendering
+    delivers:
+      - Byte-stable rendering of every mode to wire text with the fixed field
+        names and section order
+      - Default-modifier omission for camera amplitude and speed, and the
+        defined absent-value token for empty soundscape and music sections
+      - Canonical ordering and formatting rules that make two renders of one
+        prompt byte-identical
+    depends_on:
+      - 3
+    story_ids:
+      - prompt-authoring/story/render-a-prompt-deterministically
+    files:
+      - src/tkr_cloud_video/prompting/render.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The grammar tables, typed models, validators, and
+        renderer are pure in-process values constructed per request and
+        discarded with the request; no writer exists that persists them.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Deterministic prompt renderer
+    layer: domain
+    status: planned
+  - number: 7
+    feature: pinned-prompt-rendering
+    delivers:
+      - Rejection of grammar tokens, shot headers, and field names appearing
+        inside caller-supplied dialogue, lyrics, and on-screen text
+      - Verbatim preservation of accepted caller spans including original
+        script, language, and punctuation
+      - Redaction-safe containment errors that name the field and the rule while
+        carrying no caller text
+    depends_on:
+      - 6
+    story_ids:
+      - prompt-authoring/story/contain-untrusted-caller-text
+    files:
+      - src/tkr_cloud_video/prompting/containment.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The grammar tables, typed models, validators, and
+        renderer are pure in-process values constructed per request and
+        discarded with the request; no writer exists that persists them.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Caller-text containment
+    layer: domain
+    status: planned
+  - number: 8
+    feature: pinned-prompt-rendering
+    delivers:
+      - A stable prompt digest computed over the canonical wire text
+      - Binding of the loaded grammar revision and digest to every validated
+        prompt
+      - Contribution of prompt digest, grammar revision, and grammar digest to
+        the existing reproducibility metadata without carrying the prompt body
+    depends_on:
+      - 7
+    story_ids:
+      - prompt-authoring/story/pin-and-record-the-grammar-revision
+    files:
+      - src/tkr_cloud_video/prompting/provenance.py
+    data_lifecycle:
+      kind: bounded
+      detail: Adds three scalar fields to the existing per-attempt result manifest
+        owned by durable-delivery. The manifest is written once per immutable
+        attempt prefix and inherits that capability's retention rules; this
+        slice creates no new store and no additional write path.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Prompt digest and grammar pinning
+    layer: service
+    status: planned
+  - number: 9
+    feature: pinned-prompt-rendering
+    delivers:
+      - The versioned generation request accepting a structured prompt alongside
+        the existing bounded string, with no current bound loosened
+      - Renderer and containment bound into the pinned workflow binder so
+        submitted wire text is derived, never hand-assembled
+      - Composition-root wiring of digest and grammar pinning into the
+        reproducibility metadata path
+    depends_on:
+      - 4
+      - 6
+      - 7
+      - 8
+    story_ids:
+      - prompt-authoring/story/render-a-prompt-deterministically
+      - prompt-authoring/story/pin-and-record-the-grammar-revision
+    files:
+      - src/tkr_cloud_video/prompt_authoring/composition.py
+      - src/tkr_cloud_video/jobs/contracts.py
+      - src/tkr_cloud_video/jobs/workflow_binder.py
+      - schemas/generation-request.schema.json
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The grammar tables, typed models, validators, and
+        renderer are pure in-process values constructed per request and
+        discarded with the request; no writer exists that persists them.
+    paths:
+      - src/tkr_cloud_video/**
+      - schemas/**
+    title: Wire Pinned Prompt Rendering
+    layer: integration
+    status: planned
+  - number: 10
+    feature: pinned-prompt-rendering
+    delivers:
+      - A cross-process determinism test asserting byte-identical wire text and
+        matching digests
+      - Containment tests driving a closing delimiter, a shot header, and a
+        field name through caller dialogue, each rejected with no wire text
+        produced
+      - An end-to-end intake test proving a structured prompt reaches the
+        workflow binder and its digest and grammar revision reach
+        reproducibility metadata
+      - A redaction test asserting no event or result field carries the prompt
+        body or caller dialogue
+    depends_on:
+      - 9
+    story_ids:
+      - prompt-authoring/story/render-a-prompt-deterministically
+      - prompt-authoring/story/contain-untrusted-caller-text
+      - prompt-authoring/story/pin-and-record-the-grammar-revision
+    files:
+      - tests/prompt_authoring/test_render.py
+      - tests/prompt_authoring/test_containment.py
+      - tests/prompt_authoring/test_intake_integration.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. Fixtures and rendered comparison text are built
+        inside a per-test temporary directory removed by the test runner; no
+        writer persists beyond the run.
+    paths:
+      - tests/**
+    title: Test Pinned Prompt Rendering
+    layer: integration
+    status: planned

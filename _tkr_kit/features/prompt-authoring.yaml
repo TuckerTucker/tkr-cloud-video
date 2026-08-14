@@ -1,0 +1,60 @@
+capability: prompt-authoring
+features:
+  - name: structured-prompt-contract
+    status: planned
+    display_name: Structured Prompt Contract
+    user_story: As an authorized application, I want to submit a MiniMax H3 prompt
+      as typed structured fields rather than an opaque string, so that a
+      malformed prompt is rejected inline with field-scoped errors before any
+      GPU work begins.
+    acceptance_criteria:
+      - Each generation mode accepts only the sections that mode defines, in the
+        order it fixes, and rejects unknown or misordered sections.
+      - Shot numbering, cut times, and the keyframe alignment header are
+        validated against the requested clip duration.
+      - Every reference label used in a section resolves to a definition, and
+        every definition is used.
+      - A rejection names the offending field and the rule it broke, and reports
+        which checks the submitted mode did not exercise.
+    scope_in:
+      - Freeze the grammar vocabularies (camera motion, cut phrasing, retention
+        markers, task-type prefixes) as versioned tables with declared defaults.
+      - Define discriminated typed models for base-mode and full-reference
+        prompts with per-mode required sections and fixed field order.
+      - "Validate structure before submission: monotonic shots, in-duration cut
+        times, resolved labels, balanced delimiters, and speaker-identifier
+        continuity."
+    scope_out:
+      - Rendering the models to wire text, owned by pinned-prompt-rendering.
+      - Judging whether the prompt will produce a good video.
+    depends_on: []
+  - name: pinned-prompt-rendering
+    status: planned
+    display_name: Pinned Prompt Rendering
+    user_story: As a platform operator, I want every accepted prompt rendered
+      deterministically, pinned to a grammar revision, and digested, so that a
+      committed result is reproducible and untrusted caller text can never
+      rewrite the prompt structure.
+    acceptance_criteria:
+      - The same structured prompt renders to byte-identical wire text on every
+        run and across processes.
+      - Caller dialogue, lyrics, and on-screen text appear verbatim in the wire
+        text and cannot introduce grammar tokens, shot headers, or field names.
+      - A rendered prompt carries a stable digest and the grammar revision it
+        was validated against into reproducibility metadata.
+      - Job intake accepts a structured prompt through the existing versioned
+        request contract without loosening any current bound.
+    scope_in:
+      - Render structured models to the exact wire text, omitting default
+        modifiers and emitting the defined absent-value tokens.
+      - Contain untrusted caller text so grammar tokens inside dialogue or scene
+        text are rejected or escaped, never passed through as structure.
+      - Compute a stable prompt digest, bind the pinned grammar revision, and
+        contribute both to the existing reproducibility metadata.
+      - Bind the structured prompt into the versioned job request and the pinned
+        workflow binder.
+    scope_out:
+      - Changing the ComfyUI workflow graph or model-set selection.
+      - Storing prompts outside the existing per-attempt result manifest.
+    depends_on:
+      - structured-prompt-contract
