@@ -17,7 +17,30 @@ REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO_ROOT"
 
 ENDPOINT_ID="${1:-176tpna3ogl94t}"
-GRANTED_TERRITORIES="${2:-CA}"
+APPROVAL="${APPROVAL:-release-assets/minimax-h3-t2v/license-approval.json}"
+
+# Territories come from the ratified approval rather than the command line, so
+# the record is what decides where the model may run. An unratified record
+# grants nothing: the run stops instead of falling back to a permissive guess.
+if [ -n "${2:-}" ]; then
+    GRANTED_TERRITORIES="$2"
+else
+    GRANTED_TERRITORIES=$(
+        APPROVAL="$APPROVAL" .venv/bin/python -c '
+import json, os, sys
+
+from tkr_cloud_video.security.release_gate import LicenseApproval
+
+try:
+    record = json.load(open(os.environ["APPROVAL"]))
+    approval = LicenseApproval.model_validate(record)
+except (OSError, ValueError) as error:
+    print(f"no ratified approval to read territories from: {error}"[:200], file=sys.stderr)
+    raise SystemExit(1)
+print(",".join(approval.territories))
+'
+    ) || exit 1
+fi
 
 export TKR_VAULT_PROJECT_TKR_CLOUD_VIDEO_PASSWORD
 if [ -z "${TKR_VAULT_PROJECT_TKR_CLOUD_VIDEO_PASSWORD:-}" ]; then
