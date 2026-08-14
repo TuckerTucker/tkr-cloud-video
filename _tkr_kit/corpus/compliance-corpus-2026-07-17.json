@@ -1,0 +1,338 @@
+{
+ "instruments": [
+  {
+   "instrument": {
+    "id": "pipeda",
+    "jurisdiction": "Canada (federal)",
+    "title": "Personal Information Protection and Electronic Documents Act",
+    "officialCitation": "S.C. 2000, c. 5",
+    "sourceUrl": "https://laws-lois.justice.gc.ca/eng/acts/P-8.6/",
+    "consolidatedAsOf": "2026-05-26",
+    "licenseNote": "Reproduced under the Reproduction of Federal Law Order, SI/97-5; not an official version. Page states: current to 2026-05-26, last amended 2025-03-04.",
+    "language": "en"
+   },
+   "provisions": [
+    {
+     "ref": "s 4(1)(a)",
+     "kind": "section",
+     "ordinal": 1,
+     "heading": "Application — commercial activities",
+     "text": "This Part applies to every organization in respect of personal information that (a) the organization collects, uses or discloses in the course of commercial activities"
+    },
+    {
+     "ref": "sch 1, cl 4.1.3",
+     "kind": "schedule-clause",
+     "ordinal": 2,
+     "heading": "Accountability — information transferred for processing",
+     "text": "An organization is responsible for personal information in its possession or custody, including information that has been transferred to a third party for processing. The organization shall use contractual or other means to provide a comparable level of protection while the information is being processed by a third party."
+    },
+    {
+     "ref": "sch 1, cl 4.5.3",
+     "kind": "schedule-clause",
+     "ordinal": 3,
+     "heading": "Limiting use, disclosure, and retention — destruction",
+     "text": "Personal information that is no longer required to fulfil the identified purposes should be destroyed, erased, or made anonymous. Organizations shall develop guidelines and implement procedures to govern the destruction of personal information."
+    },
+    {
+     "ref": "sch 1, cl 4.7.1",
+     "kind": "schedule-clause",
+     "ordinal": 4,
+     "heading": "Safeguards",
+     "text": "The security safeguards shall protect personal information against loss or theft, as well as unauthorized access, disclosure, copying, use, or modification. Organizations shall protect personal information regardless of the format in which it is held."
+    },
+    {
+     "ref": "s 8(3)",
+     "kind": "subsection",
+     "ordinal": 5,
+     "heading": "Access request — 30-day time limit for response",
+     "text": "(3) An organization shall respond to a request with due diligence and in any case not later than thirty days after receipt of the request.",
+     "parentRef": "s 8"
+    },
+    {
+     "ref": "s 10.1",
+     "kind": "section",
+     "ordinal": 6,
+     "heading": "Breach of security safeguards — report to Commissioner and notification to affected individuals",
+     "text": "10.1 (1) An organization shall report to the Commissioner any breach of security safeguards involving personal information under its control if it is reasonable in the circumstances to believe that the breach creates a real risk of significant harm to an individual. (2) The report shall contain the prescribed information and shall be made in the prescribed form and manner as soon as feasible after the organization determines that the breach has occurred. (3) Unless otherwise prohibited by law, an organization shall notify an individual of any breach of security safeguards involving the individual’s personal information under the organization’s control if it is reasonable in the circumstances to believe that the breach creates a real risk of significant harm to the individual. (4) The notification shall contain sufficient information to allow the individual to understand the significance to them of the breach and to take steps, if any are possible, to reduce the risk of harm that could result from it or to mitigate that harm. It shall also contain any other prescribed information. (5) The notification shall be conspicuous and shall be given directly to the individual in the prescribed form and manner, except in prescribed circumstances, in which case it shall be given indirectly in the prescribed form and manner. (6) The notification shall be given as soon as feasible after the organization determines that the breach has occurred. (7) For the purpose of this section, significant harm includes bodily harm, humiliation, damage to reputation or relationships, loss of employment, business or professional opportunities, financial loss, identity theft, negative effects on the credit record and damage to or loss of property. (8) The factors that are relevant to determining whether a breach of security safeguards creates a real risk of significant harm to the individual include (a) the sensitivity of the personal information involved in the breach; (b) the probability that the personal information has been, is being or will be misused; and (c) any other prescribed factor."
+    },
+    {
+     "ref": "s 10.2",
+     "kind": "section",
+     "ordinal": 7,
+     "heading": "Breach of security safeguards — notification to other organizations",
+     "text": "10.2 (1) An organization that notifies an individual of a breach of security safeguards under subsection 10.1(3) shall notify any other organization, a government institution or a part of a government institution of the breach if the notifying organization believes that the other organization or the government institution or part concerned may be able to reduce the risk of harm that could result from it or mitigate that harm, or if any of the prescribed conditions are satisfied. (2) The notification shall be given as soon as feasible after the organization determines that the breach has occurred. (3) In addition to the circumstances set out in subsection 7(3), for the purpose of clause 4.3 of Schedule 1, and despite the note that accompanies that clause, an organization may disclose personal information without the knowledge or consent of the individual if (a) the disclosure is made to the other organization, the government institution or the part of a government institution that was notified of the breach under subsection (1); and (b) the disclosure is made solely for the purposes of reducing the risk of harm to the individual that could result from the breach or mitigating that harm. (4) Despite clause 4.5 of Schedule 1, an organization may disclose personal information for purposes other than those for which it was collected in the circumstance set out in subsection (3)."
+    },
+    {
+     "ref": "s 10.3",
+     "kind": "section",
+     "ordinal": 8,
+     "heading": "Breach of security safeguards — record-keeping",
+     "text": "10.3 (1) An organization shall, in accordance with any prescribed requirements, keep and maintain a record of every breach of security safeguards involving personal information under its control. (2) An organization shall, on request, provide the Commissioner with access to, or a copy of, a record."
+    },
+    {
+     "ref": "sch 1, cl 4.9",
+     "kind": "schedule-clause",
+     "ordinal": 9,
+     "heading": "Individual Access (Principle 9)",
+     "text": "Upon request, an individual shall be informed of the existence, use, and disclosure of his or her personal information and shall be given access to that information. An individual shall be able to challenge the accuracy and completeness of the information and have it amended as appropriate."
+    }
+   ],
+   "topicLinks": [
+    {
+     "topicSlug": "applicability",
+     "provisionRef": "s 4(1)(a)"
+    },
+    {
+     "topicSlug": "processor-accountability",
+     "provisionRef": "sch 1, cl 4.1.3"
+    },
+    {
+     "topicSlug": "retention-destruction",
+     "provisionRef": "sch 1, cl 4.5.3"
+    },
+    {
+     "topicSlug": "safeguards",
+     "provisionRef": "sch 1, cl 4.7.1"
+    },
+    {
+     "topicSlug": "breach-report",
+     "provisionRef": "s 10.1"
+    },
+    {
+     "topicSlug": "breach-notify-individuals",
+     "provisionRef": "s 10.1"
+    },
+    {
+     "topicSlug": "breach-notify-organizations",
+     "provisionRef": "s 10.2"
+    },
+    {
+     "topicSlug": "breach-record-keeping",
+     "provisionRef": "s 10.3"
+    },
+    {
+     "topicSlug": "individual-access",
+     "provisionRef": "sch 1, cl 4.9"
+    },
+    {
+     "topicSlug": "access-response-clock",
+     "provisionRef": "s 8(3)"
+    }
+   ],
+   "definitions": [
+    {
+     "term": "significant harm",
+     "provisionRef": "s 10.1"
+    }
+   ]
+  },
+  {
+   "instrument": {
+    "id": "qc-p39-1",
+    "jurisdiction": "Québec",
+    "title": "Act respecting the protection of personal information in the private sector",
+    "officialCitation": "CQLR c. P-39.1",
+    "sourceUrl": "https://www.legisquebec.gouv.qc.ca/en/document/cs/P-39.1",
+    "consolidatedAsOf": "2026-04-01",
+    "licenseNote": "© Éditeur officiel du Québec; unofficial copy for internal compliance reference. Page states: updated to 1 April 2026 (à jour au 1 avril 2026). Text reflects Law 25 (2021, c. 25) amendments.",
+    "language": "en"
+   },
+   "provisions": [
+    {
+     "ref": "s 3.3",
+     "kind": "section",
+     "ordinal": 1,
+     "heading": "Privacy impact assessment — information system projects",
+     "text": "Any person carrying on an enterprise must conduct a privacy impact assessment for any project to acquire, develop or overhaul an information system or electronic service delivery system involving the collection, use, communication, keeping or destruction of personal information. For the purposes of such an assessment, the person must consult the person in charge of the protection of personal information within the enterprise from the outset of the project. The person must also ensure that the project allows computerized personal information collected from the person concerned to be communicated to him in a structured, commonly used technological format. The conduct of a privacy impact assessment under this Act must be proportionate to the sensitivity of the information concerned, the purposes for which it is to be used, the quantity and distribution of the information and the medium on which it is stored.",
+     "effectiveNote": "2021, c. 25, s. 103"
+    },
+    {
+     "ref": "s 17",
+     "kind": "section",
+     "ordinal": 2,
+     "heading": "Communication of personal information outside Québec",
+     "text": "Before communicating personal information outside Québec, a person carrying on an enterprise must conduct a privacy impact assessment. The person must, in particular, take into account (1) the sensitivity of the information; (2) the purposes for which it is to be used; (3) the protection measures, including those that are contractual, that would apply to it; and (4) the legal framework applicable in the State in which the information would be communicated, including the personal information protection principles applicable in that State. The information may be communicated if the assessment establishes that it would receive adequate protection, in particular in light of generally recognized principles regarding the protection of personal information. The communication of the information must be the subject of a written agreement that takes into account, in particular, the results of the assessment and, if applicable, the terms agreed on to mitigate the risks identified in the assessment. The same applies where the person carrying on an enterprise entrusts a person or body outside Québec with the task of collecting, using, communicating or keeping such information on his behalf. This section does not apply to a communication of information under subparagraph 7 of the first paragraph of section 18.",
+     "effectiveNote": "1993, c. 17, s. 17; 2006, c. 22, s. 116; as amended by Law 25"
+    },
+    {
+     "ref": "s 23",
+     "kind": "section",
+     "ordinal": 3,
+     "heading": "Destruction or anonymization when purposes achieved",
+     "text": "Where the purposes for which personal information was collected or used are achieved, the person carrying on an enterprise must destroy the information, or anonymize it to use it for serious and legitimate purposes, subject to any preservation period provided for by an Act. For the purposes of this Act, information concerning a natural person is anonymized if it is, at all times, reasonably foreseeable in the circumstances that it irreversibly no longer allows the person to be identified directly or indirectly. Information anonymized under this Act must be anonymized according to generally accepted best practices and according to the criteria and terms determined by regulation.",
+     "effectiveNote": "1993, c. 17, s. 23; 2021, c. 25, s. 119"
+    },
+    {
+     "ref": "s 3.5",
+     "kind": "section",
+     "ordinal": 4,
+     "heading": "Confidentiality incident — measures; notification to the Commission and affected persons",
+     "text": "Any person carrying on an enterprise who has cause to believe that a confidentiality incident involving personal information the person holds has occurred must take reasonable measures to reduce the risk of injury and to prevent new incidents of the same nature. If the incident presents a risk of serious injury, the person carrying on an enterprise must promptly notify the Commission d’accès à l’information established by section 103 of the Act respecting Access to documents held by public bodies and the Protection of personal information ( chapter A-2.1 ). He must also notify any person whose personal information is concerned by the incident, failing which the Commission may order him to do so. He may also notify any person or body that could reduce the risk, by communicating to the person or body only the personal information necessary for that purpose without the consent of the person concerned. In the latter case, the person in charge of the protection of personal information must record the communication of the information. Despite the second paragraph, a person whose personal information is concerned by the incident need not be notified so long as doing so could hamper an investigation conducted by a person or body responsible by law for the prevention, detection or repression of crime or statutory offences. A government regulation may determine the content and terms of the notices provided for in this section."
+    },
+    {
+     "ref": "s 3.6",
+     "kind": "section",
+     "ordinal": 5,
+     "heading": "Definition — confidentiality incident",
+     "text": "For the purposes of this Act, “ confidentiality incident ” means ( 1 ) access not authorized by law to personal information; ( 2 ) use not authorized by law of personal information; ( 3 ) communication not authorized by law of personal information; or ( 4 ) loss of personal information or any other breach of the protection of such information."
+    },
+    {
+     "ref": "s 3.7",
+     "kind": "section",
+     "ordinal": 6,
+     "heading": "Confidentiality incident — assessing the risk of injury",
+     "text": "In assessing the risk of injury to a person whose personal information is concerned by a confidentiality incident, a person carrying on an enterprise must consider, in particular, the sensitivity of the information concerned, the anticipated consequences of its use and the likelihood that such information will be used for injurious purposes. The person must also consult the person in charge of the protection of personal information within the enterprise."
+    },
+    {
+     "ref": "s 3.8",
+     "kind": "section",
+     "ordinal": 7,
+     "heading": "Register of confidentiality incidents",
+     "text": "A person carrying on an enterprise must keep a register of confidentiality incidents. A government regulation may determine the content of the register. A copy of the register must be sent to the Commission at its request."
+    },
+    {
+     "ref": "s 27",
+     "kind": "section",
+     "ordinal": 8,
+     "heading": "Right of access to personal information",
+     "text": "Every person carrying on an enterprise who holds personal information on another person must, at the request of the person concerned, confirm the existence of the personal information, communicate it to the person and allow him to obtain a copy of it. At the applicant’s request, computerized personal information must be communicated in the form of a written and intelligible transcript. Unless doing so raises serious practical difficulties, computerized personal information collected from the applicant, and not created or inferred using personal information concerning him, must, at his request, be communicated to him in a structured, commonly used technological format. The information must also be communicated, at the applicant’s request, to any person or body authorized by law to collect such information. If the person concerned is handicapped, reasonable accommodation must be provided on request to enable the person to exercise the right of access provided for in this division."
+    },
+    {
+     "ref": "s 28",
+     "kind": "section",
+     "ordinal": 9,
+     "heading": "Right to rectification",
+     "text": "In addition to the rights provided under the first paragraph of article 40 of the Civil Code, any person may, if personal information concerning him is inaccurate, incomplete or equivocal, or if collecting, communicating or keeping it are not authorized by law, require that the information be rectified."
+    },
+    {
+     "ref": "s 30",
+     "kind": "section",
+     "ordinal": 10,
+     "heading": "Access or rectification request — form and identity verification",
+     "text": "No request for access or rectification may be considered unless it is made in writing by a person who proves that he is the person concerned or the representative, heir or successor of that person, the liquidator of the succession, a beneficiary of life insurance or of a death benefit, the person having parental authority even if the minor child is deceased, or the spouse or a close relative of the deceased person in accordance with section 40.1. Such a request must be addressed to the person in charge of the protection of personal information. If the request is not sufficiently precise or if a person requires it, the person in charge must assist in identifying the information sought. This section does not limit the communication of personal information to the person concerned or the rectification of that information as a result of a service to be provided to the person."
+    },
+    {
+     "ref": "s 32",
+     "kind": "section",
+     "ordinal": 11,
+     "heading": "Access or rectification — 30-day response; deemed refusal",
+     "text": "The person in charge of the protection of personal information must reply in writing to the request for access or rectification, promptly and not later than 30 days after the date the request is received. Failure to respond within 30 days of the receipt of a request is deemed to be a refusal to grant the request."
+    }
+   ],
+   "topicLinks": [
+    {
+     "topicSlug": "pia",
+     "provisionRef": "s 3.3"
+    },
+    {
+     "topicSlug": "cross-border-transfer",
+     "provisionRef": "s 17"
+    },
+    {
+     "topicSlug": "retention-destruction",
+     "provisionRef": "s 23"
+    },
+    {
+     "topicSlug": "anonymization",
+     "provisionRef": "s 23"
+    },
+    {
+     "topicSlug": "confidentiality-incident",
+     "provisionRef": "s 3.5"
+    },
+    {
+     "topicSlug": "confidentiality-incident-definition",
+     "provisionRef": "s 3.6"
+    },
+    {
+     "topicSlug": "confidentiality-incident-risk",
+     "provisionRef": "s 3.7"
+    },
+    {
+     "topicSlug": "incident-register",
+     "provisionRef": "s 3.8"
+    },
+    {
+     "topicSlug": "individual-access",
+     "provisionRef": "s 27"
+    },
+    {
+     "topicSlug": "rectification",
+     "provisionRef": "s 28"
+    },
+    {
+     "topicSlug": "access-request",
+     "provisionRef": "s 30"
+    },
+    {
+     "topicSlug": "access-response-clock",
+     "provisionRef": "s 32"
+    }
+   ],
+   "definitions": [
+    {
+     "term": "confidentiality incident",
+     "termFr": "incident de confidentialité",
+     "provisionRef": "s 3.6"
+    }
+   ]
+  },
+  {
+   "instrument": {
+    "id": "qc-c11",
+    "jurisdiction": "Québec",
+    "title": "Charter of the French Language",
+    "officialCitation": "CQLR c. C-11",
+    "sourceUrl": "https://www.legisquebec.gouv.qc.ca/en/document/cs/C-11",
+    "consolidatedAsOf": "2026-04-01",
+    "licenseNote": "© Éditeur officiel du Québec; unofficial copy for internal compliance reference. Page states: updated to 1 April 2026 (à jour au 1 avril 2026). Text reflects Bill 96 (2022, c. 14) amendments.",
+    "language": "en"
+   },
+   "provisions": [
+    {
+     "ref": "s 41",
+     "kind": "section",
+     "ordinal": 1,
+     "heading": "Employer obligations — French in written communications to staff",
+     "text": "Every employer shall respect the worker's right to carry on his activities in French; therefore, the employer is required, in particular, (1) to see that any offer of employment, transfer or promotion the employer publishes is in French; (2) to see that any individual employment contract the employer enters into in writing is drawn up in French; (3) to use French in written communications, even those after termination of the employment relationship, with all or part of the staff, a worker in particular or an association of workers representing all or part of the staff; and (4) to see that the documents below that the employer makes available are drawn up in French and, if also available in another language, see that the French version is available on terms that are at least as favourable: (a) employment application forms; (b) documents relating to conditions of employment; and (c) training documents produced for the staff. Despite subparagraph 2 of the first paragraph, the parties to an individual employment contract that is a contract of adhesion may be bound only by its version in a language other than French if, after examining its French version, such is their express wish. In the other cases, an individual employment contract may be drawn up exclusively in a language other than French at the express wish of the parties. Despite subparagraph 3 of the first paragraph, the employer may communicate in writing with a worker exclusively in a language other than French if the latter has so requested.",
+     "effectiveNote": "1977, c. 5, s. 41; 2022, c. 14, s. 29"
+    }
+   ],
+   "topicLinks": [
+    {
+     "topicSlug": "language-of-work",
+     "provisionRef": "s 41"
+    }
+   ]
+  },
+  {
+   "instrument": {
+    "id": "pipeda-breach-regs",
+    "jurisdiction": "Canada (federal)",
+    "title": "Breach of Security Safeguards Regulations",
+    "officialCitation": "SOR/2018-64",
+    "sourceUrl": "https://laws-lois.justice.gc.ca/eng/regulations/SOR-2018-64/",
+    "consolidatedAsOf": "2026-05-26",
+    "licenseNote": "Reproduced under the Reproduction of Federal Law Order, SI/97-5; not an official version. Page states: current to 2026-05-26.",
+    "language": "en"
+   },
+   "provisions": [
+    {
+     "ref": "s 6(1)",
+     "kind": "subsection",
+     "ordinal": 1,
+     "parentRef": "s 6",
+     "heading": "Breach records — 24-month retention",
+     "text": "6 (1) For the purposes of subsection 10.3(1) of the Act, an organization must maintain a record of every breach of security safeguards for 24 months after the day on which the organization determines that the breach has occurred."
+    }
+   ],
+   "definitions": [],
+   "topicLinks": [
+    {
+     "topicSlug": "breach-record-retention",
+     "provisionRef": "s 6(1)"
+    }
+   ]
+  }
+ ]
+}
