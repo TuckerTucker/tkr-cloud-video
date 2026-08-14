@@ -204,3 +204,55 @@ stories:
       - security-foundation/slice/8
       - security-foundation/slice/9
       - security-foundation/slice/10
+  - name: record-model-license-territory-approval
+    status: todo
+    display_name: Record the model license territory approval
+    feature: boundary-validation-and-provenance
+    actor: Release reviewer
+    intent: bind a named reviewer's territory decision to the exact model set so
+      placement is enforced by the release path rather than by deployment
+      configuration
+    preconditions:
+      - The model set manifest and its digest are published.
+      - The applicable license terms and their excluded territories are known.
+      - A named reviewer is authorized to accept or reject each territory.
+    trigger_action: A deployment is proposed in a territory the current record
+      does not cover
+    steps:
+      - actor: Release reviewer
+        action: records the territories the license permits and the reviewer accepts
+        system_response: the record binds reviewer, model set, manifest digest,
+          deployment use, territories, and an expiry
+      - actor: Release pipeline
+        action: evaluates the proposed placement against the record
+        system_response: a placement outside the recorded territories is refused
+          before any provider call
+      - actor: Platform operator
+        action: proposes a provider region
+        system_response: a region absent from the territory registry is refused
+          and named, never inferred from its identifier
+    acceptance_criteria:
+      - given: a manifest whose license_approval_id names no stored record
+        when: a release is evaluated
+        then: promotion is refused for missing approval, and the identifier alone
+          never stands in for the decision it references
+      - given: a recorded approval covering only the reviewed territories
+        when: a deployment proposes a region outside them
+        then: the placement is refused before any provider call, naming the
+          region and the territory that excludes it
+      - given: a provider region absent from the territory registry
+        when: placement is evaluated
+        then: the region is reported as unregistered and refused, because a
+          region identifier carries a city or state as often as a country
+      - given: an approval whose model set, manifest digest, deployment use, or
+          validity window no longer matches the candidate
+        when: the release gate runs
+        then: the approval is treated as stale and renewal is required
+      - given: an approved deployment
+        when: its committed evidence is later audited
+        then: the run resolves to the reviewer, territories, and manifest digest
+          that were in force when it ran
+    slice_ids:
+      - security-foundation/slice/8
+      - security-foundation/slice/9
+      - security-foundation/slice/10
