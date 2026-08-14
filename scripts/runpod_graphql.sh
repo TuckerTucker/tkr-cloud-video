@@ -57,6 +57,7 @@ export RUNPOD_API_KEY ENDPOINT_ID GRANTED_TERRITORIES
 report_placement() {
     OBSERVED_LOCATIONS="$1" .venv/bin/python -c '
 import os
+import sys
 
 from tkr_cloud_video.security.territories import (
     license_permitted_territories,
@@ -69,6 +70,14 @@ review = review_placement(observed, granted)
 
 print("granted territories:", ",".join(granted))
 print("permitted regions  :", ",".join(review.permitted) or "none")
+# An endpoint with no placement at all has nothing outside the grant in it, so
+# review_placement approves it. That is the wrong answer for the question this
+# script is asked: no placement means the provider may run the model anywhere,
+# which is the ADR-001 failure mode rather than a clean bill of health. Callers
+# that know what was sent compare against it; a bare run of this script does not
+# know, so unrestricted placement is refused here on its own terms.
+if not observed:
+    print("NO PLACEMENT STORED: the endpoint may run in any region", file=sys.stderr)
 if review.excluded:
     print("OUTSIDE THE GRANT  :", ",".join(review.excluded))
 if review.unmapped:
@@ -77,7 +86,7 @@ print(
     "license permits (needs approval before use):",
     ",".join(license_permitted_territories()),
 )
-raise SystemExit(0 if review.approved else 1)
+raise SystemExit(0 if review.approved and observed else 1)
 '
 }
 
@@ -85,7 +94,12 @@ LOCATIONS_OUT=$(mktemp "${TMPDIR:-/tmp}/tkr-locations.XXXXXX")
 trap 'rm -f "$LOCATIONS_OUT"' EXIT HUP INT TERM
 export LOCATIONS_OUT
 
-python3 - <<'PY'
+# The provider call runs under the project interpreter rather than the system
+# python3 because the python.org framework build resolves its trust store to a
+# cert.pem that its installer never created, so every HTTPS call from it dies
+# in certificate verification. The venv interpreter uses the macOS store and
+# this script already depends on the venv for the territory review below.
+.venv/bin/python - <<'PY'
 import json, os, urllib.error, urllib.request
 
 # The key rides in the query string and a browser-shaped agent is sent because
