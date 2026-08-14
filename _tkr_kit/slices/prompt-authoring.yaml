@@ -27,7 +27,10 @@ slices:
       - schemas/**
     title: Pinned prompt grammar tables
     layer: data
-    status: in_progress
+    status: done
+    evidence:
+      kind: commit
+      ref: a7d1719b0a17046c24637d4b2e818486365c1f9f
   - number: 2
     feature: structured-prompt-contract
     delivers:
@@ -53,7 +56,10 @@ slices:
       - src/tkr_cloud_video/**
     title: Structured prompt models
     layer: domain
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: c87962eaea6a5e26da3dc102c36edb50440cf1ab
   - number: 3
     feature: structured-prompt-contract
     delivers:
@@ -82,7 +88,10 @@ slices:
       - src/tkr_cloud_video/**
     title: Structural prompt validator
     layer: domain
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: efaf6925b179df115c516739cf7bc21253ef0596
   - number: 4
     feature: structured-prompt-contract
     delivers:
@@ -110,7 +119,10 @@ slices:
       - src/tkr_cloud_video/**
     title: Wire Structured Prompt Contract
     layer: integration
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: 3a6c3cd38fcad210b14ab9e70368eb522b1f3ac8
   - number: 5
     feature: structured-prompt-contract
     delivers:
@@ -140,7 +152,10 @@ slices:
       - tests/**
     title: Test Structured Prompt Contract
     layer: integration
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: f393fa36b38cb33e2eecf1fbddd2eec25298ebe5
   - number: 6
     feature: pinned-prompt-rendering
     delivers:
@@ -165,7 +180,10 @@ slices:
       - src/tkr_cloud_video/**
     title: Deterministic prompt renderer
     layer: domain
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: 0b334dc220de94cd363291fc8171425e7ed8320d
   - number: 7
     feature: pinned-prompt-rendering
     delivers:
@@ -190,7 +208,10 @@ slices:
       - src/tkr_cloud_video/**
     title: Caller-text containment
     layer: domain
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: ea3193105993fb224efdb60f7a09ae6e7cb54eae
   - number: 8
     feature: pinned-prompt-rendering
     delivers:
@@ -215,7 +236,10 @@ slices:
       - src/tkr_cloud_video/**
     title: Prompt digest and grammar pinning
     layer: service
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: 1cc4a03fbef1a250d2fada25bbbe756726c60a42
   - number: 9
     feature: pinned-prompt-rendering
     delivers:
@@ -248,7 +272,10 @@ slices:
       - schemas/**
     title: Wire Pinned Prompt Rendering
     layer: integration
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858
   - number: 10
     feature: pinned-prompt-rendering
     delivers:
@@ -281,4 +308,7 @@ slices:
       - tests/**
     title: Test Pinned Prompt Rendering
     layer: integration
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858

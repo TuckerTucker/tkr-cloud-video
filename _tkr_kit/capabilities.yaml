@@ -195,7 +195,9 @@ capabilities:
       - Idempotency, duplicate-job behavior, retry classification, workspace
         cleanup, and reproducibility metadata generation.
     scope_out:
-      - End-user prompt-authoring UI.
+      - An end-user prompt editor UI. Structured prompt authoring is owned by
+        the prompt-authoring capability and is reachable headlessly, not through
+        a screen.
       - Training-time model selection or arbitrary user-supplied workflow
         execution.
       - Durable object upload and signed delivery, owned by durable-delivery.
@@ -408,7 +410,7 @@ capabilities:
       - scripts/**
   - name: prompt-authoring
     layer: domain
-    status: planned
+    status: done
     display_name: Prompt Authoring
     description: "Owns the MiniMax H3 prompt grammar as a typed, versioned contract:
       structured composition, pre-flight structural validation, deterministic
@@ -474,3 +476,6 @@ capabilities:
         6da473b48daf91e5aebfb56451f8a0b116348df5 — skills/h3-prompt-writing/
         (SKILL.md, references/base-en.txt, references/ref-en.txt); the grammar
         of record for this capability, pinned by upstream commit.
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858

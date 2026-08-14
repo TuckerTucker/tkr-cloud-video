@@ -1,7 +1,7 @@
 capability: prompt-authoring
 stories:
   - name: compose-a-mode-correct-h3-prompt
-    status: planned
+    status: done
     display_name: Compose a mode-correct H3 prompt
     feature: structured-prompt-contract
     actor: Authorized application
@@ -37,8 +37,11 @@ stories:
           two decimals
     slice_ids:
       - prompt-authoring/slice/2
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858
   - name: reject-a-structurally-invalid-prompt
-    status: planned
+    status: done
     display_name: Reject a structurally invalid prompt
     feature: structured-prompt-contract
     actor: Prompt service
@@ -77,8 +80,11 @@ stories:
           submitted mode
     slice_ids:
       - prompt-authoring/slice/3
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858
   - name: resolve-reference-labels-across-sections
-    status: planned
+    status: done
     display_name: Resolve reference labels across sections
     feature: structured-prompt-contract
     actor: Authorized application
@@ -113,8 +119,11 @@ stories:
           carries a relationship marker from the closed set
     slice_ids:
       - prompt-authoring/slice/3
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858
   - name: render-a-prompt-deterministically
-    status: planned
+    status: done
     display_name: Render a prompt deterministically
     feature: pinned-prompt-rendering
     actor: Job service
@@ -150,8 +159,11 @@ stories:
           section
     slice_ids:
       - prompt-authoring/slice/6
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858
   - name: contain-untrusted-caller-text
-    status: planned
+    status: done
     display_name: Contain untrusted caller text
     feature: pinned-prompt-rendering
     actor: Prompt renderer
@@ -188,8 +200,11 @@ stories:
         then: the event names the field and the rule and carries no caller text
     slice_ids:
       - prompt-authoring/slice/7
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858
   - name: pin-and-record-the-grammar-revision
-    status: planned
+    status: done
     display_name: Pin and record the grammar revision
     feature: pinned-prompt-rendering
     actor: Platform operator
@@ -222,3 +237,6 @@ stories:
         then: no prompt body, dialogue, or caller filename is present
     slice_ids:
       - prompt-authoring/slice/8
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858

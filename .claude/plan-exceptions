@@ -23,3 +23,10 @@ orphan-continuation:worker-runtime/slice/1::security-foundation/slice/10
 orphan-continuation:worker-runtime::artifact-foundation
 orphan-continuation:worker-runtime::operations-and-scale
 orphan-continuation:worker-runtime::security-foundation
+
+# Reviewed 2026-08-14. job-execution's scope_out names prompt-authoring to declare
+# which capability owns structured prompt authoring, and to state that the excluded
+# thing is a screen rather than the capability. That is a boundary declaration, not
+# lineage: prompt-authoring depends on job-execution, so a `continues` edge in this
+# direction would invert the real graph.
+orphan-continuation:job-execution::prompt-authoring
