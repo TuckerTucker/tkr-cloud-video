@@ -33,6 +33,8 @@ from tkr_cloud_video.adapters.process import (
     SubprocessCommandExecutor,
 )
 from tkr_cloud_video.adapters.rclone import (
+    TRANSFER_STREAMS,
+    TRANSFER_TIMEOUT_SECONDS,
     ArtifactRcloneStore,
     RcloneB2Client,
     RcloneBlobDownloader,
@@ -64,6 +66,7 @@ class RecordingExecutor(CommandExecutor):
     calls: list[tuple[tuple[str, ...], dict[str, str], bytes | None]] = field(
         default_factory=list
     )
+    timeouts: list[float] = field(default_factory=list)
 
     async def run(
         self,
@@ -76,6 +79,7 @@ class RecordingExecutor(CommandExecutor):
         """Record exact process boundaries and return the next result."""
         assert timeout_seconds > 0
         self.calls.append((arguments, environment, stdin))
+        self.timeouts.append(timeout_seconds)
         response = self.responses.pop(0)
         if isinstance(response, AppError):
             raise response
@@ -328,6 +332,62 @@ async def test_rclone_read_download_probe_and_store_views(tmp_path: Path) -> Non
     await RcloneBlobDownloader(client).download("blobs/object", destination)
     assert "--config" in executor.calls[-1][0]
     assert await ResultRcloneStore(client).get("missing") is None
+
+
+@pytest.mark.asyncio
+async def test_rclone_download_bounds_an_intercontinental_pull(tmp_path: Path) -> None:
+    """Hydration deadlines a 21 GB transfer, not the executor's API-call default."""
+    executor = RecordingExecutor([CommandResult(b"", b"")])
+    client = RcloneB2Client(
+        executor,
+        RcloneCredentials("key", "application"),
+        RcloneLocation("tkr", "bucket", "models/"),
+    )
+
+    await RcloneBlobDownloader(client).download("blobs/object", tmp_path / "partial")
+
+    arguments = executor.calls[0][0]
+    assert executor.timeouts[0] == TRANSFER_TIMEOUT_SECONDS
+    assert executor.timeouts[0] > 300
+    streams = arguments.index("--multi-thread-streams")
+    assert arguments[streams + 1] == str(TRANSFER_STREAMS)
+    assert "--retries" in arguments
+    assert "--low-level-retries" in arguments
+    assert "--retries-sleep" in arguments
+
+
+@pytest.mark.asyncio
+async def test_rclone_transfer_bounds_are_injectable_and_validated(
+    tmp_path: Path,
+) -> None:
+    """Placement benchmarks can sweep the bounds; unusable ones fail closed."""
+    executor = RecordingExecutor([CommandResult(b"", b"")])
+    client = RcloneB2Client(
+        executor,
+        RcloneCredentials("key", "application"),
+        RcloneLocation("tkr", "bucket", "models/"),
+        transfer_timeout_seconds=900,
+        transfer_streams=16,
+    )
+
+    await client.download("blobs/object", tmp_path / "partial")
+
+    assert executor.timeouts[0] == 900
+    assert "16" in executor.calls[0][0]
+    with pytest.raises(ValueError, match="timeout must be positive"):
+        RcloneB2Client(
+            RecordingExecutor([]),
+            RcloneCredentials("key", "application"),
+            RcloneLocation("tkr", "bucket", "models/"),
+            transfer_timeout_seconds=0,
+        )
+    with pytest.raises(ValueError, match="streams must be positive"):
+        RcloneB2Client(
+            RecordingExecutor([]),
+            RcloneCredentials("key", "application"),
+            RcloneLocation("tkr", "bucket", "models/"),
+            transfer_streams=0,
+        )
 
 
 @pytest.mark.asyncio

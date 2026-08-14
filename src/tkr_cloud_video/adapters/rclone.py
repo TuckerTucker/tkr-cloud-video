@@ -19,6 +19,18 @@ from tkr_cloud_video.security.validation import ObjectKey, Sha256Digest
 
 RCLONE_EXECUTABLE = "/opt/tkr-cloud-video/bin/rclone"
 
+# Model blobs reach 21 GB and ADR-002 placed workers across six territories, so
+# a bulk transfer's deadline has to bound an intercontinental pull rather than
+# an API call. The executor's 300-second default deadlines the diffusion model
+# below any throughput a long-haul link plausibly sustains.
+TRANSFER_TIMEOUT_SECONDS = 14_400
+
+# rclone splits a transfer above --multi-thread-cutoff across this many ranged
+# readers. Its default of 4 suits a same-region link; a worker in AU, IN or JP
+# reading from ca-east-006 needs more concurrency because round-trip time, not
+# bandwidth, bounds what one stream achieves.
+TRANSFER_STREAMS = 8
+
 
 @dataclass(frozen=True, slots=True)
 class RcloneCredentials:
@@ -90,14 +102,22 @@ class RcloneB2Client:
         location: RcloneLocation,
         *,
         executable: str = RCLONE_EXECUTABLE,
+        transfer_timeout_seconds: float = TRANSFER_TIMEOUT_SECONDS,
+        transfer_streams: int = TRANSFER_STREAMS,
     ) -> None:
         """Initialize from explicit command, secret, and scope dependencies."""
         if not executable.startswith("/"):
             raise ValueError("rclone executable must be absolute")
+        if transfer_timeout_seconds <= 0:
+            raise ValueError("transfer timeout must be positive")
+        if transfer_streams < 1:
+            raise ValueError("transfer streams must be positive")
         self._executor = executor
         self._credentials = credentials
         self._location = location
         self._executable = executable
+        self._transfer_timeout_seconds = transfer_timeout_seconds
+        self._transfer_streams = transfer_streams
 
     def _environment(self) -> dict[str, str]:
         remote = self._normalized_remote_name().upper()
@@ -131,6 +151,18 @@ class RcloneB2Client:
     def _arguments(self, *arguments: str) -> tuple[str, ...]:
         """Add the fixed empty config path so ambient files are never read."""
         return (self._executable, *arguments, "--config", "/dev/null")
+
+    @staticmethod
+    def _retry_arguments() -> tuple[str, ...]:
+        """Return the retry bounds every multi-gigabyte transfer shares."""
+        return (
+            "--retries",
+            "10",
+            "--low-level-retries",
+            "20",
+            "--retries-sleep",
+            "5s",
+        )
 
     @staticmethod
     def _metadata_mapper_command(sha256: str) -> str:
@@ -271,15 +303,10 @@ class RcloneB2Client:
                 "--metadata",
                 "--metadata-mapper",
                 self._metadata_mapper_command(digest),
-                "--retries",
-                "10",
-                "--low-level-retries",
-                "20",
-                "--retries-sleep",
-                "5s",
+                *self._retry_arguments(),
             ),
             environment,
-            timeout_seconds=14_400,
+            timeout_seconds=self._transfer_timeout_seconds,
         )
         evidence = await self.head(key)
         if (
@@ -317,8 +344,12 @@ class RcloneB2Client:
                 self._target(key),
                 str(destination),
                 "--immutable",
+                "--multi-thread-streams",
+                str(self._transfer_streams),
+                *self._retry_arguments(),
             ),
             self._environment(),
+            timeout_seconds=self._transfer_timeout_seconds,
         )
 
 
