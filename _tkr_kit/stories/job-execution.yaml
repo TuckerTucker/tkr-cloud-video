@@ -206,7 +206,7 @@ stories:
       - job-execution/slice/9
       - job-execution/slice/10
   - name: keep-request-defaults-inside-the-trained-envelope
-    status: todo
+    status: done
     display_name: Keep request defaults inside the trained envelope
     feature: validated-job-intake
     actor: Platform operator

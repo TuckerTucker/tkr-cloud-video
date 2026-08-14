@@ -11,6 +11,8 @@ from typing import Any
 import pytest
 
 from tests.job_execution.test_validated_job_intake import (
+    H3,
+    MODEL_SET_ID,
     ImageInspector,
     MemoryInputSource,
 )
@@ -41,9 +43,12 @@ def request() -> TextToVideoRequest:
     return TextToVideoRequest(
         mode="text-to-video",
         workflow_id="h3-t2v-1",
-        model_set_id="h3-models-1",
+        model_set_id=MODEL_SET_ID,
         prompt="Synthetic prompt",
         seed=42,
+        width=H3.default_width,
+        height=H3.default_height,
+        frames=H3.default_frames,
     )
 
 

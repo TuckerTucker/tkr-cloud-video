@@ -11,10 +11,6 @@ import pytest
 from pydantic import ValidationError
 
 from tkr_cloud_video.jobs.contracts import (
-    TRAINED_LONG_EDGE,
-    TRAINED_MAX_FRAMES,
-    TRAINED_MIN_FRAMES,
-    TRAINED_SHORT_EDGE,
     InputReference,
     parse_generation_request,
 )
@@ -25,18 +21,27 @@ from tkr_cloud_video.jobs.input_staging import (
     InputStager,
     InputStagingError,
 )
+from tkr_cloud_video.jobs.trained_envelope import TRAINED_RANGES
 from tkr_cloud_video.jobs.workspace import WorkspaceManager
 from tkr_cloud_video.security.validation import ObjectKey
+
+MODEL_SET_ID = "minimax-h3-t2v-int8-20260809"
+H3 = TRAINED_RANGES[MODEL_SET_ID]
 
 
 def request_payload(
     mode: str = "text-to-video", **overrides: object
 ) -> dict[str, object]:
-    """Build a minimally valid generation payload."""
+    """Build a minimally valid generation payload.
+
+    The model set is the real registered one rather than a synthetic identifier:
+    dimensions are now resolved from the named model set's trained envelope, so
+    a payload naming a model set nobody published is refused by design.
+    """
     payload: dict[str, object] = {
         "mode": mode,
         "workflow_id": "h3-t2v-1",
-        "model_set_id": "h3-models-1",
+        "model_set_id": MODEL_SET_ID,
         "prompt": "A safe synthetic prompt",
         "seed": 42,
     }
@@ -90,8 +95,8 @@ def test_request_defaults_match_the_node_declaration() -> None:
     """
     request = parse_generation_request(request_payload())
 
-    assert (request.width, request.height) == (TRAINED_LONG_EDGE, TRAINED_SHORT_EDGE)
-    assert request.frames == TRAINED_MIN_FRAMES
+    assert (request.width, request.height) == (H3.long_edge, H3.short_edge)
+    assert request.frames == H3.min_frames
     assert (request.frames - 5) % 17 == 0
     assert request.fps == 24
 
@@ -129,13 +134,13 @@ def test_envelope_reports_each_axis_independently() -> None:
 def test_the_trained_ceiling_is_a_hard_bound_not_a_report() -> None:
     """Above the trained range there is no cheap use to protect, so it is refused."""
     assert (
-        parse_generation_request(request_payload(frames=TRAINED_MAX_FRAMES))
+        parse_generation_request(request_payload(frames=H3.max_frames))
         .trained_envelope()
         .inside
     )
 
     with pytest.raises(ValidationError):
-        parse_generation_request(request_payload(frames=TRAINED_MAX_FRAMES + 17))
+        parse_generation_request(request_payload(frames=H3.max_frames + 17))
 
 
 @pytest.mark.asyncio

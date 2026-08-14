@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from tests.job_execution.test_validated_job_intake import H3, MODEL_SET_ID
 from tkr_cloud_video.jobs.contracts import (
     MAX_PROMPT_CHARS,
     TextToVideoRequest,
@@ -60,7 +61,7 @@ def request_payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "mode": "text-to-video",
         "workflow_id": "h3-t2v-1",
-        "model_set_id": "h3-models-1",
+        "model_set_id": MODEL_SET_ID,
         "structured_prompt": json.loads(json.dumps(STRUCTURED)),
         "seed": 42,
     }
@@ -257,6 +258,9 @@ def test_direct_model_construction_also_enforces_one_prompt_form() -> None:
         TextToVideoRequest(
             mode="text-to-video",
             workflow_id="h3-t2v-1",
-            model_set_id="h3-models-1",
+            model_set_id=MODEL_SET_ID,
             seed=1,
+            width=H3.default_width,
+            height=H3.default_height,
+            frames=H3.default_frames,
         )
