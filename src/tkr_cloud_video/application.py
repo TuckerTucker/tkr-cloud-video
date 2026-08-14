@@ -24,6 +24,10 @@ from tkr_cloud_video.jobs.contracts import (
 )
 from tkr_cloud_video.jobs.identity import JobIdentity, JobState
 from tkr_cloud_video.jobs.workflow_binder import ParameterBinding
+from tkr_cloud_video.prompt_authoring.composition import (
+    PromptServices,
+    resolve_request_prompt,
+)
 from tkr_cloud_video.security.validation import Sha256Digest
 from tkr_cloud_video.worker import WorkerStartupSteps
 
@@ -37,6 +41,7 @@ class CloudVideoApplication:
         startup: WorkerStartupSteps,
         result_store: ResultStore,
         clock: Clock,
+        prompts: PromptServices,
         *,
         principal_id: str,
         workspace_root: Path,
@@ -47,6 +52,7 @@ class CloudVideoApplication:
         if generation_timeout_seconds <= 0:
             raise ValueError("generation timeout must be positive")
         self._jobs = jobs
+        self._prompts = prompts
         self._startup = startup
         self._store = result_store
         self._uploader = VerifiedUploader(result_store)
@@ -88,6 +94,12 @@ class CloudVideoApplication:
             runtime_values["output_prefix"] = (
                 f"{identity.job_id}/{identity.attempt_id}/video"
             )
+            # The wire text is derived here rather than taken from the request.
+            # A structured prompt has no `prompt` field to bind, so without this
+            # the binder refuses it as unrendered - which is exactly what the
+            # first live structured submission hit.
+            resolved = resolve_request_prompt(request, self._prompts)
+            runtime_values["prompt"] = resolved.text
             bindings = tuple(
                 ParameterBinding(source, node_id, input_name)
                 for source, node_id, input_name in workflow.bindings
@@ -126,6 +138,14 @@ class CloudVideoApplication:
                     "model_set_id": request.model_set_id,
                     "workflow_digest": str(workflow.sha256),
                     "trained_envelope": request.trained_envelope().as_metadata(),
+                    # Present only for a structured prompt: it identifies the
+                    # grammar the wire text was derived under, which a freeform
+                    # prompt has no claim to.
+                    **(
+                        {"prompt_provenance": resolved.provenance.as_metadata()}
+                        if resolved.provenance is not None
+                        else {}
+                    ),
                     "media": asdict(result.media),
                 },
             )
