@@ -825,3 +825,32 @@ async def test_comfy_failure_reports_node_and_exception_class() -> None:
     assert status.state is PromptState.FAILED
     assert status.error_node == "92"
     assert status.error_type == "FileNotFoundError"
+    assert status.error_detail == "/outputs/job-x/attempt-y missing"
+
+
+@pytest.mark.asyncio
+async def test_comfy_failure_detail_is_bounded() -> None:
+    """A provider message is truncated rather than carried whole."""
+    response = {
+        "prompt-1": {
+            "status": {
+                "status_str": "error",
+                "messages": [
+                    [
+                        "execution_error",
+                        {
+                            "node_id": "92",
+                            "exception_type": "TypeError",
+                            "exception_message": "x" * 5000,
+                        },
+                    ]
+                ],
+            }
+        }
+    }
+    client = ComfyApiClient(Transport({("GET", "/history/prompt-1"): response}))
+
+    status = await client.status("prompt-1")
+
+    assert status.error_detail is not None
+    assert len(status.error_detail) == 200

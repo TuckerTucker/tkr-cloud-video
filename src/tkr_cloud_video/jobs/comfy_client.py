@@ -26,6 +26,9 @@ class PromptStatus:
     # The provider's exception class name. Bounded by construction, unlike
     # its message and traceback, which are left where they are.
     error_type: str | None = None
+    # The provider's message, truncated. It is free text, so it is bounded
+    # here and never carries the traceback that accompanies it.
+    error_detail: str | None = None
 
 
 class ComfyExecutionClient(Protocol):

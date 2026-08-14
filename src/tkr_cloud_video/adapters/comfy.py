@@ -15,6 +15,8 @@ from urllib.request import Request, urlopen
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.jobs.comfy_client import PromptState, PromptStatus
 
+_MAXIMUM_ERROR_DETAIL = 200
+
 
 class JsonTransport(Protocol):
     """Bounded asynchronous JSON transport port."""
@@ -148,9 +150,12 @@ class ComfyApiClient:
             raise _invalid_response()
         status_text = status.get("status_str")
         if status_text in {"error", "failed"}:
-            node, exception = _execution_error(status.get("messages"))
+            node, exception, detail = _execution_error(status.get("messages"))
             return PromptStatus(
-                PromptState.FAILED, error_node=node, error_type=exception
+                PromptState.FAILED,
+                error_node=node,
+                error_type=exception,
+                error_detail=detail,
             )
         if status_text in {"cancelled", "canceled"}:
             return PromptStatus(PromptState.CANCELLED)
@@ -243,22 +248,25 @@ def _output_paths(value: object) -> tuple[str, ...]:
     return tuple(paths)
 
 
-def _execution_error(messages: object) -> tuple[str | None, str | None]:
-    """Return the failing node and its exception class from provider messages.
+def _execution_error(
+    messages: object,
+) -> tuple[str | None, str | None, str | None]:
+    """Return the failing node, exception class and message from the provider.
 
-    The provider also reports an exception message and a traceback. Both are
-    free text that can carry a path or a payload, so only the class name is
-    taken: it names the kind of failure without quoting anything.
+    The traceback is left where it is. The message is free text, so it is
+    truncated rather than carried whole: one exception class can stand for
+    several causes, and the message is what separates them.
 
     Args:
         messages: The provider's status message list.
 
     Returns:
-        The node identifier and exception class name, each None when absent.
+        The node identifier, exception class name and truncated message, each
+        None when absent.
 
     """
     if not isinstance(messages, list):
-        return None, None
+        return None, None, None
     for item in messages:
         if not isinstance(item, list) or len(item) != 2 or item[0] != "execution_error":
             continue
@@ -267,11 +275,13 @@ def _execution_error(messages: object) -> tuple[str | None, str | None]:
             continue
         node = detail.get("node_id")
         exception = detail.get("exception_type")
+        message = detail.get("exception_message")
         return (
             str(node) if isinstance(node, str) else None,
             str(exception) if isinstance(exception, str) else None,
+            str(message)[:_MAXIMUM_ERROR_DETAIL] if isinstance(message, str) else None,
         )
-    return None, None
+    return None, None, None
 
 
 def _invalid_response() -> AppError:

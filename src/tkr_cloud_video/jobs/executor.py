@@ -51,6 +51,7 @@ class PromptExecutor:
                     context={
                         "resource_id": status.error_node or "unknown-node",
                         "error_type": status.error_type or "unknown-exception",
+                        "error_detail": status.error_detail or "",
                     },
                 )
             if status.state is PromptState.CANCELLED:
