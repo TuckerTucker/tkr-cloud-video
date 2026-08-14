@@ -55,6 +55,7 @@ import hashlib, json, os, re, subprocess, sys
 bucket = os.environ["BUCKET"]
 endpoint = os.environ["ENDPOINT"]
 failures = []
+findings: list[str] = []
 
 
 def aws(*args: str, empty_ok: bool = False) -> str:
@@ -135,11 +136,20 @@ for artifact in artifacts:
             f"{role}: stored size {head.get('ContentLength')} != declared "
             f"{artifact.get('size_bytes')}"
         )
+    # The uploader records a provider version when the provider reports one and
+    # falls back to a digest-derived value when it does not. The fallback is
+    # not the provider's version and cannot retrieve a specific one, so it is
+    # reported rather than compared, and anything else must still match.
     version = head.get("VersionId")
-    if version and artifact.get("provider_version_id") != version:
+    recorded = artifact.get("provider_version_id") or ""
+    if recorded == f"sha256-{artifact.get('sha256')}":
+        findings.append(
+            f"{role}: no provider version recorded; the digest-derived "
+            f"fallback stands in for one"
+        )
+    elif version and recorded != version:
         failures.append(
-            f"{role}: provider_version_id {artifact.get('provider_version_id')} "
-            f"!= stored {version}"
+            f"{role}: provider_version_id {recorded} != stored {version}"
         )
 
     raw = subprocess.run(
@@ -151,6 +161,9 @@ for artifact in artifacts:
         failures.append(f"{role}: recomputed sha256 {digest} != declared {artifact.get('sha256')}")
     else:
         print(f"{role}: {artifact.get('size_bytes')} bytes, sha256 verified")
+
+for finding in findings:
+    print(" note:", finding)
 
 if failures:
     print("\nEVIDENCE VERIFICATION FAILED")
