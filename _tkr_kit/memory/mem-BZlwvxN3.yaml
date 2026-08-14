@@ -1,0 +1,28 @@
+canonicalId: mem-BZlwvxN3
+sourceId: find-zDyJwmBI
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: high
+  title: "Existence in an object store is asked of head, never of a read: B2
+    answers an absent object with empty content and success, so a read-based
+    check reported a committed result that was never written"
+  status: resolved
+  file: src/tkr_cloud_video/application.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 179b1d16e6a30039c7751b71d6aa15cad2874ad41ac1ee92eb37fba2476e8794
+  snapshotAt: 2026-08-14T04:53:25.278Z
+rationale: "Generalizes past this repo and past this provider. Where absence is
+  not an error, a read cannot answer existence: B2 returns empty content with a
+  success status for an object whose virtual parent exists, and empty bytes are
+  not None. The same shape appeared twice in one deployment — intake
+  short-circuiting to a reference it never wrote, and head rejecting an absent
+  object as malformed metadata — so the rule is that existence is asked of the
+  operation that reports absence as absence. Both sites were invisible to a
+  green suite because the store was faked in tests and the path had never run
+  against the real one."
+who: TuckerTucker
+when: 2026-08-14T04:53:25.278Z

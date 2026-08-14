@@ -1,0 +1,15 @@
+canonicalId: mem-ju5xfDLH
+sourceId: find-xfjI7pbm
+kind: finding
+disposition: deferred
+body: null
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 04f2a3cb03c7f4d85f9d34fe2da6f26d4c2dc3e29ddda7a7f654b52d84a7ad81
+  snapshotAt: 2026-08-14T04:53:46.927Z
+rationale: Real and unresolved, but a repo-specific parameter question rather
+  than transferable knowledge. The schema caps the canvas without floors, so
+  defaults below the trained envelope validate cleanly. Deferred until a run at
+  the default settings shows whether output quality actually suffers.
+who: TuckerTucker
+when: 2026-08-14T04:53:46.927Z
