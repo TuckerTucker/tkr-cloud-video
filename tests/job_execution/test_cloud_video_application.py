@@ -225,3 +225,108 @@ async def test_absent_result_reading_as_empty_still_generates(tmp_path: Path) ->
     assert client.submissions == 1
     assert reference is not None
     assert reference in store.objects
+
+
+@pytest.mark.asyncio
+async def test_generation_record_states_the_trained_envelope(tmp_path: Path) -> None:
+    """A sub-envelope request is committed, and the record says it was one.
+
+    The defect this closes was silence, not the request itself: defaults below the
+    canvas and frame range the model was trained on validated cleanly and left no
+    trace, so a disappointing render had nothing to point at.
+    """
+    workspace_root, output_root = tmp_path / "workspaces", tmp_path / "outputs"
+    workspace_root.mkdir()
+    output_root.mkdir()
+    jobs = compose_job_execution(
+        JobDependencies(
+            FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC), monotonic_value=0),
+            NoWait(),
+            GeneratingComfyClient(output_root),
+            MemoryInputSource(b"unused"),
+            ImageInspector(),
+            Inspector(),
+            workspace_root,
+            1024,
+        )
+    )
+    store = MemoryResultStore()
+    application = CloudVideoApplication(
+        jobs,
+        Startup(approved_workflow()),  # type: ignore[arg-type]
+        store,
+        FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC)),
+        principal_id="runpod-endpoint",
+        workspace_root=workspace_root,
+        output_root=output_root,
+        generation_timeout_seconds=60,
+    )
+
+    await application.submit(
+        TextToVideoRequest(
+            mode="text-to-video",
+            workflow_id="workflow-1",
+            model_set_id="models-1",
+            prompt="Synthetic prompt",
+            seed=42,
+            width=864,
+            height=480,
+            frames=73,
+        )
+    )
+
+    key = next(k for k in store.objects if k.endswith("generation.bin"))
+    record = json.loads(store.objects[key])
+
+    assert record["trained_envelope"] == {
+        "trained_envelope_inside": False,
+        "trained_envelope_short_edge_below": True,
+        "trained_envelope_frames_below": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_default_request_records_an_inside_envelope(tmp_path: Path) -> None:
+    workspace_root, output_root = tmp_path / "workspaces", tmp_path / "outputs"
+    workspace_root.mkdir()
+    output_root.mkdir()
+    jobs = compose_job_execution(
+        JobDependencies(
+            FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC), monotonic_value=0),
+            NoWait(),
+            GeneratingComfyClient(output_root),
+            MemoryInputSource(b"unused"),
+            ImageInspector(),
+            Inspector(),
+            workspace_root,
+            1024,
+        )
+    )
+    store = MemoryResultStore()
+    application = CloudVideoApplication(
+        jobs,
+        Startup(approved_workflow()),  # type: ignore[arg-type]
+        store,
+        FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC)),
+        principal_id="runpod-endpoint",
+        workspace_root=workspace_root,
+        output_root=output_root,
+        generation_timeout_seconds=60,
+    )
+
+    await application.submit(
+        TextToVideoRequest(
+            mode="text-to-video",
+            workflow_id="workflow-1",
+            model_set_id="models-1",
+            prompt="Synthetic prompt",
+            seed=42,
+        )
+    )
+
+    key = next(k for k in store.objects if k.endswith("generation.bin"))
+    record = json.loads(store.objects[key])
+
+    assert record["trained_envelope"]["trained_envelope_inside"] is True
+    assert record["request"]["width"] == 1344
+    assert record["request"]["frames"] == 124

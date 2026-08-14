@@ -125,6 +125,7 @@ class CloudVideoApplication:
                     "request_hash": request_hash,
                     "model_set_id": request.model_set_id,
                     "workflow_digest": str(workflow.sha256),
+                    "trained_envelope": request.trained_envelope().as_metadata(),
                     "media": asdict(result.media),
                 },
             )

@@ -10,7 +10,14 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from tkr_cloud_video.jobs.contracts import InputReference, parse_generation_request
+from tkr_cloud_video.jobs.contracts import (
+    TRAINED_LONG_EDGE,
+    TRAINED_MAX_FRAMES,
+    TRAINED_MIN_FRAMES,
+    TRAINED_SHORT_EDGE,
+    InputReference,
+    parse_generation_request,
+)
 from tkr_cloud_video.jobs.identity import IdempotencyConflictError, IdempotencyRegistry
 from tkr_cloud_video.jobs.input_staging import (
     InputMediaInspector,
@@ -22,7 +29,9 @@ from tkr_cloud_video.jobs.workspace import WorkspaceManager
 from tkr_cloud_video.security.validation import ObjectKey
 
 
-def request_payload(mode: str = "text-to-video") -> dict[str, object]:
+def request_payload(
+    mode: str = "text-to-video", **overrides: object
+) -> dict[str, object]:
     """Build a minimally valid generation payload."""
     payload: dict[str, object] = {
         "mode": mode,
@@ -35,6 +44,7 @@ def request_payload(mode: str = "text-to-video") -> dict[str, object]:
         payload["image"] = {"object_key": "inputs/principal/image.png"}
     if mode == "reference-to-video":
         payload["references"] = [{"object_key": "inputs/principal/reference.png"}]
+    payload.update(overrides)
     return payload
 
 
@@ -71,13 +81,61 @@ def test_request_rejects_unknown_or_out_of_range_fields(
         parse_generation_request(payload)
 
 
-def test_request_defaults_match_minimax_h3_native_grid() -> None:
-    """The zero-decision request defaults are executable by MiniMax H3."""
+def test_request_defaults_match_the_node_declaration() -> None:
+    """The zero-decision defaults are the ones the pinned node declares.
+
+    Executable is not the same as trained. The previous assertion checked only
+    the temporal grid, so defaults of 864x480x73 - a canvas below the trained
+    short edge and a frame count below the trained floor - satisfied it.
+    """
     request = parse_generation_request(request_payload())
 
-    assert (request.width, request.height) == (864, 480)
+    assert (request.width, request.height) == (TRAINED_LONG_EDGE, TRAINED_SHORT_EDGE)
+    assert request.frames == TRAINED_MIN_FRAMES
     assert (request.frames - 5) % 17 == 0
     assert request.fps == 24
+
+
+def test_request_defaults_sit_inside_the_trained_envelope() -> None:
+    envelope = parse_generation_request(request_payload()).trained_envelope()
+
+    assert envelope.inside
+    assert envelope.as_metadata()["trained_envelope_inside"] is True
+
+
+def test_a_sub_envelope_request_is_permitted_but_reported() -> None:
+    """A cheap smoke test stays legal; it just stops being silent."""
+    request = parse_generation_request(
+        request_payload(width=864, height=480, frames=73)
+    )
+
+    envelope = request.trained_envelope()
+
+    assert not envelope.inside
+    assert envelope.short_edge_below_trained
+    assert envelope.frames_below_trained
+
+
+def test_envelope_reports_each_axis_independently() -> None:
+    below = parse_generation_request(request_payload(frames=73)).trained_envelope()
+    narrow = parse_generation_request(
+        request_payload(width=864, height=480)
+    ).trained_envelope()
+
+    assert below.frames_below_trained and not below.short_edge_below_trained
+    assert narrow.short_edge_below_trained and not narrow.frames_below_trained
+
+
+def test_the_trained_ceiling_is_a_hard_bound_not_a_report() -> None:
+    """Above the trained range there is no cheap use to protect, so it is refused."""
+    assert (
+        parse_generation_request(request_payload(frames=TRAINED_MAX_FRAMES))
+        .trained_envelope()
+        .inside
+    )
+
+    with pytest.raises(ValidationError):
+        parse_generation_request(request_payload(frames=TRAINED_MAX_FRAMES + 17))
 
 
 @pytest.mark.asyncio

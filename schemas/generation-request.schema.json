@@ -53,21 +53,21 @@
           "minimum": 256,
           "maximum": 1344,
           "multipleOf": 32,
-          "default": 864
+          "default": 1344
         },
         "height": {
           "type": "integer",
           "minimum": 256,
           "maximum": 1344,
           "multipleOf": 32,
-          "default": 480
+          "default": 768
         },
         "frames": {
           "type": "integer",
           "minimum": 5,
           "maximum": 362,
-          "default": 73,
-          "description": "MiniMax H3 requires a 17k+5 frame count."
+          "default": 124,
+          "description": "MiniMax H3 requires a 17k+5 frame count. The node's trained range is ~124-362; values outside it are permitted but reported as outside the trained envelope."
         },
         "fps": {
           "const": 24,
