@@ -1,0 +1,31 @@
+{
+  "input": {
+    "schema_version": "1",
+    "mode": "text-to-video",
+    "workflow_id": "minimax-h3-t2v",
+    "model_set_id": "minimax-h3-t2v-int8-20260809",
+    "seed": 7,
+    "width": 1344,
+    "height": 768,
+    "frames": 73,
+    "fps": 24,
+    "structured_prompt": {
+      "mode": "T2VA",
+      "duration_seconds": 3.04,
+      "shots": [
+        {
+          "number": 1,
+          "style": "live-action",
+          "description": "A wide shot frames a snow-covered pine forest at dawn. Low mist drifts between the trees and soft golden light reaches the upper branches.",
+          "camera": {
+            "motion": "Push In",
+            "amplitude": "with small amplitude",
+            "speed": "at slow speed"
+          }
+        }
+      ],
+      "overall_soundscape": "Wind moves steadily through the pine branches. Snow settles from a bough with a soft collapse, and a distant raven calls twice.",
+      "non_diegetic_music": "A sparse sustained string pad at slow tempo, joined by a single low piano note, fading gently at the end."
+    }
+  }
+}
