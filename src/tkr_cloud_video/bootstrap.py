@@ -26,6 +26,7 @@ BOUNDARY_DIRECTORIES: Final[tuple[str, ...]] = (
     "docs/briefs",
     "docs/models",
     "docs/patterns",
+    "docs/prompting",
     "docs/published",
     "docs/runbooks",
     "src/tkr_cloud_video",
