@@ -65,7 +65,11 @@ class CloudVideoApplication:
         commit_key = f"outputs/{identity.job_id}/{identity.attempt_id}/result.json"
         lock = self._locks.setdefault(request_hash, asyncio.Lock())
         async with lock:
-            if await self._store.get(commit_key) is not None:
+            # Existence is asked of `head`, which reports an absent object as
+            # absent. A read cannot: B2 has no materialized directories, so an
+            # absent object whose virtual parent exists reads as empty content
+            # with a success status, and empty content is not None.
+            if await self._store.head(commit_key) is not None:
                 return identity.job_id, commit_key
             return await self._execute(request, identity, request_hash, commit_key)
 
@@ -121,6 +125,7 @@ class CloudVideoApplication:
                     "request_hash": request_hash,
                     "model_set_id": request.model_set_id,
                     "workflow_digest": str(workflow.sha256),
+                    "trained_envelope": request.trained_envelope().as_metadata(),
                     "media": asdict(result.media),
                 },
             )

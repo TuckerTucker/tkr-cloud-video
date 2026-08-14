@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -28,6 +29,11 @@ class HandlerResponse:
     result_reference: str | None = None
     error_code: str | None = None
     retryable: bool = False
+    # The error's allowlisted context, which names what failed: the workflow
+    # node, the field, the operation. Without it a caller sees only the code
+    # and has to read worker output to learn which node stopped the run, which
+    # a caller holding nothing but the response cannot do.
+    error_context: Mapping[str, str | int | float | bool | None] | None = None
 
 
 class RunPodHandler:
@@ -52,7 +58,10 @@ class RunPodHandler:
             job_id, reference = await self._application.submit(request)
         except AppError as error:
             return HandlerResponse(
-                False, error_code=error.code, retryable=error.retryable
+                False,
+                error_code=error.code,
+                retryable=error.retryable,
+                error_context=dict(error.context) or None,
             )
         return HandlerResponse(True, job_id, reference)
 

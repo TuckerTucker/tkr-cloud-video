@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tkr.example/schemas/h3-prompt.schema.json",
+  "title": "tkr-cloud-video structured MiniMax H3 prompt",
+  "description": "A typed H3 prompt. Caller-supplied text lives only in dialogue.text and on_screen_text; every other string is service-authored and may carry grammar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mode", "duration_seconds", "shots", "overall_soundscape", "non_diegetic_music"],
+  "properties": {
+    "schema_version": { "const": "1", "default": "1" },
+    "grammar_revision": { "type": "string", "minLength": 1 },
+    "mode": { "enum": ["T2VA", "I2VA", "FL2VA", "L2VA", "Ref2VA"] },
+    "duration_seconds": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
+    "shots": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/shot" } },
+    "overall_soundscape": { "$ref": "#/$defs/section" },
+    "non_diegetic_music": { "$ref": "#/$defs/section" },
+    "subject_definitions": { "type": "array", "items": { "$ref": "#/$defs/definition" } },
+    "summary": { "$ref": "#/$defs/summary" },
+    "retention_analysis": { "type": "array", "items": { "$ref": "#/$defs/retention" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "Ref2VA" } }, "required": ["mode"] },
+      "then": { "required": ["subject_definitions", "summary", "retention_analysis"] },
+      "else": {
+        "properties": {
+          "subject_definitions": false,
+          "summary": false,
+          "retention_analysis": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "section": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1200,
+      "description": "Service-authored prose, or the literal N/A when the section is absent."
+    },
+    "label": {
+      "type": "string",
+      "pattern": "^<(Subject|Picture|Video|Audio) [1-9][0-9]?>$"
+    },
+    "shot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "description"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "cut_at_seconds": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "Absent on the opening shot; strictly increasing and inside duration_seconds thereafter."
+        },
+        "cut_phrase": { "type": "string" },
+        "style": {
+          "type": "string",
+          "description": "Declared on the opening shot only; establishes the whole video's style."
+        },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "camera": { "$ref": "#/$defs/camera" },
+        "dialogue": { "type": "array", "items": { "$ref": "#/$defs/dialogue" } },
+        "on_screen_text": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": "Caller-supplied. Rendered verbatim in double quotes, never translated."
+        },
+        "labels": { "type": "array", "items": { "$ref": "#/$defs/label" } }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["motion"],
+      "properties": {
+        "motion": { "type": "string" },
+        "amplitude": { "type": ["string", "null"], "description": "Omitted when medium." },
+        "speed": { "type": ["string", "null"], "description": "Omitted when normal." }
+      }
+    },
+    "dialogue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["speaker_id", "language", "text"],
+      "properties": {
+        "speaker_id": { "type": "string", "pattern": "^S[1-9][0-9]?(,S[1-9][0-9]?)*$" },
+        "identity": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Service-authored voice and delivery description, rendered outside the dialogue delimiters."
+        },
+        "language": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Caller-supplied. Rendered verbatim between the dialogue delimiters; never translated or rewritten."
+        },
+        "voiceover": { "type": "boolean", "default": false },
+        "continues_across_cut": { "type": "boolean", "default": false },
+        "truncated_by_end": { "type": "boolean", "default": false }
+      }
+    },
+    "definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "definition"],
+      "properties": {
+        "label": { "$ref": "#/$defs/label" },
+        "definition": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "speaker_id": { "type": "string", "pattern": "^S[1-9][0-9]?$" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_types", "text"],
+      "properties": {
+        "task_types": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "text": { "type": "string", "minLength": 1, "maxLength": 1200 }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "marker", "detail"],
+      "properties": {
+        "label": { "$ref": "#/$defs/label" },
+        "marker": { "type": "string" },
+        "scope": { "type": "string", "maxLength": 200 },
+        "detail": { "type": "string", "minLength": 1, "maxLength": 600 }
+      }
+    }
+  }
+}

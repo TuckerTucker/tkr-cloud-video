@@ -15,6 +15,7 @@ capabilities:
       - job-execution
       - durable-delivery
       - operations-and-scale
+      - prompt-authoring
     scope_in:
       - Backblaze bucket and single-prefix application-key topology with
         distinct read, input-read, output-write, and delivery-read capabilities.
@@ -183,6 +184,7 @@ capabilities:
     provides_to:
       - durable-delivery
       - operations-and-scale
+      - prompt-authoring
     scope_in:
       - Versioned request schema for text-to-video, image-to-video, and
         reference-to-video jobs with strict job-id and path validation.
@@ -193,7 +195,9 @@ capabilities:
       - Idempotency, duplicate-job behavior, retry classification, workspace
         cleanup, and reproducibility metadata generation.
     scope_out:
-      - End-user prompt-authoring UI.
+      - An end-user prompt editor UI. Structured prompt authoring is owned by
+        the prompt-authoring capability and is reachable headlessly, not through
+        a screen.
       - Training-time model selection or arbitrary user-supplied workflow
         execution.
       - Durable object upload and signed delivery, owned by durable-delivery.
@@ -339,8 +343,8 @@ capabilities:
     deferred_reason: Implementation is intentionally withheld until
       engineering-foundation/slice/5 is done and this capability's declared
       prerequisites are satisfied.
-    resume_condition: Transition this capability to planned, then its entry slice from blocked
-      to planned, only with reviewed prerequisite completion and
+    resume_condition: Transition this capability to planned, then its entry slice
+      from blocked to planned, only with reviewed prerequisite completion and
       boundary-readiness evidence.
   - name: engineering-foundation
     layer: infra
@@ -358,6 +362,7 @@ capabilities:
       - job-execution
       - durable-delivery
       - operations-and-scale
+      - prompt-authoring
     scope_in:
       - Python 3.11+ src-layout packaging with committed pyproject metadata, uv
         lockfile, typed package marker, documented developer commands, and
@@ -403,3 +408,74 @@ capabilities:
       - tests/engineering_foundation/**
       - .github/workflows/**
       - scripts/**
+  - name: prompt-authoring
+    layer: domain
+    status: done
+    display_name: Prompt Authoring
+    description: "Owns the MiniMax H3 prompt grammar as a typed, versioned contract:
+      structured composition, pre-flight structural validation, deterministic
+      rendering to the exact wire text, and prompt-form provenance, so a
+      malformed prompt is rejected before GPU spend and a committed result
+      records the grammar revision it was generated under."
+    depends_on:
+      - engineering-foundation
+      - security-foundation
+      - job-execution
+    optional_depends_on: []
+    provides_to: []
+    scope_in:
+      - Typed models for the H3 base-mode prompt
+        (integrated_multimodal_description, overall_soundscape,
+        non_diegetic_music) and the full-reference prompt (subject_definitions,
+        summary, retention_analysis, detailed_description, overall_soundscape,
+        non_diegetic_music) with the field order each mode fixes.
+      - Mode-specific keyframe alignment headers for T2VA, I2VA, FL2VA, and
+        L2VA, with two-decimal timing bound to the requested clip duration.
+      - Controlled vocabularies with declared defaults for camera motion type,
+        amplitude, and speed, cut phrasing, retention relationship markers, and
+        task-type prefixes, so an omitted modifier is omitted rather than
+        invented.
+      - "Structural validation before submission: monotonic shot numbering, cut
+        times inside the requested duration, resolved reference labels, balanced
+        dialogue and transition delimiters, and speaker-identifier continuity
+        across shots."
+      - Deterministic rendering to the exact wire text, a stable prompt digest,
+        and a pinned grammar revision carried into reproducibility metadata.
+      - Containment of untrusted caller text so dialogue, lyrics, and on-screen
+        text are preserved verbatim yet cannot inject grammar tokens, shot
+        headers, or field names into the rendered prompt.
+    scope_out:
+      - An end-user prompt editor, gallery, or any interactive authoring
+        surface; composition is reachable headlessly in a single call.
+      - "Creative quality judgement: scoring, rewriting for aesthetics, or
+        recommending content."
+      - Prompt grammars for video models other than MiniMax H3; portability is
+        preserved through the mode discriminator and vocabulary tables, not
+        through a second grammar.
+      - Model-side prompt adherence. This capability validates form and never
+        predicts render fidelity.
+    acceptance_criteria:
+      - A structurally invalid prompt is rejected with field-scoped typed errors
+        before any input transfer or GPU allocation.
+      - Rendering the same structured prompt twice produces byte-identical wire
+        text and the same prompt digest.
+      - Caller-supplied dialogue, lyrics, and on-screen text survive rendering
+        byte for byte and cannot introduce grammar tokens, shot headers, or
+        field names.
+      - Every accepted prompt records the pinned grammar revision it validated
+        against, and a revision change is detectable without re-reading the
+        prompt.
+      - The validator reports which checks it did not run for the submitted
+        mode, so a passing result never implies coverage it did not have.
+      - No validation error, log event, or result field carries the composed
+        prompt body or caller dialogue.
+    paths:
+      - docs/prompting/**
+    source_documents:
+      - https://github.com/MiniMax-AI/MiniMax-H3 @
+        6da473b48daf91e5aebfb56451f8a0b116348df5 — skills/h3-prompt-writing/
+        (SKILL.md, references/base-en.txt, references/ref-en.txt); the grammar
+        of record for this capability, pinned by upstream commit.
+    evidence:
+      kind: commit
+      ref: 3abb15cb91703e2f4068971d141f42cff5d9e858

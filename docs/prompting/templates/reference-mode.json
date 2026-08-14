@@ -1,0 +1,70 @@
+{
+  "$comment": "FILL-IN TEMPLATE — full-reference mode (Ref2VA). Replace every <ANGLE_BRACKET> slot and delete this $comment plus any *_help key. Section KEY ORDER below is fixed and checked; do not reorder. Slot rules: docs/prompting/h3-prompt-template.md.",
+
+  "mode": "Ref2VA",
+  "duration_seconds": "<NUMBER, 0 < d <= 60, e.g. 6.0>",
+
+  "subject_definitions": [
+    {
+      "$comment": "The ONLY section that may introduce a label. Every label defined here must be used somewhere, and every label used anywhere must be defined here.",
+      "label": "<<Subject 1> | <Picture 1> | <Video 1> | <Audio 1>>",
+      "definition": "<SERVICE PROSE. What the label denotes, its reference role, and the features to follow. No leading 'is' — the renderer supplies it.>",
+      "speaker_id": null
+    },
+    {
+      "label": "<Audio 1>",
+      "definition": "<e.g. the voice-timbre reference containing a spoken English vocal layer>",
+      "speaker_id": "<S1 — only when this audio maps to a target speaker. Reuses the global id; never assigns a new one.>"
+    }
+  ],
+
+  "summary": {
+    "task_types": [
+      "<keyframe completion | reference generation | video editing | video continuation | audio reuse | audio reference>",
+      "<second type only if a second relationship genuinely applies — no repeats>"
+    ],
+    "text": "<ONE SHORT PARAGRAPH. The target video and its reference relationships, using labels already defined above. Introduce no new labels.>"
+  },
+
+  "retention_analysis": [
+    {
+      "$comment": "One entry per label. Visual labels draw from the visual marker table; <Audio N> draws from the audio table. No speaker ids anywhere in this section.",
+      "label": "<Subject 1>",
+      "marker": "<fully_preserved | partially_preserved | attribute_transfer | weak_reference>",
+      "scope": "<appears in [Shot 1], [Shot 3] — or omit>",
+      "detail": "<SERVICE PROSE. What is retained, changed, transferred, or only loosely echoed.>"
+    },
+    {
+      "label": "<Audio 1>",
+      "marker": "<fully_copy | partially_copy | reference | weak_reference>",
+      "detail": "<e.g. its timbre guides delivery without copying the original signal>"
+    }
+  ],
+
+  "shots": [
+    {
+      "$comment": "Supplied as `shots` in every mode; renders as detailed_description here. Aim 350-500 words across the shots for a generation task.",
+      "number": 1,
+      "style": "<Cinematic | live-action | 2D-animated | 3D CG | claymation | watercolor | vintage film>",
+      "description": "<SERVICE PROSE. Describe each label at its first clear appearance: referenced features, position in frame, current action. May contain labels.>",
+      "labels": ["<Subject 1>", "<Audio 1>"],
+      "camera": {
+        "motion": "<Push In | Arc Shot | Static Shot | ...>",
+        "amplitude": null,
+        "speed": null
+      },
+      "dialogue": [
+        {
+          "speaker_id": "<S1>",
+          "identity": "<SERVICE PROSE. Voice and delivery, rendered outside the delimiters.>",
+          "language": "<English>",
+          "text": "<CALLER TEXT. Verbatim. Use [unclear] for unintelligible source spans rather than guessing.>",
+          "voiceover": false
+        }
+      ]
+    }
+  ],
+
+  "overall_soundscape": "<1-4 SENTENCES. Ambience and physical sound across the whole video. Cite a copied ambience label here if one applies. N/A only for requested silence.>",
+  "non_diegetic_music": "<1-3 SENTENCES. Audience-only score, or the reused audio label serving as it. Instrumentation, tempo, dynamics. N/A when there is none.>"
+}

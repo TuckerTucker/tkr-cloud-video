@@ -1,0 +1,14 @@
+{
+  "input": {
+    "schema_version": "1",
+    "mode": "text-to-video",
+    "workflow_id": "minimax-h3-t2v",
+    "model_set_id": "minimax-h3-t2v-int8-20260809",
+    "seed": 7,
+    "width": 864,
+    "height": 480,
+    "frames": 73,
+    "fps": 24,
+    "prompt": "A calm wide shot of a snow-covered pine forest at dawn, low mist drifting between the trees, soft golden light. Slow push-in. Wind moves through the branches and a distant raven calls."
+  }
+}

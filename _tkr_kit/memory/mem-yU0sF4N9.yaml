@@ -1,0 +1,27 @@
+canonicalId: mem-yU0sF4N9
+sourceId: find-WatD1LyX
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: medium
+  title: "A pinned workflow asset carried a frontend export shape: the executor
+    matches a dynamic input against option keys, so a nested object resolved to
+    no option and the node ran without a required argument"
+  status: resolved
+  file: release-assets/minimax-h3-t2v/workflow-api.json
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 4e3bcefffb82fc41c5a00b66249c89ed86437afa72802a6a12bf934c37e7b531
+  snapshotAt: 2026-08-14T04:53:38.093Z
+rationale: A reviewed, digest-pinned asset was still wrong, and pinning made it
+  wrong reproducibly. The workflow was captured in the shape a frontend exports
+  rather than the shape the API executor consumes, and the executor drops an
+  input it cannot resolve instead of rejecting it, so the failure surfaced as a
+  missing argument inside the node rather than as a validation error. Worth
+  keeping because provenance guarantees an asset is unchanged, never that it was
+  right, and because startup validation checked node classes and model files
+  without ever exercising the graph.
+who: TuckerTucker
+when: 2026-08-14T04:53:38.093Z

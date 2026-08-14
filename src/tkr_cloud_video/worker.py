@@ -96,10 +96,14 @@ class WorkerStartupSteps:
             self._settings.output_root,
             self._settings.comfyui_root,
         )
-        if any(not root.is_absolute() or not root.is_dir() for root in roots):
+        unavailable = [
+            root for root in roots if not root.is_absolute() or not root.is_dir()
+        ]
+        if unavailable:
             raise AppError(
                 "worker_directory_invalid",
                 "A configured worker directory is unavailable.",
+                context={"relative_path": unavailable[0].name},
             )
         if not (self._settings.comfyui_root / "main.py").is_file():
             raise AppError("comfy_entrypoint_missing", "ComfyUI entrypoint is absent.")
@@ -114,6 +118,7 @@ class WorkerStartupSteps:
             raise AppError(
                 "model_set_identity_mismatch",
                 "Manifest model-set identity differs from configuration.",
+                context={"resource_id": manifest.model_set_id},
             )
         self._manifest = manifest
         await self._preflight.run(
@@ -171,11 +176,13 @@ class WorkerStartupSteps:
             raise AppError(
                 "workflow_not_approved",
                 "Requested workflow is not present in the approved model set.",
+                context={"resource_id": workflow_id},
             )
         if not workflow.bindings:
             raise AppError(
                 "workflow_bindings_missing",
                 "Approved workflow does not declare parameter bindings.",
+                context={"resource_id": workflow_id},
             )
         return workflow
 

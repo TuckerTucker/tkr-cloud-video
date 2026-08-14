@@ -1,0 +1,20 @@
+{
+  "approval_id": "minimax-h3-t2v-int8-20260809-ca-is",
+  "reviewer_id": "TuckerTucker",
+  "model_set_id": "minimax-h3-t2v-int8-20260809",
+  "manifest_digest": "6f74cd5ff33e161619be3eee07f91bb1379ac357c2ebc6d3583ca12dacfdfe68",
+  "deployment_use": "internal",
+  "territories": [
+    "CA",
+    "IS"
+  ],
+  "approved_at": "2026-08-14T05:00:00Z",
+  "expires_at": "2026-11-14T05:00:00Z",
+  "constraints": [
+    "The works and their outputs may not be used, reproduced, modified, distributed or displayed outside the Applicable Territory.",
+    "Commercial products or services generating over 20 million USD in yearly revenue require separate prior written authorization from MiniMax (api@minimax.io).",
+    "Territories are limited to those in use: CA is the deployed territory, IS is the only licensed source of the Blackwell architecture the NVFP4 text encoder targets. AU, IN, JP and NO are licence-permitted but unreviewed, and adding one is a new decision.",
+    "The reading that places EEA non-members outside the European Union exclusion is provisional per ADR-001. A written answer from the licensor replaces it.",
+    "This approval covers internal use. Public or commercial service is a different deployment use and requires its own review."
+  ]
+}

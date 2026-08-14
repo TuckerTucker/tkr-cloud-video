@@ -48,7 +48,11 @@ class PromptExecutor:
                 raise JobExecutionError(
                     "comfy_node_failed",
                     "ComfyUI reported a node execution failure.",
-                    context={"resource_id": status.error_node or "unknown-node"},
+                    context={
+                        "resource_id": status.error_node or "unknown-node",
+                        "error_type": status.error_type or "unknown-exception",
+                        "error_detail": status.error_detail or "",
+                    },
                 )
             if status.state is PromptState.CANCELLED:
                 raise JobExecutionError(

@@ -164,12 +164,13 @@ class RcloneB2Client:
             if error.code == "adapter_command_failed" and _not_found(error.__cause__):
                 return None
             raise
-        payload = _json_object(result.stdout)
-        # rclone represents an absent B2 object whose virtual parent exists as
-        # a directory stat instead of returning a not-found exit status. B2
-        # has no materialized directories, and callers only pass validated
-        # object keys here, so this sentinel is the provider's absence result.
-        if payload.get("IsDir") is True:
+        # B2 has no materialized directories, so rclone answers a stat for an
+        # absent object with a success status rather than a not-found exit
+        # code. It signals the absence in one of three ways: no output at all,
+        # a null document, or a directory stat for the virtual parent. Callers
+        # only pass validated object keys here, so each one means absent.
+        payload = _optional_json_object(result.stdout)
+        if payload is None or payload.get("IsDir") is True:
             return None
         metadata = payload.get("Metadata", {})
         if not isinstance(metadata, dict):
@@ -416,7 +417,21 @@ class RcloneInputSource:
         return size
 
 
-def _json_object(content: bytes) -> dict[str, Any]:
+def _optional_json_object(content: bytes) -> dict[str, Any] | None:
+    """Parse a provider document, reporting an empty or null one as absent.
+
+    Args:
+        content: Raw provider output.
+
+    Returns:
+        The parsed object, or None when the provider described nothing.
+
+    Raises:
+        AppError: The output is neither empty, null, nor a JSON object.
+
+    """
+    if not content.strip():
+        return None
     try:
         value = json.loads(content)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -426,6 +441,8 @@ def _json_object(content: bytes) -> dict[str, Any]:
             context={"operation": "parse_provider_response"},
             cause=error,
         ) from error
+    if value is None:
+        return None
     if not isinstance(value, dict):
         raise AppError(
             "provider_response_invalid",

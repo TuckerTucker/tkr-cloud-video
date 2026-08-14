@@ -162,12 +162,23 @@ async def test_executor_cancels_timeout_and_classifies_node_failure() -> None:
         )
     assert timeout.value.retryable and client.cancelled == ["prompt-1"]
 
-    failure = FakeClient([PromptStatus(PromptState.FAILED, error_node="node-10")])
+    failure = FakeClient(
+        [
+            PromptStatus(
+                PromptState.FAILED,
+                error_node="node-10",
+                error_type="FileNotFoundError",
+            )
+        ]
+    )
     with pytest.raises(JobExecutionError) as captured:
         await PromptExecutor(
             failure, FakeClock(), AdvancingWaiter(FakeClock())
         ).execute({"10": {}}, "attempt-1", 1)
+    # The node says where it stopped; the exception class says what kind of
+    # failure it was, which is the difference between a report and a lead.
     assert captured.value.context["resource_id"] == "node-10"
+    assert captured.value.context["error_type"] == "FileNotFoundError"
 
 
 class VideoInspector(MediaInspector):

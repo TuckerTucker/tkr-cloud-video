@@ -3,34 +3,188 @@
   "$id": "https://tkr.example/schemas/generation-request.schema.json",
   "title": "tkr-cloud-video generation request",
   "oneOf": [
-    { "$ref": "#/$defs/textToVideo" },
-    { "$ref": "#/$defs/imageToVideo" },
-    { "$ref": "#/$defs/referenceToVideo" }
+    {
+      "$ref": "#/$defs/textToVideo"
+    },
+    {
+      "$ref": "#/$defs/imageToVideo"
+    },
+    {
+      "$ref": "#/$defs/referenceToVideo"
+    }
   ],
   "$defs": {
     "base": {
       "type": "object",
-      "required": ["mode", "workflow_id", "model_set_id", "prompt", "seed"],
+      "required": [
+        "mode",
+        "workflow_id",
+        "model_set_id",
+        "seed"
+      ],
       "properties": {
-        "schema_version": { "const": "1" },
-        "mode": { "type": "string" },
-        "workflow_id": { "type": "string" },
-        "model_set_id": { "type": "string" },
-        "prompt": { "type": "string", "minLength": 1, "maxLength": 4000 },
-        "seed": { "type": "integer", "minimum": 0 },
-        "width": { "type": "integer", "minimum": 256, "maximum": 1344, "multipleOf": 32, "default": 864 },
-        "height": { "type": "integer", "minimum": 256, "maximum": 1344, "multipleOf": 32, "default": 480 },
-        "frames": { "type": "integer", "minimum": 5, "maximum": 362, "default": 73, "description": "MiniMax H3 requires a 17k+5 frame count." },
-        "fps": { "const": 24, "default": 24 }
-      }
+        "schema_version": {
+          "const": "1"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "workflow_id": {
+          "type": "string"
+        },
+        "model_set_id": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 4000,
+          "description": "Freeform prompt. Supply exactly one of prompt or structured_prompt."
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 1344,
+          "multipleOf": 32,
+          "default": 1344
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 1344,
+          "multipleOf": 32,
+          "default": 768
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 362,
+          "default": 124,
+          "description": "MiniMax H3 requires a 17k+5 frame count. The node's trained range is ~124-362; values outside it are permitted but reported as outside the trained envelope."
+        },
+        "fps": {
+          "const": 24,
+          "default": 24
+        },
+        "structured_prompt": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "$ref": "https://tkr.example/schemas/h3-prompt.schema.json",
+          "description": "Structured H3 prompt. Validated, rendered, and digested server-side."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "prompt"
+          ],
+          "properties": {
+            "structured_prompt": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "required": [
+            "structured_prompt"
+          ],
+          "properties": {
+            "prompt": {
+              "type": "null"
+            }
+          }
+        }
+      ]
     },
     "input": {
-      "type": "object", "additionalProperties": false,
-      "required": ["object_key"],
-      "properties": { "object_key": { "type": "string" }, "sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" } }
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "object_key"
+      ],
+      "properties": {
+        "object_key": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
     },
-    "textToVideo": { "allOf": [{ "$ref": "#/$defs/base" }, { "properties": { "mode": { "const": "text-to-video" } }, "additionalProperties": false }] },
-    "imageToVideo": { "allOf": [{ "$ref": "#/$defs/base" }, { "required": ["image"], "properties": { "mode": { "const": "image-to-video" }, "image": { "$ref": "#/$defs/input" } }, "additionalProperties": false }] },
-    "referenceToVideo": { "allOf": [{ "$ref": "#/$defs/base" }, { "required": ["references"], "properties": { "mode": { "const": "reference-to-video" }, "references": { "type": "array", "minItems": 1, "maxItems": 4, "items": { "$ref": "#/$defs/input" } } }, "additionalProperties": false }] }
+    "textToVideo": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "mode": {
+              "const": "text-to-video"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "imageToVideo": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "required": [
+            "image"
+          ],
+          "properties": {
+            "mode": {
+              "const": "image-to-video"
+            },
+            "image": {
+              "$ref": "#/$defs/input"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "referenceToVideo": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "required": [
+            "references"
+          ],
+          "properties": {
+            "mode": {
+              "const": "reference-to-video"
+            },
+            "references": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "$ref": "#/$defs/input"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
   }
 }

@@ -17,8 +17,11 @@ class ResultCommitter:
     async def commit(self, manifest: ResultManifest) -> bool:
         """Publish a new marker or accept an exact idempotent retry."""
         content = manifest.canonical_bytes()
-        existing = await self._store.get(manifest.commit_key)
-        if existing is not None:
+        # Existence is decided by `head`, never by a read: an absent object
+        # whose virtual parent exists reads as empty content with a success
+        # status, and empty content would otherwise present as a conflict.
+        if await self._store.head(manifest.commit_key) is not None:
+            existing = await self._store.get(manifest.commit_key)
             if existing != content:
                 raise AppError(
                     "commit_conflict", "A different result is already committed."

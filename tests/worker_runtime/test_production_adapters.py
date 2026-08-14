@@ -765,3 +765,92 @@ async def test_serverless_composition_starts_once_and_rejects_invalid_envelope(
     assert not any(
         marker in serialized for marker in environment.values() if "-key" in marker
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stdout", "shape"),
+    [(b"", "empty output"), (b"null\n", "a null document")],
+)
+async def test_head_reports_absence_when_stat_returns_no_object(
+    stdout: bytes, shape: str
+) -> None:
+    """A stat that succeeds without describing an object means absent.
+
+    B2 has no materialized directories, so rclone answers a stat for an absent
+    object with a success status and no object description rather than a
+    not-found exit code. Treating that as malformed metadata would fail a
+    caller that only asked whether the object exists.
+    """
+    executor = RecordingExecutor([CommandResult(stdout, b"")])
+    client = RcloneB2Client(
+        executor,
+        RcloneCredentials("key", "application"),
+        RcloneLocation("tkr", "bucket", "outputs/"),
+    )
+
+    assert await client.head("job/attempt/result.json") is None, shape
+
+
+@pytest.mark.asyncio
+async def test_comfy_failure_reports_node_and_exception_class() -> None:
+    """A node failure carries which node stopped and what kind of failure it was.
+
+    The provider also sends an exception message and a traceback. Both are free
+    text that can quote a path or a payload, so neither is carried out.
+    """
+    response = {
+        "prompt-1": {
+            "status": {
+                "status_str": "error",
+                "messages": [
+                    [
+                        "execution_error",
+                        {
+                            "node_id": "92",
+                            "node_type": "SaveVideo",
+                            "exception_type": "FileNotFoundError",
+                            "exception_message": "/outputs/job-x/attempt-y missing",
+                            "traceback": ["frame one", "frame two"],
+                        },
+                    ]
+                ],
+            }
+        }
+    }
+    client = ComfyApiClient(Transport({("GET", "/history/prompt-1"): response}))
+
+    status = await client.status("prompt-1")
+
+    assert status.state is PromptState.FAILED
+    assert status.error_node == "92"
+    assert status.error_type == "FileNotFoundError"
+    assert status.error_detail == "/outputs/job-x/attempt-y missing"
+
+
+@pytest.mark.asyncio
+async def test_comfy_failure_detail_is_bounded() -> None:
+    """A provider message is truncated rather than carried whole."""
+    response = {
+        "prompt-1": {
+            "status": {
+                "status_str": "error",
+                "messages": [
+                    [
+                        "execution_error",
+                        {
+                            "node_id": "92",
+                            "exception_type": "TypeError",
+                            "exception_message": "x" * 5000,
+                        },
+                    ]
+                ],
+            }
+        }
+    }
+    client = ComfyApiClient(Transport({("GET", "/history/prompt-1"): response}))
+
+    status = await client.status("prompt-1")
+
+    assert status.error_detail is not None
+    assert len(status.error_detail) == 200

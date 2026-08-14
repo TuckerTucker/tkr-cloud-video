@@ -18,6 +18,7 @@ from tkr_cloud_video.core.settings import (
     SettingsSource,
     load_core_settings,
 )
+from tkr_cloud_video.prompt_authoring.composition import grammar_report
 
 BOUNDARY_DIRECTORIES: Final[tuple[str, ...]] = (
     "_tkr_kit",
@@ -25,6 +26,7 @@ BOUNDARY_DIRECTORIES: Final[tuple[str, ...]] = (
     "docs/briefs",
     "docs/models",
     "docs/patterns",
+    "docs/prompting",
     "docs/published",
     "docs/runbooks",
     "src/tkr_cloud_video",
@@ -53,6 +55,7 @@ class DoctorResult(BaseModel):
     lock_digest: str | None
     core_contracts: bool
     boundary_directories: dict[str, bool]
+    prompt_grammar: dict[str, object] = Field(default_factory=dict)
     outcome: str
     errors: tuple[str, ...] = Field(default_factory=tuple)
 
@@ -127,6 +130,10 @@ def run_doctor(repository_root: Path | None = None) -> DoctorResult:
     if lock_digest is None:
         errors.append("lock_missing")
 
+    grammar = grammar_report()
+    if not grammar["digest_verified"]:
+        errors.append("prompt_grammar_digest_mismatch")
+
     return DoctorResult(
         package="tkr-cloud-video",
         context="repository",
@@ -134,6 +141,7 @@ def run_doctor(repository_root: Path | None = None) -> DoctorResult:
         lock_digest=lock_digest,
         core_contracts=core_ok,
         boundary_directories=boundary_status,
+        prompt_grammar=grammar,
         outcome="succeeded" if not errors else "failed",
         errors=tuple(errors),
     )

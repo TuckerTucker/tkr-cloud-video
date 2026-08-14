@@ -1,0 +1,46 @@
+{
+  "$comment": "FILL-IN TEMPLATE — base modes (T2VA, I2VA, FL2VA, L2VA). Replace every <ANGLE_BRACKET> slot and delete this $comment plus any *_help key. Slot rules and allowed values: docs/prompting/h3-prompt-template.md. Submit as the structured_prompt field of a generation request.",
+
+  "mode": "<T2VA | I2VA | FL2VA | L2VA>",
+  "duration_seconds": "<NUMBER, 0 < d <= 60, exactly two decimals, e.g. 8.0>",
+
+  "shots": [
+    {
+      "$comment_opening_shot": "Shot 1 declares the style and carries NO cut_at_seconds.",
+      "number": 1,
+      "style": "<Cinematic | live-action | 2D-animated | 3D CG | claymation | watercolor | vintage film>",
+      "description": "<SERVICE PROSE. Composition, subjects, environment, action. May contain reference labels. 1-2000 chars.>",
+      "camera": {
+        "motion": "<Push In | Truck Right | Static Shot | ... see the 20-value table>",
+        "amplitude": null,
+        "speed": null,
+        "$comment_modifiers": "Leave amplitude/speed null for medium/normal — the grammar omits its defaults. Otherwise: 'with small amplitude' | 'with large amplitude', 'at slow speed' | 'at fast speed'."
+      },
+      "dialogue": [
+        {
+          "$comment_dialogue": "Delete this array entirely if the shot is silent.",
+          "speaker_id": "<S1 — assign in order of first vocalization, no gaps. Group: S1,S2>",
+          "identity": "<SERVICE PROSE. Character type, age, pitch, timbre, delivery. Rendered OUTSIDE the delimiters.>",
+          "language": "<English | 中文 | 日本語 | ...>",
+          "text": "<CALLER TEXT. Verbatim, never translated. No grammar markers, labels, shot headers, or newlines.>",
+          "voiceover": false,
+          "continues_across_cut": false,
+          "truncated_by_end": false
+        }
+      ],
+      "on_screen_text": [
+        "<CALLER TEXT. Visible signs, banners, subtitles. Rendered in double quotes, untranslated. Delete the array if none.>"
+      ]
+    },
+    {
+      "$comment_later_shot": "Every later shot REQUIRES cut_at_seconds: strictly increasing and < duration_seconds. Delete this whole object for a single-shot clip.",
+      "number": 2,
+      "cut_at_seconds": "<NUMBER, > previous cut, < duration_seconds>",
+      "cut_phrase": "<the camera cuts to | the shot cuts to | the shot transitions to | the shot changes to | the shot switches to>",
+      "description": "<SERVICE PROSE. A cut must introduce new information about subject, space, state, viewpoint, or time.>"
+    }
+  ],
+
+  "overall_soundscape": "<1-4 SENTENCES. Ambience, physical action sounds, non-verbal human sounds. NOT dialogue, singing, or diegetic music — those live in the shots. Use N/A only for requested total silence.>",
+  "non_diegetic_music": "<1-3 SENTENCES. Audience-only score: instrumentation, tempo, rhythm, dynamics. NO mood words, no emotional function. Use N/A when there is none.>"
+}

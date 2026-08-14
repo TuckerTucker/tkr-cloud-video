@@ -205,3 +205,39 @@ stories:
       - job-execution/slice/8
       - job-execution/slice/9
       - job-execution/slice/10
+  - name: keep-request-defaults-inside-the-trained-envelope
+    status: todo
+    display_name: Keep request defaults inside the trained envelope
+    feature: validated-job-intake
+    actor: Platform operator
+    intent: have a request that names no dimensions land where the model was
+      trained, rather than merely inside what the schema permits
+    preconditions:
+      - The model set declares the canvas and frame range it was trained on.
+      - The request contract already rejects values beyond the supported canvas.
+    trigger_action: A request omits width, height, or frame count
+    steps:
+      - actor: Requester
+        action: submits a request naming only a prompt
+        system_response: the applied dimensions are the ones the model set was
+          trained on
+      - actor: Requester
+        action: submits dimensions below the trained range
+        system_response: the request is accepted and the departure is reported,
+          because a smaller canvas is supported and merely untrained
+    acceptance_criteria:
+      - given: a request that names no dimensions
+        when: it is validated
+        then: the defaults applied are the trained canvas and frame count, not
+          values that only satisfy the schema's upper bounds
+      - given: a request below the trained frame count or canvas
+        when: it is validated
+        then: it is accepted and the departure from the trained envelope is
+          reported, so an operator sees it before spending a generation
+      - given: a model set whose trained envelope differs
+        when: defaults are resolved
+        then: they come from the model set rather than from constants that would
+          silently misdescribe a different model
+    slice_ids:
+      - job-execution/slice/1
+      - job-execution/slice/2
