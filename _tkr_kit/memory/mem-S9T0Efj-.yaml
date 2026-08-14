@@ -1,0 +1,24 @@
+canonicalId: mem-S9T0Efj-
+sourceId: find-YQkGbVF_
+kind: finding
+disposition: kept
+body:
+  type: observability
+  severity: medium
+  title: "A failure must name its subject: the failing node, exception class and
+    message existed at every layer and were dropped three times, costing a
+    build-and-deploy cycle each to recover"
+  status: resolved
+  file: src/tkr_cloud_video/adapters/comfy.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 713fd5f937881b22a76434949eb48912268a86118a893f64ed113e808aa16e9b
+  snapshotAt: 2026-08-14T22:56:49.310Z
+rationale: A failure must carry its subject across every layer it crosses. The
+  failing node, exception class and message existed at each boundary and were
+  dropped three times, and each recovery cost a build-and-deploy cycle because
+  the only way to learn what failed was to redeploy with more logging. The cost
+  of discarding failure context is paid in deploy cycles, not in log lines.
+who: TuckerTucker
+when: 2026-08-14T22:56:49.310Z

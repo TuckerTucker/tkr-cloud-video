@@ -1,0 +1,14 @@
+canonicalId: mem-4gIDkPK4
+sourceId: find-xfjI7pbm
+kind: finding
+disposition: deferred
+body: null
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 04f2a3cb03c7f4d85f9d34fe2da6f26d4c2dc3e29ddda7a7f654b52d84a7ad81
+  snapshotAt: 2026-08-14T22:57:00.694Z
+rationale: "Already covered: kept as mem-KSx_iPF7 and deferred as mem-ju5xfDLH
+  in the first-validation session. Deferring again rather than promoting a third
+  copy."
+who: TuckerTucker
+when: 2026-08-14T22:57:00.694Z

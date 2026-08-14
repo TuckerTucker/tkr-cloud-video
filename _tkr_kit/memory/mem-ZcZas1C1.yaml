@@ -1,0 +1,26 @@
+canonicalId: mem-ZcZas1C1
+sourceId: find-vVGM4wix
+kind: finding
+disposition: kept
+body:
+  type: assurance
+  severity: low
+  title: Committed evidence records a digest-derived stand-in where the provider
+    reports no version, so the contract's phrase provider version is thinner
+    than it reads
+  status: open
+  file: src/tkr_cloud_video/adapters/rclone.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: c26f2be26fb48f8f0b65aac69e4c84c8f7cf8c50f89ba864b186798cb1950e89
+  snapshotAt: 2026-08-14T22:57:00.225Z
+rationale: Committed evidence must not present a derived value as an observed
+  one. The contract reads provider version, but where the provider reports none
+  the field carries a digest-derived stand-in, so the evidence is thinner than
+  its own vocabulary claims. Still true after the long-haul hydration work
+  touched this file. A reader auditing provenance cannot tell the substitution
+  from a real provider fact, which is the property that makes the evidence worth
+  keeping in the first place.
+who: TuckerTucker
+when: 2026-08-14T22:57:00.225Z
