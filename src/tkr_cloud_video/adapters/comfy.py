@@ -148,8 +148,9 @@ class ComfyApiClient:
             raise _invalid_response()
         status_text = status.get("status_str")
         if status_text in {"error", "failed"}:
+            node, exception = _execution_error(status.get("messages"))
             return PromptStatus(
-                PromptState.FAILED, error_node=_error_node(status.get("messages"))
+                PromptState.FAILED, error_node=node, error_type=exception
             )
         if status_text in {"cancelled", "canceled"}:
             return PromptStatus(PromptState.CANCELLED)
@@ -241,16 +242,35 @@ def _output_paths(value: object) -> tuple[str, ...]:
     return tuple(paths)
 
 
-def _error_node(messages: object) -> str | None:
+def _execution_error(messages: object) -> tuple[str | None, str | None]:
+    """Return the failing node and its exception class from provider messages.
+
+    The provider also reports an exception message and a traceback. Both are
+    free text that can carry a path or a payload, so only the class name is
+    taken: it names the kind of failure without quoting anything.
+
+    Args:
+        messages: The provider's status message list.
+
+    Returns:
+        The node identifier and exception class name, each None when absent.
+
+    """
     if not isinstance(messages, list):
-        return None
+        return None, None
     for item in messages:
         if not isinstance(item, list) or len(item) != 2 or item[0] != "execution_error":
             continue
         detail = item[1]
-        if isinstance(detail, dict) and isinstance(detail.get("node_id"), str):
-            return str(detail["node_id"])
-    return None
+        if not isinstance(detail, dict):
+            continue
+        node = detail.get("node_id")
+        exception = detail.get("exception_type")
+        return (
+            str(node) if isinstance(node, str) else None,
+            str(exception) if isinstance(exception, str) else None,
+        )
+    return None, None
 
 
 def _invalid_response() -> AppError:

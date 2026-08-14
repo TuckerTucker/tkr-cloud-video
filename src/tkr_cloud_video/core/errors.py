@@ -10,6 +10,7 @@ SAFE_CONTEXT_KEYS: Final[frozenset[str]] = frozenset(
     {
         "attempt_id",
         "correlation_id",
+        "error_type",
         "field",
         "gate",
         "job_id",

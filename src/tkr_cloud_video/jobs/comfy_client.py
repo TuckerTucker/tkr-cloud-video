@@ -23,6 +23,9 @@ class PromptStatus:
     state: PromptState
     outputs: tuple[str, ...] = ()
     error_node: str | None = None
+    # The provider's exception class name. Bounded by construction, unlike
+    # its message and traceback, which are left where they are.
+    error_type: str | None = None
 
 
 class ComfyExecutionClient(Protocol):
