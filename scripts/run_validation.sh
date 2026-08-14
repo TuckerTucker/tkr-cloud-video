@@ -30,15 +30,25 @@ worker_total() {
         | python3 -c 'import json,sys; print(sum(json.load(sys.stdin)["workers"].values()))'
 }
 
-echo "waiting for stale workers to retire"
-for _ in $(seq 1 60); do
-    total=$(worker_total || echo 1)
-    if [ "${total:-1}" -eq 0 ]; then
-        echo "no workers remain; the next one starts on the current template"
-        break
-    fi
+set_workers_max() {
+    curl -s -X PATCH -H "Authorization: Bearer $RUNPOD_API_KEY" \
+        -H "Content-Type: application/json" -d "{\"workersMax\": $1}" \
+        "https://rest.runpod.io/v1/endpoints/${ENDPOINT_ID}" >/dev/null
+}
+
+# A worker already up is running the image from before the template changed,
+# and waiting for it to retire never succeeds: the endpoint keeps one warm, so
+# the count returns to one as fast as it reaches zero. Retirement is therefore
+# driven rather than awaited, and capacity is restored before anything is
+# submitted, because an endpoint at zero refuses work outright.
+echo "retiring workers from the previous template"
+set_workers_max 0
+for _ in $(seq 1 20); do
+    [ "$(worker_total || echo 1)" -eq 0 ] && break
     sleep 15
 done
+set_workers_max 1
+echo "capacity restored; the next worker starts on the current template"
 
 echo "submitting validation job"
 bash scripts/submit_validation_job.sh "$REQUEST"
