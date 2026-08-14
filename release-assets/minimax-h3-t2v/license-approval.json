@@ -1,0 +1,24 @@
+{
+  "_draft": [
+    "Unratified. reviewer_id, approved_at and expires_at are null because only",
+    "a named reviewer can supply them, and LicenseApproval rejects the record",
+    "while they are absent. Run scripts/validate_license_approval.sh to see what",
+    "remains and to check the record against the manifest it claims to cover.",
+    "Remove this key when ratifying; the model forbids unknown fields."
+  ],
+  "approval_id": "minimax-h3-t2v-int8-20260809-ca-is",
+  "reviewer_id": null,
+  "model_set_id": "minimax-h3-t2v-int8-20260809",
+  "manifest_digest": "4e13714759a0bcf598e5f27a877eb86d13e1d7d25995afd03e5881d273713c5d",
+  "deployment_use": "internal",
+  "territories": ["CA", "IS"],
+  "approved_at": null,
+  "expires_at": null,
+  "constraints": [
+    "The works and their outputs may not be used, reproduced, modified, distributed or displayed outside the Applicable Territory.",
+    "Commercial products or services generating over 20 million USD in yearly revenue require separate prior written authorization from MiniMax (api@minimax.io).",
+    "Territories are limited to those in use: CA is the deployed territory, IS is the only licensed source of the Blackwell architecture the NVFP4 text encoder targets. AU, IN, JP and NO are licence-permitted but unreviewed, and adding one is a new decision.",
+    "The reading that places EEA non-members outside the European Union exclusion is provisional per ADR-001. A written answer from the licensor replaces it.",
+    "This approval covers internal use. Public or commercial service is a different deployment use and requires its own review."
+  ]
+}
