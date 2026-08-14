@@ -165,3 +165,63 @@ async def test_generation_commits_exact_artifacts_and_duplicate_converges(
     assert first[1] is not None and store.objects[first[1]]
     assert not any(path.is_file() for path in output_root.rglob("*"))
     assert not any(path.is_dir() for path in workspace_root.glob("job-*"))
+
+
+@dataclass
+class DirectoryStatResultStore(MemoryResultStore):
+    """Store reproducing the provider's absent-object read behavior.
+
+    B2 has no materialized directories, so rclone answers a read for an absent
+    object whose virtual parent exists with empty content and a success status
+    rather than a not-found error. `head` already reports that case as absent.
+    """
+
+    async def get(self, key: str) -> bytes | None:
+        """Return empty content for an absent object, as the provider does."""
+        return self.objects.get(key, b"")
+
+
+@pytest.mark.asyncio
+async def test_absent_result_reading_as_empty_still_generates(tmp_path: Path) -> None:
+    """An absent result that reads as empty must not be taken as committed."""
+    workspace_root, output_root = tmp_path / "workspaces", tmp_path / "outputs"
+    workspace_root.mkdir()
+    output_root.mkdir()
+    client = GeneratingComfyClient(output_root)
+    jobs = compose_job_execution(
+        JobDependencies(
+            FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC), monotonic_value=0),
+            NoWait(),
+            client,
+            MemoryInputSource(b"unused"),
+            ImageInspector(),
+            Inspector(),
+            workspace_root,
+            1024,
+        )
+    )
+    store = DirectoryStatResultStore()
+    application = CloudVideoApplication(
+        jobs,
+        Startup(approved_workflow()),  # type: ignore[arg-type]
+        store,
+        FakeClock(current=datetime(2026, 8, 10, tzinfo=UTC)),
+        principal_id="runpod-endpoint",
+        workspace_root=workspace_root,
+        output_root=output_root,
+        generation_timeout_seconds=60,
+    )
+    request = TextToVideoRequest(
+        mode="text-to-video",
+        workflow_id="workflow-1",
+        model_set_id="models-1",
+        prompt="Synthetic prompt",
+        seed=42,
+    )
+
+    _, reference = await application.submit(request)
+
+    # The returned reference must name an object that was actually committed.
+    assert client.submissions == 1
+    assert reference is not None
+    assert reference in store.objects
