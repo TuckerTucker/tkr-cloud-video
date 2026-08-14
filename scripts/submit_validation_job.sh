@@ -53,8 +53,23 @@ def call(path: str, body: dict | None = None) -> dict:
 job_id = os.environ.get("JOB_ID") or ""
 if not job_id:
     payload = json.load(open(os.environ["REQUEST"]))
-    submitted = call("/run", payload)
-    if "httpError" in submitted or "id" not in submitted:
+    # Raising the worker ceiling reaches the config plane before the run
+    # plane, so an endpoint that has just been un-paused still refuses work
+    # for a while. That refusal is a state to wait out, not a failure.
+    submitted = {}
+    for attempt in range(20):
+        submitted = call("/run", payload)
+        if "id" in submitted:
+            break
+        if submitted.get("httpError") == 409 and "ENDPOINT_PAUSED" in submitted.get(
+            "body", ""
+        ):
+            if attempt == 0:
+                print("endpoint has not resumed yet; waiting")
+            time.sleep(15)
+            continue
+        break
+    if "id" not in submitted:
         print("submit failed:", json.dumps(submitted)[:400])
         raise SystemExit(1)
     job_id = submitted["id"]
