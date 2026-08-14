@@ -765,3 +765,28 @@ async def test_serverless_composition_starts_once_and_rejects_invalid_envelope(
     assert not any(
         marker in serialized for marker in environment.values() if "-key" in marker
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("stdout", "shape"),
+    [(b"", "empty output"), (b"null\n", "a null document")],
+)
+async def test_head_reports_absence_when_stat_returns_no_object(
+    stdout: bytes, shape: str
+) -> None:
+    """A stat that succeeds without describing an object means absent.
+
+    B2 has no materialized directories, so rclone answers a stat for an absent
+    object with a success status and no object description rather than a
+    not-found exit code. Treating that as malformed metadata would fail a
+    caller that only asked whether the object exists.
+    """
+    executor = RecordingExecutor([CommandResult(stdout, b"")])
+    client = RcloneB2Client(
+        executor,
+        RcloneCredentials("key", "application"),
+        RcloneLocation("tkr", "bucket", "outputs/"),
+    )
+
+    assert await client.head("job/attempt/result.json") is None, shape
