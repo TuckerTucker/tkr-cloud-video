@@ -1,0 +1,31 @@
+canonicalId: mem-KSx_iPF7
+sourceId: find-xfjI7pbm
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: medium
+  title: "Request defaults sit outside the model's trained envelope: the schema
+    defaults to 73 frames at 864x480 while the node declares 1344x768 and a
+    trained range of roughly 124 to 362 frames"
+  status: open
+  file: src/tkr_cloud_video/jobs/contracts.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 04f2a3cb03c7f4d85f9d34fe2da6f26d4c2dc3e29ddda7a7f654b52d84a7ad81
+  snapshotAt: 2026-08-14T08:32:40.254Z
+rationale: "Resolved, and the insight generalizes past this parameter. A bound
+  that caps without flooring admits defaults outside the range the dependency
+  was built for: width/height/frames were capped at MiniMax H3 native limits
+  with floors of 256 and 5, so defaults of 864x480x73 sat below the trained
+  canvas and frame floor while validating cleanly. The guard that should have
+  caught it asserted the temporal grid and named itself \"executable by MiniMax
+  H3\" — executable is not trained, and a test that checks the weaker property
+  blesses the stronger claim in its own name. Two rules came out of it: read the
+  pinned dependency's own declaration rather than inheriting a number, and where
+  sub-range values are legitimate (a cheap smoke test), fix the silence rather
+  than the legality by recording which axis falls short. Superseded the earlier
+  deferral, which was correct while the remedy was unknown."
+who: TuckerTucker
+when: 2026-08-14T08:32:40.254Z
