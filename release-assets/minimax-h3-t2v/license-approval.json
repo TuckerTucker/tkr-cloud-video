@@ -1,20 +1,26 @@
 {
-  "approval_id": "minimax-h3-t2v-int8-20260809-ca-is",
+  "approval_id": "minimax-h3-t2v-int8-20260809-au-ca-in-is-jp-no",
   "reviewer_id": "TuckerTucker",
   "model_set_id": "minimax-h3-t2v-int8-20260809",
   "manifest_digest": "6f74cd5ff33e161619be3eee07f91bb1379ac357c2ebc6d3583ca12dacfdfe68",
   "deployment_use": "internal",
   "territories": [
+    "AU",
     "CA",
-    "IS"
+    "IN",
+    "IS",
+    "JP",
+    "NO"
   ],
-  "approved_at": "2026-08-14T05:00:00Z",
-  "expires_at": "2026-11-14T05:00:00Z",
+  "approved_at": "2026-08-14T22:08:09Z",
+  "expires_at": "2026-11-14T22:08:09Z",
   "constraints": [
     "The works and their outputs may not be used, reproduced, modified, distributed or displayed outside the Applicable Territory.",
     "Commercial products or services generating over 20 million USD in yearly revenue require separate prior written authorization from MiniMax (api@minimax.io).",
-    "Territories are limited to those in use: CA is the deployed territory, IS is the only licensed source of the Blackwell architecture the NVFP4 text encoder targets. AU, IN, JP and NO are licence-permitted but unreviewed, and adding one is a new decision.",
-    "The reading that places EEA non-members outside the European Union exclusion is provisional per ADR-001. A written answer from the licensor replaces it.",
+    "AU, CA, IN and JP sit plainly outside the licence's named exclusions — the European Union, the United Kingdom, the Republic of Korea and the United States of America — and rest on no contested reading of the agreement.",
+    "IS and NO are licensable only through ADR-001's provisional reading of \"the European Union\" as Union membership. Both fall out of this grant if the licensor answers that the EEA is in scope, and the grant expires in three months so the reading lapses rather than standing indefinitely.",
+    "What each territory is for: CA holds the ca-east-006 object storage bucket, the worker identity and the reviewed publication path; IS is the only licensed source of the Blackwell architecture the NVFP4 text encoder targets. AU, IN, JP and NO widen placement capacity, and no further purpose is documented for them in this repository.",
+    "Outputs are written to Canadian object storage regardless of which territory the worker runs in, so placement and data residency are separate questions. This record settles the model licence only; it makes no data-residency finding.",
     "This approval covers internal use. Public or commercial service is a different deployment use and requires its own review."
   ]
 }

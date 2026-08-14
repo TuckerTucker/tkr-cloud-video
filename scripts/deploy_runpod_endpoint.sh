@@ -40,11 +40,17 @@ vault_get() {
 RUNPOD_API_KEY=$(vault_get RUNPOD_API_KEY)
 export RUNPOD_API_KEY
 
+# Every call that leaves this machine runs under the project interpreter rather
+# than the system python3. The python.org framework build resolves its trust
+# store to a cert.pem its installer never created, so HTTPS from it dies in
+# certificate verification before a request is sent. Local parsing below still
+# uses python3, which needs neither TLS nor the project package.
+#
 # Registry auth is only needed while the image is private.
 REGISTRY_AUTH_ID=""
 if [ -n "${GHCR_PAT:-}" ]; then
     REGISTRY_AUTH_ID=$(
-        python3 - <<'PY'
+        .venv/bin/python - <<'PY'
 import json, os, urllib.request
 
 body = json.dumps({
@@ -83,7 +89,7 @@ TEMPLATE_ID=$(
     RELEASE_ID="$RELEASE_ID" \
     IMAGE="$IMAGE" \
     REGISTRY_AUTH_ID="$REGISTRY_AUTH_ID" \
-    python3 - <<'PY'
+    .venv/bin/python - <<'PY'
 import json, os, urllib.request
 
 environment = {
@@ -127,10 +133,30 @@ PY
 echo "template: ${TEMPLATE_ID}"
 
 # Blackwell only: the text encoder is NVFP4 and the image pins the cu128 build.
-# Canadian data centres only: the bucket, the worker identity, and the reviewed
-# publication path all place this workload in Canada.
+#
+# Placement follows the territories the ratified licence approval covers, which
+# is what bounds where the model set and its outputs may be used. Compute is not
+# storage: the bucket, the worker identity and the reviewed publication path
+# stay in Canada regardless of where a worker runs, so a Canadian data centre is
+# no longer the thing carrying the licence argument and no longer has to be the
+# only option. Widening the grant is a change to the approval record, and the
+# gate after this create is what proves the two still agree.
+#
+# The regions below are every registered region of those territories, grouped by
+# territory; security/territories.py is the registry that maps each one, and an
+# unregistered region fails the gate rather than passing unnoticed. CA-MTL-4
+# joins the three Montreal regions already used because it is the same
+# territory, the same residency story and the same review as its neighbours.
+DATA_CENTRE_IDS="CA-MTL-1,CA-MTL-2,CA-MTL-3,CA-MTL-4"          # Canada
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-IS-1,EUR-IS-2,EUR-IS-3,EUR-IS-4"  # Iceland
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-NO-1,EUR-NO-2"           # Norway
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,AP-IN-1,AP-IN-2"             # India
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,AP-JP-1"                     # Japan
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,OC-AU-1"                     # Australia
+export DATA_CENTRE_IDS
+
 ENDPOINT_ID=$(
-    TEMPLATE_ID="$TEMPLATE_ID" python3 - <<'PY'
+    TEMPLATE_ID="$TEMPLATE_ID" .venv/bin/python - <<'PY'
 import json, os, urllib.request
 
 body = json.dumps({
@@ -143,7 +169,7 @@ body = json.dumps({
         "NVIDIA B200",
     ],
     "allowedCudaVersions": ["12.8", "12.9", "13.0"],
-    "dataCenterIds": ["CA-MTL-1", "CA-MTL-2", "CA-MTL-3"],
+    "dataCenterIds": [r for r in os.environ["DATA_CENTRE_IDS"].split(",") if r],
     "workersMin": 0,
     "workersMax": 1,
     # Cold start re-hydrates 42.5 GB, so hold a finished worker briefly to make
@@ -167,3 +193,74 @@ with urllib.request.urlopen(request) as response:
 PY
 )
 echo "endpoint: ${ENDPOINT_ID}"
+
+# A created endpoint is not a deployed one until its placement has been seen.
+# ADR-001 records this provider dropping a placement field on create and moving
+# worker bounds unprompted, and REST omits dataCenterIds from its responses, so
+# the create call's own 200 is not evidence that the restriction is in force.
+# scripts/runpod_graphql.sh reads the placement back as `locations` and judges it
+# against the territories the ratified approval covers.
+#
+# Invoked through `bash` because runpod_graphql.sh is checked in without its
+# executable bit. Its status is captured rather than allowed to end the run, so
+# the report still prints and the message below can name what refused.
+VERIFY_OUT=$(mktemp "${TMPDIR:-/tmp}/tkr-placement.XXXXXX")
+trap 'rm -f "$VERIFY_OUT"' EXIT HUP INT TERM
+export VERIFY_OUT
+
+VERIFY_STATUS=0
+bash scripts/runpod_graphql.sh "$ENDPOINT_ID" >"$VERIFY_OUT" 2>&1 || VERIFY_STATUS=$?
+cat "$VERIFY_OUT"
+
+if [ "$VERIFY_STATUS" -ne 0 ]; then
+    echo "deploy failed: endpoint ${ENDPOINT_ID} is placed outside the approval" >&2
+    exit 1
+fi
+
+# The grant check above cannot catch a dropped field on its own: an endpoint
+# with no observed placement has nothing outside the grant in it and passes.
+# The create is therefore only accepted when the observed regions are exactly
+# the regions sent. This mirrors the check in set_endpoint_datacenters.sh, which
+# is the script that repairs a placement; this one only refuses to bless it.
+python3 - <<'PY'
+import json, os, sys
+
+missing_key = object()
+observed_raw = missing_key
+
+# runpod_graphql.sh prints the endpoint record with json.dumps(indent=1), which
+# puts the placement on a line of its own as `"locations": "..."`.
+with open(os.environ["VERIFY_OUT"], encoding="utf-8") as handle:
+    for line in handle:
+        stripped = line.strip().rstrip(",")
+        if stripped.startswith('"locations":'):
+            observed_raw = json.loads("{" + stripped + "}")["locations"]
+            break
+
+if observed_raw is missing_key:
+    print("no placement observed in the verification report", file=sys.stderr)
+    raise SystemExit(1)
+
+observed = sorted(r.strip() for r in (observed_raw or "").split(",") if r.strip())
+intended = sorted(r for r in os.environ["DATA_CENTRE_IDS"].split(",") if r)
+
+if not observed:
+    print(
+        "the provider created the endpoint and stored no placement at all: "
+        "it may run in any region it likes",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+missing = [r for r in intended if r not in observed]
+extra = [r for r in observed if r not in intended]
+if missing or extra:
+    print("placement does not match what was sent", file=sys.stderr)
+    if missing:
+        print("  dropped by the provider:", ",".join(missing), file=sys.stderr)
+    if extra:
+        print("  added by the provider  :", ",".join(extra), file=sys.stderr)
+    raise SystemExit(1)
+
+print("placement confirmed:", ",".join(observed))
+PY
