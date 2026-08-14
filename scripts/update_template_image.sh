@@ -26,10 +26,11 @@ RUNPOD_API_KEY=$(
         --name RUNPOD_API_KEY --json 2>/dev/null \
         | python3 -c 'import json,sys; print(json.load(sys.stdin)["output"]["value"])'
 )
-export RUNPOD_API_KEY TEMPLATE_ID IMAGE_DIGEST RELEASE_ID
+MANIFEST_PATH="${MANIFEST_PATH:-dist/minimax-h3-t2v.model-set.json}"
+export RUNPOD_API_KEY TEMPLATE_ID IMAGE_DIGEST RELEASE_ID MANIFEST_PATH
 
 python3 - <<'PY'
-import json, os, urllib.error, urllib.request
+import hashlib, json, os, urllib.error, urllib.request
 
 base = "https://rest.runpod.io/v1/templates/" + os.environ["TEMPLATE_ID"]
 headers = {
@@ -49,6 +50,16 @@ current = read()
 environment = dict(current.get("env") or {})
 environment["TKR_RELEASE_ID"] = os.environ["RELEASE_ID"]
 
+# The worker resolves its manifest by digest, so the digest is read from the
+# manifest itself rather than repeated by hand where the two could drift.
+manifest_path = os.environ.get("MANIFEST_PATH")
+if manifest_path and os.path.exists(manifest_path):
+    manifest = json.load(open(manifest_path))
+    digest = hashlib.sha256(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    environment["TKR_MANIFEST_DIGEST"] = digest
+
 body = json.dumps({"imageName": image, "env": environment}).encode()
 try:
     request = urllib.request.Request(base, data=body, headers=headers, method="PATCH")
@@ -62,6 +73,7 @@ after = read()
 after_env = after.get("env") or {}
 print("imageName     :", after.get("imageName"))
 print("TKR_RELEASE_ID:", after_env.get("TKR_RELEASE_ID"))
+print("TKR_MANIFEST_DIGEST:", after_env.get("TKR_MANIFEST_DIGEST"))
 print("env keys      :", len(after_env))
 
 secrets = (
