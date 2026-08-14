@@ -47,6 +47,13 @@ class WorkflowBinder:
         bound = copy.deepcopy(workflow)
         values = request.model_dump(mode="json")
         values.update(runtime_values or {})
+        if values.get("prompt") is None:
+            raise WorkflowBindingError(
+                "unrendered_prompt_submitted",
+                "A structured prompt must be rendered before binding.",
+                context={"field": "prompt"},
+            )
+        values.pop("structured_prompt", None)
         for binding in bindings:
             node = bound.get(binding.node_id)
             if not isinstance(node, dict) or not isinstance(node.get("inputs"), dict):

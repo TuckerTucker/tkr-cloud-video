@@ -6,7 +6,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from tkr_cloud_video.prompting.errors import PromptGrammarIntegrityError
+from tkr_cloud_video.jobs.contracts import MAX_PROMPT_CHARS, RequestBase
+from tkr_cloud_video.prompting.errors import (
+    PromptGrammarIntegrityError,
+    PromptValidationError,
+)
 from tkr_cloud_video.prompting.grammar import (
     GRAMMAR_DIGEST,
     GRAMMAR_REVISION,
@@ -14,6 +18,8 @@ from tkr_cloud_video.prompting.grammar import (
     verify_grammar_integrity,
 )
 from tkr_cloud_video.prompting.models import StructuredPrompt, compose_prompt
+from tkr_cloud_video.prompting.provenance import PromptProvenance, bind_provenance
+from tkr_cloud_video.prompting.render import render_prompt
 from tkr_cloud_video.prompting.validation import (
     CHECKS,
     Check,
@@ -126,3 +132,52 @@ def grammar_report(expected: str = GRAMMAR_DIGEST) -> dict[str, object]:
         "digest_verified": True,
         "observed_digest": expected,
     }
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedPrompt:
+    """The wire text to submit, with the provenance to record beside it."""
+
+    text: str
+    provenance: PromptProvenance | None
+
+
+def resolve_request_prompt(
+    request: RequestBase, services: PromptServices
+) -> ResolvedPrompt:
+    """Return the wire text for a request, whichever prompt form it carries.
+
+    A freeform prompt passes through unvalidated, exactly as it does today. A
+    structured prompt is composed, validated, rendered, and digested, so the text
+    reaching the workflow is derived rather than supplied.
+
+    Args:
+        request: A parsed generation request.
+        services: The composed prompt boundary.
+
+    Returns:
+        The wire text and, for structured prompts, its provenance.
+
+    Raises:
+        PromptValidationError: The structured prompt is invalid, or its rendered
+            text exceeds the bound the freeform field has always enforced.
+
+    """
+    if request.structured_prompt is None:
+        if request.prompt is None:  # pragma: no cover - contract forbids both absent
+            raise PromptValidationError(
+                "prompt_absent",
+                "Request carries neither prompt form.",
+                context={"field": "prompt"},
+            )
+        return ResolvedPrompt(text=request.prompt, provenance=None)
+
+    prompt, _ = services.accept(request.structured_prompt)
+    text = render_prompt(prompt)
+    if len(text) > MAX_PROMPT_CHARS:
+        raise PromptValidationError(
+            "request_bound_loosened",
+            "Rendered prompt exceeds the bound the freeform field enforces.",
+            context={"field": "structured_prompt", "rule": str(MAX_PROMPT_CHARS)},
+        )
+    return ResolvedPrompt(text=text, provenance=bind_provenance(prompt))

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Annotated, Literal, TypeAlias
+from typing import Annotated, Any, Final, Literal, TypeAlias
 
 from pydantic import (
     BaseModel,
@@ -18,6 +18,8 @@ from pydantic import (
 from tkr_cloud_video.core.context import validate_identifier
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.security.validation import ModelSetId, ObjectKey, Sha256Digest
+
+MAX_PROMPT_CHARS: Final[int] = 4000
 
 
 class InputReference(BaseModel):
@@ -55,7 +57,8 @@ class RequestBase(BaseModel):
     schema_version: Literal["1"] = "1"
     workflow_id: str
     model_set_id: str
-    prompt: str = Field(min_length=1, max_length=4000)
+    prompt: str | None = Field(default=None, max_length=MAX_PROMPT_CHARS)
+    structured_prompt: dict[str, Any] | None = None
     seed: int = Field(ge=0, le=18_446_744_073_709_551_615)
     width: int = Field(default=864, ge=256, le=1344, multiple_of=32)
     height: int = Field(default=480, ge=256, le=1344, multiple_of=32)
@@ -87,6 +90,20 @@ class RequestBase(BaseModel):
         if (value - 5) % 17 != 0:
             raise ValueError("frames must satisfy MiniMax H3's 17k+5 grid")
         return value
+
+    @model_validator(mode="after")
+    def validate_exactly_one_prompt_form(self) -> RequestBase:
+        """Require exactly one prompt form, with the freeform bound unchanged.
+
+        The structured form is an addition, never a relaxation: a freeform prompt
+        is still one to :data:`MAX_PROMPT_CHARS` characters, and supplying both
+        forms is refused rather than resolved by precedence.
+        """
+        if (self.prompt is None) == (self.structured_prompt is None):
+            raise ValueError("supply exactly one of prompt or structured_prompt")
+        if self.prompt is not None and not self.prompt.strip():
+            raise ValueError("prompt must not be blank")
+        return self
 
     @model_validator(mode="after")
     def validate_native_canvas(self) -> RequestBase:
