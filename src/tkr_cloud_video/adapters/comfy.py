@@ -237,6 +237,7 @@ def _output_paths(value: object) -> tuple[str, ...]:
                     raise AppError(
                         "comfy_output_path_invalid",
                         "ComfyUI returned an unsafe output path.",
+                        context={"operation": "read_prompt_outputs"},
                     )
                 paths.append(str(candidate))
     return tuple(paths)
