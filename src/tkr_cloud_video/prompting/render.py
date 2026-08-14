@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Final
 
 from tkr_cloud_video.prompting.alignment import alignment_header
+from tkr_cloud_video.prompting.containment import contain_prompt, require_verbatim
 from tkr_cloud_video.prompting.errors import PromptRenderError
 from tkr_cloud_video.prompting.grammar import (
     CAMERA_MOTIONS,
@@ -177,12 +178,17 @@ def render_prompt(prompt: StructuredPrompt) -> str:
 
     Raises:
         PromptRenderError: A value in the prompt has no wire form.
+        PromptContainmentError: Caller text would act as grammar, or did not
+            survive rendering unchanged.
 
     """
+    contain_prompt(prompt)
     body = (
         render_reference_prompt(prompt)
         if prompt.is_reference_mode
         else render_base_prompt(prompt)
     )
     header = alignment_header(prompt)
-    return f"{header}{SECTION_SEPARATOR}{body}" if header else body
+    text = f"{header}{SECTION_SEPARATOR}{body}" if header else body
+    require_verbatim(text, prompt)
+    return text
