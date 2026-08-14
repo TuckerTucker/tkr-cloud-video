@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from tests.conftest import CapturingEventSink
+from tests.job_execution.test_validated_job_intake import MODEL_SET_ID
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.core.logging import configure_logging
 from tkr_cloud_video.jobs.contracts import GenerationRequest
@@ -33,7 +34,7 @@ def request_payload() -> dict[str, object]:
         "schema_version": "1",
         "mode": "text-to-video",
         "workflow_id": "h3-t2v-1",
-        "model_set_id": "h3-models-1",
+        "model_set_id": MODEL_SET_ID,
         "prompt": "Synthetic prompt",
         "seed": 42,
     }
@@ -230,7 +231,7 @@ async def test_failure_response_names_what_failed() -> None:
             "input": {
                 "mode": "text-to-video",
                 "workflow_id": "workflow-1",
-                "model_set_id": "models-1",
+                "model_set_id": MODEL_SET_ID,
                 "prompt": "Synthetic prompt",
                 "seed": 1,
             }

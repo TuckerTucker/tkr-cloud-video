@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,6 +18,10 @@ from tkr_cloud_video.core.settings import (
     CoreSettings,
     SettingsSource,
     load_core_settings,
+)
+from tkr_cloud_video.jobs.trained_envelope import (
+    envelope_report,
+    unregistered_model_sets,
 )
 from tkr_cloud_video.prompt_authoring.composition import grammar_report
 
@@ -56,6 +61,7 @@ class DoctorResult(BaseModel):
     core_contracts: bool
     boundary_directories: dict[str, bool]
     prompt_grammar: dict[str, object] = Field(default_factory=dict)
+    trained_envelope: dict[str, object] = Field(default_factory=dict)
     outcome: str
     errors: tuple[str, ...] = Field(default_factory=tuple)
 
@@ -134,6 +140,15 @@ def run_doctor(repository_root: Path | None = None) -> DoctorResult:
     if not grammar["digest_verified"]:
         errors.append("prompt_grammar_digest_mismatch")
 
+    observed = observed_model_sets(root)
+    envelope = envelope_report(observed)
+    if not envelope["digest_verified"]:
+        errors.append("trained_envelope_digest_mismatch")
+    errors.extend(
+        f"model_set_envelope_unregistered:{model_set_id}"
+        for model_set_id in unregistered_model_sets(observed)
+    )
+
     return DoctorResult(
         package="tkr-cloud-video",
         context="repository",
@@ -142,9 +157,46 @@ def run_doctor(repository_root: Path | None = None) -> DoctorResult:
         core_contracts=core_ok,
         boundary_directories=boundary_status,
         prompt_grammar=grammar,
+        trained_envelope=envelope,
         outcome="succeeded" if not errors else "failed",
         errors=tuple(errors),
     )
+
+
+def observed_model_sets(root: Path) -> tuple[str, ...]:
+    """Return the model sets the repository actually publishes.
+
+    Scope is declared rather than implied: this looks only at the release
+    catalogs under ``release-assets/``, which is where a model set is minted in
+    this repository. A model set that exists anywhere else is outside what this
+    observation can see, and the envelope registry cannot be checked against it.
+
+    Reading this population is what makes the envelope registry falsifiable — a
+    registry read forward only asks whether each listed envelope is well-formed,
+    which can never see a published model set the registry forgot.
+
+    Args:
+        root: Repository root to scan.
+
+    Returns:
+        Sorted model-set identifiers found in readable catalogs. A catalog that
+        is unreadable or malformed contributes nothing rather than failing the
+        scan, because the doctor's job here is to report omissions from the
+        registry, not to re-validate catalog syntax.
+
+    """
+    found: set[str] = set()
+    for catalog_path in sorted((root / "release-assets").glob("*/catalog.json")):
+        try:
+            payload = json.loads(catalog_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        model_set_id = (
+            payload.get("model_set_id") if isinstance(payload, dict) else None
+        )
+        if isinstance(model_set_id, str):
+            found.add(model_set_id)
+    return tuple(sorted(found))
 
 
 def run_runtime_doctor(

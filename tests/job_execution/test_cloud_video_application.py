@@ -13,6 +13,7 @@ import pytest
 from tests.conftest import FakeClock
 from tests.durable_delivery.test_verified_result_commit import MemoryResultStore
 from tests.job_execution.test_validated_job_intake import (
+    MODEL_SET_ID,
     ImageInspector,
     MemoryInputSource,
 )
@@ -22,7 +23,7 @@ from tkr_cloud_video.job_execution.composition import (
     compose_job_execution,
 )
 from tkr_cloud_video.jobs.comfy_client import PromptState, PromptStatus
-from tkr_cloud_video.jobs.contracts import TextToVideoRequest
+from tkr_cloud_video.jobs.contracts import parse_generation_request
 from tkr_cloud_video.jobs.executor import Waiter
 from tkr_cloud_video.jobs.media_validation import MediaInfo
 from tkr_cloud_video.security.validation import Sha256Digest
@@ -148,12 +149,14 @@ async def test_generation_commits_exact_artifacts_and_duplicate_converges(
         output_root=output_root,
         generation_timeout_seconds=60,
     )
-    request = TextToVideoRequest(
-        mode="text-to-video",
-        workflow_id="workflow-1",
-        model_set_id="models-1",
-        prompt="Synthetic prompt",
-        seed=42,
+    request = parse_generation_request(
+        {
+            "mode": "text-to-video",
+            "workflow_id": "workflow-1",
+            "model_set_id": MODEL_SET_ID,
+            "prompt": "Synthetic prompt",
+            "seed": 42,
+        }
     )
 
     first = await application.submit(request)
@@ -211,12 +214,14 @@ async def test_absent_result_reading_as_empty_still_generates(tmp_path: Path) ->
         output_root=output_root,
         generation_timeout_seconds=60,
     )
-    request = TextToVideoRequest(
-        mode="text-to-video",
-        workflow_id="workflow-1",
-        model_set_id="models-1",
-        prompt="Synthetic prompt",
-        seed=42,
+    request = parse_generation_request(
+        {
+            "mode": "text-to-video",
+            "workflow_id": "workflow-1",
+            "model_set_id": MODEL_SET_ID,
+            "prompt": "Synthetic prompt",
+            "seed": 42,
+        }
     )
 
     _, reference = await application.submit(request)
@@ -263,15 +268,17 @@ async def test_generation_record_states_the_trained_envelope(tmp_path: Path) -> 
     )
 
     await application.submit(
-        TextToVideoRequest(
-            mode="text-to-video",
-            workflow_id="workflow-1",
-            model_set_id="models-1",
-            prompt="Synthetic prompt",
-            seed=42,
-            width=864,
-            height=480,
-            frames=73,
+        parse_generation_request(
+            {
+                "mode": "text-to-video",
+                "workflow_id": "workflow-1",
+                "model_set_id": MODEL_SET_ID,
+                "prompt": "Synthetic prompt",
+                "seed": 42,
+                "width": 864,
+                "height": 480,
+                "frames": 73,
+            }
         )
     )
 
@@ -279,6 +286,7 @@ async def test_generation_record_states_the_trained_envelope(tmp_path: Path) -> 
     record = json.loads(store.objects[key])
 
     assert record["trained_envelope"] == {
+        "trained_envelope_model_set_id": MODEL_SET_ID,
         "trained_envelope_inside": False,
         "trained_envelope_short_edge_below": True,
         "trained_envelope_frames_below": True,
@@ -315,12 +323,14 @@ async def test_default_request_records_an_inside_envelope(tmp_path: Path) -> Non
     )
 
     await application.submit(
-        TextToVideoRequest(
-            mode="text-to-video",
-            workflow_id="workflow-1",
-            model_set_id="models-1",
-            prompt="Synthetic prompt",
-            seed=42,
+        parse_generation_request(
+            {
+                "mode": "text-to-video",
+                "workflow_id": "workflow-1",
+                "model_set_id": MODEL_SET_ID,
+                "prompt": "Synthetic prompt",
+                "seed": 42,
+            }
         )
     )
 

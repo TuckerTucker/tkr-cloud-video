@@ -33,7 +33,8 @@
           "type": "string"
         },
         "model_set_id": {
-          "type": "string"
+          "type": "string",
+          "description": "The model set to generate with. It selects the trained envelope that resolves width, height and frames, so it must name a model set with a registered envelope."
         },
         "prompt": {
           "type": [
@@ -51,23 +52,17 @@
         "width": {
           "type": "integer",
           "minimum": 256,
-          "maximum": 1344,
-          "multipleOf": 32,
-          "default": 1344
+          "description": "Canvas width. Absent, it defaults to the long edge of the trained envelope of the model set named by model_set_id. The maximum and the required multiple are properties of that model set, not of this schema; a request naming a model set with no registered envelope is refused rather than given another model's numbers."
         },
         "height": {
           "type": "integer",
           "minimum": 256,
-          "maximum": 1344,
-          "multipleOf": 32,
-          "default": 768
+          "description": "Canvas height. Absent, it defaults to the short edge of the trained envelope of the model set named by model_set_id, with the same per-model-set maximum and multiple as width."
         },
         "frames": {
           "type": "integer",
-          "minimum": 5,
-          "maximum": 362,
-          "default": 124,
-          "description": "MiniMax H3 requires a 17k+5 frame count. The node's trained range is ~124-362; values outside it are permitted but reported as outside the trained envelope."
+          "minimum": 1,
+          "description": "Frame count at 24 fps. Absent, it defaults to the trained floor of the model set named by model_set_id. The temporal grid, the floor and the ceiling are properties of that model set. For minimax-h3-t2v-int8-20260809 the grid is 17k+5 and the trained range is 124-362; below the floor is permitted and reported as a departure from the trained envelope, above the ceiling is refused."
         },
         "fps": {
           "const": 24,
