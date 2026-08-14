@@ -1,0 +1,25 @@
+canonicalId: mem-lhytVL9b
+sourceId: find-zDyJwmBI
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: high
+  title: "Existence in an object store is asked of head, never of a read: B2
+    answers an absent object with empty content and success, so a read-based
+    check reported a committed result that was never written"
+  status: resolved
+  file: src/tkr_cloud_video/application.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 179b1d16e6a30039c7751b71d6aa15cad2874ad41ac1ee92eb37fba2476e8794
+  snapshotAt: 2026-08-14T22:56:38.856Z
+rationale: Object-store existence must be asked of head, never inferred from a
+  read. B2 answers an absent object with empty content and success, so a
+  read-based check reported a committed result that was never written. This is a
+  property of the storage protocol, not of this codebase, and it silently
+  converts a missing artifact into a passing assurance check wherever the same
+  shortcut is taken.
+who: TuckerTucker
+when: 2026-08-14T22:56:38.856Z
