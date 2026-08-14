@@ -1,0 +1,14 @@
+{
+  "input": {
+    "schema_version": "1",
+    "mode": "text-to-video",
+    "workflow_id": "minimax-h3-t2v",
+    "model_set_id": "minimax-h3-t2v-int8-20260809",
+    "prompt": "integrated_multimodal_description: [Shot 1] Live-action, cinematic, a wide shot frames a snow-covered pine forest at dawn. The camera pushes in with small amplitude at slow speed as low mist drifts between the trees and soft golden light reaches the upper branches.\n\noverall_soundscape: Wind moves steadily through the pine branches. Snow settles from a bough with a soft collapse, and a distant raven calls twice.\n\nnon_diegetic_music: A sparse sustained string pad at slow tempo, joined by a single low piano note, fading gently at the end.",
+    "seed": 7,
+    "width": 1344,
+    "height": 768,
+    "frames": 124,
+    "fps": 24
+  }
+}
