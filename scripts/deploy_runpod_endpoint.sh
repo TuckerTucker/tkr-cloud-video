@@ -13,11 +13,11 @@ set -euo pipefail
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO_ROOT"
 
-IMAGE_DIGEST="sha256:a33a743f9774c8c5689d51e023ad1a43129775bad6ac3efae5773af4ffb5a798"
+IMAGE_DIGEST="sha256:861243d9aaada84cd0501d362c5505476a8d51178fb7a18b19a50e8180bbcc74"
 IMAGE="ghcr.io/tuckertucker/tkr-cloud-video@${IMAGE_DIGEST}"
 
 # Deployed release names the commit whose image is actually running.
-RELEASE_ID="tkr-cloud-video-0.1.0-f6d97e4"
+RELEASE_ID="tkr-cloud-video-0.1.0-8bf1b75"
 
 VAULT="project:tkr-cloud-video"
 
