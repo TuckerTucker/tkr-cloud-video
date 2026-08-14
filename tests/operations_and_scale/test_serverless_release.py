@@ -203,3 +203,40 @@ def test_operations_composition_wires_only_injected_dependencies() -> None:
     assert services.metrics is metrics
     assert services.handler._application is application
     assert services.rollout.rollback_release_id == "release-stable"
+
+
+@pytest.mark.asyncio
+async def test_failure_response_names_what_failed() -> None:
+    """A failed run reports the error's context, not the code alone.
+
+    The code says a node failed; the context says which one. A caller holding
+    only the response cannot read worker output to find out.
+    """
+
+    class FailingApplication:
+        """Application whose submission fails at a named workflow node."""
+
+        async def submit(self, request: object) -> tuple[str, str | None]:
+            """Fail the way the executor does when ComfyUI reports a node error."""
+            raise AppError(
+                "comfy_node_failed",
+                "ComfyUI reported a node execution failure.",
+                context={"resource_id": "104"},
+            )
+
+    handler = RunPodHandler(FailingApplication())
+    response = await handler.handle(
+        {
+            "input": {
+                "mode": "text-to-video",
+                "workflow_id": "workflow-1",
+                "model_set_id": "models-1",
+                "prompt": "Synthetic prompt",
+                "seed": 1,
+            }
+        }
+    )
+
+    assert response.ok is False
+    assert response.error_code == "comfy_node_failed"
+    assert response.error_context == {"resource_id": "104"}
