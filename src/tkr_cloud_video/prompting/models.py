@@ -13,7 +13,7 @@ from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tkr_cloud_video.core.errors import AppError
+from tkr_cloud_video.prompting.errors import PromptCompositionError
 from tkr_cloud_video.prompting.grammar import ABSENT_VALUE, SECTION_ORDER
 
 Mode = Literal["T2VA", "I2VA", "FL2VA", "L2VA", "Ref2VA"]
@@ -23,10 +23,6 @@ REFERENCE_ONLY_SECTIONS: Final[frozenset[str]] = frozenset(
 )
 SPEAKER_PATTERN: Final[str] = r"^S[1-9][0-9]?(,S[1-9][0-9]?)*$"
 LABEL_PATTERN: Final[str] = r"^<(Subject|Picture|Video|Audio) [1-9][0-9]?>$"
-
-
-class PromptCompositionError(AppError):
-    """A prompt payload does not satisfy the section contract of its mode."""
 
 
 class _Frozen(BaseModel):

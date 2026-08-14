@@ -17,17 +17,12 @@ import json
 from dataclasses import dataclass
 from typing import Final
 
-from tkr_cloud_video.core.errors import AppError
+from tkr_cloud_video.prompting.errors import (
+    PromptGrammarDefinitionError,
+    PromptGrammarIntegrityError,
+)
 
 GRAMMAR_REVISION: Final[str] = "h3-2026-08"
-
-
-class PromptGrammarDefinitionError(AppError):
-    """A grammar table violates its own construction invariants."""
-
-
-class PromptGrammarIntegrityError(AppError):
-    """The grammar tables do not match the digest pinned for this revision."""
 
 
 @dataclass(frozen=True, slots=True)

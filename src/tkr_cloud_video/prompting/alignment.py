@@ -6,14 +6,10 @@ line before the core sections. T2VA has no header: it anchors nothing.
 
 from __future__ import annotations
 
-from tkr_cloud_video.core.errors import AppError
+from tkr_cloud_video.prompting.errors import PromptAlignmentError
 from tkr_cloud_video.prompting.models import StructuredPrompt
 
 _OPENING_MARK = 0.0
-
-
-class PromptAlignmentError(AppError):
-    """A keyframe alignment mark cannot be expressed for the requested clip."""
 
 
 def format_mark(seconds: float) -> str:

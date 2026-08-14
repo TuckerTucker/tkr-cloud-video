@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from tkr_cloud_video.prompting.errors import (
+    PromptGrammarDefinitionError,
+    PromptGrammarIntegrityError,
+)
 from tkr_cloud_video.prompting.grammar import (
     CAMERA_AMPLITUDES,
     CAMERA_MOTION_TYPES,
@@ -13,8 +17,6 @@ from tkr_cloud_video.prompting.grammar import (
     MODES,
     SECTION_ORDER,
     VOCABULARIES,
-    PromptGrammarDefinitionError,
-    PromptGrammarIntegrityError,
     Vocabulary,
     grammar_fingerprint,
     verify_grammar_integrity,

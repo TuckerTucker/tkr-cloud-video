@@ -7,13 +7,12 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from tkr_cloud_video.prompting.alignment import (
+from tkr_cloud_video.prompting.alignment import alignment_header, format_mark
+from tkr_cloud_video.prompting.errors import (
     PromptAlignmentError,
-    alignment_header,
-    format_mark,
+    PromptCompositionError,
 )
 from tkr_cloud_video.prompting.models import (
-    PromptCompositionError,
     StructuredPrompt,
     absent_or,
     compose_prompt,
