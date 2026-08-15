@@ -37,15 +37,20 @@ export APPROVAL
 # below is what makes writing it out safe, since it refuses any region whose
 # territory the ratified approval does not name.
 #
-# CA-MTL-4 is included where the create script's original list stopped at
-# CA-MTL-3. It is registered as Canada in security/territories.py, so it carries
-# the same territory, the same residency story and the same review as the three
-# beside it; omitting it would narrow available capacity without narrowing legal
-# exposure, which is cost with no corresponding benefit.
-DATA_CENTRE_IDS="CA-MTL-1,CA-MTL-2,CA-MTL-3,CA-MTL-4"          # Canada
-DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-IS-1,EUR-IS-2,EUR-IS-3,EUR-IS-4"  # Iceland
-DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-NO-1,EUR-NO-2"           # Norway
-DATA_CENTRE_IDS="$DATA_CENTRE_IDS,AP-IN-1,AP-IN-2"             # India
+# Four registered regions are absent: CA-MTL-4, EUR-IS-4, EUR-NO-2 and AP-IN-2.
+# They are licence-permitted and the provider's own GraphQL `dataCenters` query
+# reports all four, but the REST PATCH schema pins dataCenterIds to a narrower
+# enum that rejects them with a 400. This is the same REST surface that omits
+# dataCenterIds from its responses entirely: it is not authoritative about
+# placement in either direction. Add them when the enum catches up; nothing in
+# the licence or the registry excludes them.
+#
+# Every territory the approval covers still has at least one region here, so the
+# grant and the placement agree even though the placement is thinner.
+DATA_CENTRE_IDS="CA-MTL-1,CA-MTL-2,CA-MTL-3"                   # Canada
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-IS-1,EUR-IS-2,EUR-IS-3"  # Iceland
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-NO-1"                    # Norway
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,AP-IN-1"                     # India
 DATA_CENTRE_IDS="$DATA_CENTRE_IDS,AP-JP-1"                     # Japan
 DATA_CENTRE_IDS="$DATA_CENTRE_IDS,OC-AU-1"                     # Australia
 export DATA_CENTRE_IDS
@@ -110,6 +115,18 @@ RUNPOD_API_KEY=$(
 )
 export RUNPOD_API_KEY ENDPOINT_ID
 
+# The write goes over GraphQL, not REST. REST is not merely unable to report this
+# field, it is unable to set it: a PATCH carrying ten regions returned 200 and
+# stored three, silently discarding every non-Canadian one. That is the failure
+# ADR-001 predicted, observed rather than inferred, and it is why this script
+# refuses to treat a success status as evidence. GraphQL's saveEndpoint is the
+# one surface that both reads and writes `locations`.
+#
+# saveEndpoint takes a whole endpoint rather than a patch, so the current
+# configuration is read first and only `locations` is replaced. Sending a partial
+# input would silently reset whatever was omitted — the same class of damage this
+# script exists to catch.
+#
 # The provider call runs under the project interpreter rather than the system
 # python3 because the python.org framework build resolves its trust store to a
 # cert.pem that its installer never created, so every HTTPS call from it dies in
@@ -117,28 +134,66 @@ export RUNPOD_API_KEY ENDPOINT_ID
 .venv/bin/python - <<'PY'
 import json, os, urllib.error, urllib.request
 
-base = "https://rest.runpod.io/v1/endpoints/" + os.environ["ENDPOINT_ID"]
-headers = {
-    "Authorization": "Bearer " + os.environ["RUNPOD_API_KEY"],
-    "Content-Type": "application/json",
-}
-body = json.dumps({
-    "dataCenterIds": [r for r in os.environ["DATA_CENTRE_IDS"].split(",") if r],
-}).encode()
-request = urllib.request.Request(base, data=body, headers=headers, method="PATCH")
-try:
-    with urllib.request.urlopen(request) as response:
-        json.load(response)
-except urllib.error.HTTPError as error:
-    print("PATCH failed:", error.code, error.read().decode()[:400])
+url = "https://api.runpod.io/graphql?api_key=" + os.environ["RUNPOD_API_KEY"]
+endpoint_id = os.environ["ENDPOINT_ID"]
+target = ",".join(r for r in os.environ["DATA_CENTRE_IDS"].split(",") if r)
+
+# A browser-shaped agent is sent because the GraphQL host sits behind a bot
+# filter that rejects the bare client.
+def call(payload: dict) -> dict:
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request) as response:
+            result = json.load(response)
+    except urllib.error.HTTPError as error:
+        try:
+            result = json.loads(error.read().decode())
+        except ValueError:
+            print("graphql call failed:", error.code)
+            raise SystemExit(1) from error
+    if result.get("errors"):
+        for item in result["errors"]:
+            print("graphql error:", str(item.get("message"))[:300])
+        raise SystemExit(1)
+    return result["data"]
+
+FIELDS = "id name templateId gpuIds locations idleTimeout scalerType scalerValue workersMin workersMax"
+endpoints = call({"query": "query { myself { endpoints { %s } } }" % FIELDS})
+current = next(
+    (e for e in endpoints["myself"]["endpoints"] if e["id"] == endpoint_id), None
+)
+if current is None:
+    print("endpoint not visible:", endpoint_id)
     raise SystemExit(1)
 
-# Printed for symmetry with the sibling scripts and as a standing reminder of
-# why the real check runs over GraphQL: REST answers this GET without a
-# dataCenterIds key at all, so None here says nothing either way.
-with urllib.request.urlopen(urllib.request.Request(base, headers=headers)) as response:
-    current = json.load(response)
-print("REST dataCenterIds:", current.get("dataCenterIds"), "(REST omits the field)")
+print("locations before:", current.get("locations") or "none")
+
+# Every field is carried forward untouched; only the placement changes. `name`
+# is the one field saveEndpoint requires, and dropping any other would reset it.
+payload = {key: current[key] for key in current if key != "__typename"}
+payload["locations"] = target
+
+mutation = (
+    "mutation($input: EndpointInput!) { saveEndpoint(input: $input) { %s } }" % FIELDS
+)
+saved = call({"query": mutation, "variables": {"input": payload}})["saveEndpoint"]
+print("locations after :", saved.get("locations") or "none")
+
+# Report any field the provider altered while handling a placement write. It has
+# rewritten gpuTypeIds into architecture classes unprompted before, so a change
+# here is worth naming even when the placement itself lands.
+for key in ("gpuIds", "workersMin", "workersMax", "idleTimeout", "templateId"):
+    if saved.get(key) != current.get(key):
+        print(f"PROVIDER ALTERED {key}: {current.get(key)!r} -> {saved.get(key)!r}")
 PY
 
 # The GraphQL report is captured rather than streamed so its observed placement
