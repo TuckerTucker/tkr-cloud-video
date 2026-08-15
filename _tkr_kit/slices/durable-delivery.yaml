@@ -288,6 +288,18 @@ slices:
     title: Retention policy loader and prompt-evidence class
     layer: domain
     status: in_progress
+    commits:
+      - hash: ce93633
+        relation: implements
+        message: "feat(delivery): load the declared retention policy and cover prompt
+          evidence"
+        author: TuckerTucker <34353433+TuckerTucker@users.noreply.github.com>
+        files:
+          - config/lifecycle.json
+          - config/lifecycle.yaml
+          - src/tkr_cloud_video/delivery/lifecycle.py
+          - tests/durable_delivery/test_enforced_retention.py
+          - tests/durable_delivery/test_private_result_access_and_retention.py
   - number: 12
     feature: enforced-retention
     delivers:
