@@ -142,15 +142,19 @@ echo "template: ${TEMPLATE_ID}"
 # only option. Widening the grant is a change to the approval record, and the
 # gate after this create is what proves the two still agree.
 #
-# The regions below are every registered region of those territories, grouped by
-# territory; security/territories.py is the registry that maps each one, and an
-# unregistered region fails the gate rather than passing unnoticed. CA-MTL-4
-# joins the three Montreal regions already used because it is the same
-# territory, the same residency story and the same review as its neighbours.
-DATA_CENTRE_IDS="CA-MTL-1,CA-MTL-2,CA-MTL-3,CA-MTL-4"          # Canada
-DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-IS-1,EUR-IS-2,EUR-IS-3,EUR-IS-4"  # Iceland
-DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-NO-1,EUR-NO-2"           # Norway
-DATA_CENTRE_IDS="$DATA_CENTRE_IDS,AP-IN-1,AP-IN-2"             # India
+# The regions below are the registered regions of those territories that the
+# provider's REST schema will actually accept; security/territories.py is the
+# registry that maps each one, and an unregistered region fails the gate rather
+# than passing unnoticed.
+#
+# CA-MTL-4, EUR-IS-4, EUR-NO-2 and AP-IN-2 are licence-permitted and reported by
+# the provider's GraphQL `dataCenters` query, but the REST enum for this field
+# rejects them with a 400, so they cannot be sent. Keep this list in step with
+# scripts/set_endpoint_datacenters.sh, which carries the same constraint.
+DATA_CENTRE_IDS="CA-MTL-1,CA-MTL-2,CA-MTL-3"                   # Canada
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-IS-1,EUR-IS-2,EUR-IS-3"  # Iceland
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,EUR-NO-1"                    # Norway
+DATA_CENTRE_IDS="$DATA_CENTRE_IDS,AP-IN-1"                     # India
 DATA_CENTRE_IDS="$DATA_CENTRE_IDS,AP-JP-1"                     # Japan
 DATA_CENTRE_IDS="$DATA_CENTRE_IDS,OC-AU-1"                     # Australia
 export DATA_CENTRE_IDS
