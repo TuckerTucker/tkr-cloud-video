@@ -400,8 +400,10 @@ slices:
       - serve-principal-access-and-erasure-request
     files:
       - src/tkr_cloud_video/delivery/subject_requests.py
+      - tests/durable_delivery/test_subject_requests.py
     paths:
       - src/tkr_cloud_video/delivery/subject_requests.py
+      - tests/durable_delivery/test_subject_requests.py
     data_lifecycle:
       kind: bounded
       detail: Erasure on request runs ahead of scheduled expiry and must reach all
@@ -411,7 +413,7 @@ slices:
         holds.
     title: Principal access and erasure API
     layer: api
-    status: planned
+    status: in_progress
   - number: 15
     feature: enforced-retention
     delivers:

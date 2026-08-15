@@ -2594,3 +2594,209 @@ slice_specs:
         delegates all policy to typed Python.
       testing: pytest parametrization over the class table; the store and clock are
         faked so expiry is exercised without waiting.
+  - name: enforced-retention-14-spec
+    title: Principal access and erasure API Specification
+    status: planned
+    format: full
+    capability: durable-delivery
+    feature: enforced-retention
+    slice: 14
+    source_story_ids:
+      - durable-delivery/story/serve-principal-access-and-erasure-request
+    purpose: Give a principal a way to learn what is held about one of their
+      generations and to have it erased ahead of its scheduled expiry. The job
+      identity is a one-way SHA-256 over principal and request hash, so records
+      cannot be enumerated from a principal alone; the principal presents the
+      request, the identity is recomputed, and the answer is scoped to that
+      record. This keeps the property that a job id discloses no principal, at
+      the cost of answering 'do you hold this' rather than 'tell me everything
+      you hold'.
+    layer_assignment:
+      - component: SubjectRequestService
+        layer: api
+        responsibility: Authorise a principal against a recomputed job identity, then
+          describe or erase that record
+      - component: ResultAccessPolicy
+        layer: domain
+        responsibility: Reused unchanged so an unauthorised subject request is
+          indistinguishable from an absent record
+      - component: RetentionStore
+        layer: integration
+        responsibility: Reused from slice 12 as the only delete-capable port
+    interfaces:
+      - name: SubjectRequestService.describe
+        kind: api_service
+        signature: "async def describe(self, principal_id: str, request_hash: str) ->
+          SubjectRecord | None"
+        async: true
+        ownership: "Composed by the capability composition root; returns None for both
+          unauthorised and absent. Amended during implementation to drop the
+          evaluated_at parameter this spec first carried: the expiry reported is
+          absolute, derived from when the record was written plus its class
+          period, so it does not depend on when the question is asked and an
+          unused reference instant would have been dead weight in a public
+          signature."
+      - name: SubjectRequestService.erase
+        kind: api_service
+        signature: "async def erase(self, principal_id: str, request_hash: str,
+          input_keys: tuple[str, ...] = ()) -> ErasureReceipt | None"
+        async: true
+        ownership: Erasure reaches output objects and the supplied input references
+          together, or reports which it could not reach.
+      - name: SubjectRequestError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Never carries a request hash or prompt; a request hash is derived
+          from caller content.
+    data_models:
+      - name: SubjectRecord
+        shape: frozen dataclass
+        fields: "job_id: str; attempt_id: str; held_fields: tuple[str, ...]; expires_at:
+          datetime"
+        validation: held_fields names the personal fields held for this record, so the
+          answer states what is held rather than only that something is
+      - name: ErasureReceipt
+        shape: frozen dataclass
+        fields: "job_id: str; erased: tuple[str, ...]; unreachable: tuple[str, ...]"
+        validation: complete is a derived property rather than a stored field, so a
+          receipt cannot be constructed claiming completeness while naming
+          unreachable objects
+    behavior:
+      - story_id: durable-delivery/story/serve-principal-access-and-erasure-request
+        given: an authorised principal presenting a request they submitted
+        when: they ask what is held
+        then: the held fields and the scheduled expiry for that record are returned
+      - story_id: durable-delivery/story/serve-principal-access-and-erasure-request
+        given: a caller presenting another principal's request
+        when: they ask what is held
+        then: the answer is indistinguishable from a record that does not exist
+      - story_id: durable-delivery/story/serve-principal-access-and-erasure-request
+        given: an authorised erasure request
+        when: it completes
+        then: the output objects carrying video and prompt evidence and the supplied
+          input references are absent, and the receipt reports complete
+      - story_id: durable-delivery/story/serve-principal-access-and-erasure-request
+        given: an erasure where one object cannot be removed
+        when: it completes
+        then: the receipt names it as unreachable and reports complete as false
+    error_handling:
+      - condition: unauthorised_or_absent
+        error: none
+        recovery: Return None. Refusal and absence share one outcome so a subject
+          request cannot be used to probe whether a record exists
+        retryable: false
+      - condition: store_unavailable_during_describe
+        error: SubjectRequestError
+        recovery: Fail rather than reporting an empty holding, because reporting nothing
+          held is an answer a principal would act on
+        retryable: true
+      - condition: partial_erasure
+        error: none
+        recovery: Return a receipt naming the unreachable objects with complete false;
+          never raise, because what was erased must still be reported
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/12
+      external:
+        - Python standard library
+        - structlog
+      inversion_of_control: Authorizer, retention store and clock are Protocol
+        dependencies supplied by the capability composition root.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/12
+      provides:
+        - A principal-facing access answer for one record
+        - On-request erasure ahead of scheduled expiry
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - durable-delivery.enforced-retention.14.subject_access
+        - durable-delivery.enforced-retention.14.subject_erasure
+      required_fields:
+        - event
+        - outcome
+        - erased_count
+        - unreachable_count
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - principal identifiers
+        - request hashes
+        - object keys
+        - full prompts
+        - user-supplied filenames
+      logging_contract: Use structlog JSON. A subject request is itself evidence about
+        a person, so neither the principal nor the request hash enters an event;
+        counts and outcome only.
+    security_constraints:
+      - Refusal and absence are one outcome, matching the non-enumeration
+        property the result-access path already holds.
+      - The request hash is recomputed from caller-presented content and never
+        stored, so no new principal-to-job linkage is created.
+      - Erasure uses the control-plane delete capability and is never reachable
+        from a worker process.
+      - A partial erasure reports itself as partial rather than raising, so the
+        principal learns what survived.
+    test_scenarios:
+      - id: S14-T01
+        level: contract
+        given: an authorised principal presenting their own request
+        when: describe runs
+        then: held fields and scheduled expiry are returned for that record
+      - id: S14-T02
+        level: security
+        given: a caller presenting a request belonging to another principal
+        when: describe runs
+        then: the result is None and matches the absent case exactly
+      - id: S14-T03
+        level: contract
+        given: an authorised erasure over a committed attempt and its input reference
+        when: erase runs
+        then: output objects and inputs are absent and the receipt reports complete
+      - id: S14-T04
+        level: failure_injection
+        given: a store refusing one delete
+        when: erase runs
+        then: the receipt names the unreachable object, reports complete false, and does
+          not raise
+      - id: S14-T05
+        level: security
+        given: an unavailable store
+        when: describe runs
+        then: it raises rather than reporting that nothing is held
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Erasure is proven by absence from the store, not by a receipt field
+        alone.
+      - Non-enumeration is asserted by comparing the unauthorised and absent
+        outcomes directly.
+      - No principal identifier, request hash or object key appears in any event.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: "Erasure runs ahead of scheduled expiry and reaches output objects and
+        supplied input references together. Prompt text is inside the committed
+        generation object, so it is erased with the attempt rather than
+        separately. No record of the request itself is retained: the recomputed
+        identity is derived and discarded."
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; counts and outcome, never subject identifiers.
+      bash: n/a
+      testing: pytest with an in-memory retention store; the unauthorised and absent
+        cases are asserted equal rather than merely both falsy.

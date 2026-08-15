@@ -145,6 +145,45 @@ def test_config_path_escaping_the_root_is_rejected(tmp_path: Path) -> None:
     assert caught.value.code == "retention_config_path_rejected"
 
 
+def test_composition_without_a_retention_store_cannot_delete() -> None:
+    """Slice 15: a process that must not delete composes without the means.
+
+    The delivery and worker compositions get no retention store, so expiry and
+    erasure are structurally absent rather than merely unused.
+    """
+    from tests.durable_delivery.test_subject_requests import (
+        Authorizer,
+        held_store,
+    )
+    from tests.durable_delivery.test_verified_result_commit import (
+        MemoryResultStore,
+    )
+    from tkr_cloud_video.durable_delivery.composition import (
+        DeliveryDependencies,
+        compose_durable_delivery,
+    )
+
+    loaded = LifecyclePolicyLoader().load(MemoryConfigSource(document()))
+    base = {
+        "store": MemoryResultStore(),
+        "authorizer": Authorizer(True),
+        "repository": None,
+        "signer": None,
+        "clock": None,
+        "signed_link_ttl_seconds": 300,
+        "lifecycle_policy": loaded,
+    }
+    without = compose_durable_delivery(DeliveryDependencies(**base))  # type: ignore[arg-type]
+    assert not without.can_delete
+    assert without.reconciler is None and without.subject_requests is None
+
+    with_store = compose_durable_delivery(
+        DeliveryDependencies(**base, retention_store=held_store())  # type: ignore[arg-type]
+    )
+    assert with_store.can_delete
+    assert with_store.declared_rules
+
+
 def test_duplicate_class_is_rejected_at_construction() -> None:
     """A policy built in code cannot declare one class twice."""
     rules = tuple(RetentionRule(item, 7) for item in RetainedClass)
