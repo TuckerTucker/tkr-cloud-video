@@ -2086,3 +2086,212 @@ slice_specs:
         to typed Python code.
       testing: pytest parametrization for scenario tables; fakes implement the same
         Protocols as production adapters.
+  - name: enforced-retention-11-spec
+    title: Retention policy loader and prompt-evidence class Specification
+    status: approved
+    format: full
+    capability: durable-delivery
+    feature: enforced-retention
+    slice: 11
+    source_story_ids:
+      - durable-delivery/story/provision-and-verify-bucket-lifecycle-rules
+      - durable-delivery/story/retain-and-erase-prompt-evidence
+    purpose: Make the declared retention policy loadable from configuration and
+      extend it to cover prompt evidence, so that one versioned policy is the
+      single source for every enforcing mechanism downstream. The predecessor's
+      config/lifecycle.yaml was read by no code and LifecyclePolicy was only
+      ever constructed in tests. The document is JSON rather than YAML because
+      every other runtime config and schema in this project is JSON and pyyaml
+      is a dev-only dependency; the declared periods are unchanged.
+    layer_assignment:
+      - component: LifecyclePolicyLoader
+        layer: domain
+        responsibility: Parse config/lifecycle.json into a validated versioned
+          LifecyclePolicy, failing closed on a missing or unknown class
+      - component: RetainedClass
+        layer: domain
+        responsibility: Enumerate every retained class including prompt evidence,
+          superseding the object-store-only ObjectClass enum
+      - component: FileConfigSource
+        layer: domain
+        responsibility: Provide the raw policy document from a root-confined path,
+          injected as a ConfigSource Protocol
+    interfaces:
+      - name: LifecyclePolicyLoader
+        kind: domain_service
+        signature: "def load(self, source: ConfigSource) -> LifecyclePolicy"
+        async: false
+        ownership: The capability composition root constructs the implementation and
+          injects the configuration source.
+      - name: LifecyclePolicy.period_for
+        kind: domain_method
+        signature: "def period_for(self, retained_class: RetainedClass) -> timedelta"
+        async: false
+        ownership: Total over RetainedClass by construction; the completeness invariant
+          is enforced in __post_init__.
+      - name: RetentionPolicyError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries the offending class name and policy version only; never
+          configuration file contents.
+    data_models:
+      - name: RetainedClass
+        shape: StrEnum
+        fields: input, failed-attempt, scratch, deliverable, hidden-version, multipart,
+          prompt-evidence
+        validation: prompt-evidence is added because job.prompt is a request field
+          committed to job evidence, not an object under a lifecycle-managed
+          prefix; no prefix rule can reach it
+      - name: RetentionRule
+        shape: frozen dataclass
+        fields: "retained_class: RetainedClass; retain_days: int"
+        validation: 1 <= retain_days <= 3650, preserved from the existing rule
+      - name: LifecyclePolicy
+        shape: frozen dataclass
+        fields: "version: str; rules: tuple[RetentionRule, ...]"
+        validation: exactly one rule per RetainedClass, no duplicates; a class added to
+          the enum without a configured period is a construction failure, not a
+          silent default
+    behavior:
+      - story_id: durable-delivery/story/provision-and-verify-bucket-lifecycle-rules
+        given: config/lifecycle.json declares a period for every retained class
+        when: the loader runs
+        then: a LifecyclePolicy carrying the declared version and every period is
+          returned
+      - story_id: durable-delivery/story/provision-and-verify-bucket-lifecycle-rules
+        given: config/lifecycle.json omits a class or names one that does not exist
+        when: the loader runs
+        then: construction fails with RetentionPolicyError naming the class, and no
+          partial policy is returned
+      - story_id: durable-delivery/story/retain-and-erase-prompt-evidence
+        given: a policy loaded from configuration
+        when: period_for is called with prompt-evidence
+        then: a declared period is returned rather than a lookup failure
+    error_handling:
+      - condition: config_missing_or_unreadable
+        error: RetentionPolicyError
+        recovery: Fail closed; no default policy is synthesized, because a synthesized
+          period would enforce something nobody approved
+        retryable: false
+      - condition: class_missing_or_unknown
+        error: RetentionPolicyError
+        recovery: Name the offending class and refuse construction
+        retryable: false
+      - condition: period_out_of_range
+        error: RetentionPolicyError
+        recovery: Reject at rule construction with the declared bound
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: The configuration source is a Protocol dependency supplied
+        by the capability composition root; tests use an in-memory source rather
+        than touching the filesystem.
+    integration_points:
+      consumes: []
+      provides:
+        - A LifecyclePolicy loaded from config/lifecycle.json
+        - A RetainedClass enum covering prompt evidence
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LIFECYCLE_CONFIG_PATH
+        type: string
+        default: config/lifecycle.json
+        secret: false
+        validation: existing readable path; rejected if it escapes the project root
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - durable-delivery.enforced-retention.11.policy_loaded
+        - durable-delivery.enforced-retention.11.policy_rejected
+      required_fields:
+        - event
+        - policy_version
+        - retained_class_count
+        - outcome
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - configuration file contents
+        - full prompts
+        - user-supplied filenames
+      logging_contract: "Use structlog JSON. These events are emitted by the composing
+        adapter in slice 15, not by the loader itself: the delivery domain
+        modules are pure and side-effect free by convention, and putting a
+        logger inside the policy object would be the only exception in the
+        package. The loader raises typed errors carrying the offending class
+        name; the boundary that catches them owns the event."
+    security_constraints:
+      - Validate at the boundary and pass typed values inward; the configuration
+        path is checked before read and never rebuilt from unchecked strings.
+      - "Fail closed on an incomplete policy: a missing period must never
+        degrade to an unbounded default."
+      - The policy object carries no credential and performs no I/O of its own.
+    test_scenarios:
+      - id: S11-T01
+        level: contract
+        given: config/lifecycle.json declares a period for every retained class
+        when: the loader runs
+        then: a LifecyclePolicy carrying the declared version and every period is
+          returned
+      - id: S11-T02
+        level: contract
+        given: config/lifecycle.json omits a class or names one that does not exist
+        when: the loader runs
+        then: construction fails with RetentionPolicyError naming the class, and no
+          partial policy is returned
+      - id: S11-T03
+        level: contract
+        given: a policy loaded from configuration
+        when: period_for is called with prompt-evidence
+        then: a declared period is returned rather than a lookup failure
+      - id: S11-T04
+        level: regression
+        given: the shipped config/lifecycle.json
+        when: the loader runs against it unmodified
+        then: it loads, which is the assertion that would have failed every day the file
+          was read by nothing
+      - id: S11-TF
+        level: failure_injection
+        given: each declared error condition is injected at the configuration source
+          boundary
+        when: the loader runs
+        then: the recovery and retryability contract is observed and no partial policy
+          escapes
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - config/lifecycle.json is loaded by production code, not only by fixtures.
+      - Typed errors carry the offending class name so the composing boundary in
+        slice 15 can emit the declared events without re-deriving cause.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Every retained class, including prompt evidence, carries an explicit
+        period in one versioned policy loaded from configuration. This slice
+        declares periods and enforces none; slices 12 and 13 carry the enforcing
+        mechanisms, and until they land the policy remains a declaration.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, and explicit exception wrapping
+        with domain context.
+      logging: structlog only for application events; configuration contents are never
+        serialized into an event.
+      bash: Any entrypoint or helper remains Bash 3.2 compatible and delegates policy
+        to typed Python code.
+      testing: pytest parametrization for the class-completeness table; the
+        configuration source is faked rather than read from disk except in
+        S11-T04.

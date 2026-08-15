@@ -52,3 +52,57 @@ features:
       - Permanent public URLs or public buckets.
       - Deleting retained deliverables because an unrelated scratch policy
         matched.
+  - name: enforced-retention
+    status: planned
+    display_name: Enforced Retention and Erasure
+    user_story: As a data subject and as the operator accountable for their
+      information, I want prompts, uploaded reference images and generated video
+      to be deleted automatically when their retention period expires, and I
+      want a way to ask what is held and have it erased on request.
+    description: "Sibling to private-result-access-and-retention, which is terminal
+      `done` and cannot be reopened. That feature declared a retention policy
+      and shipped a pure evaluator
+      (`delivery/lifecycle.py::LifecyclePolicy.expired`) plus dated fixtures,
+      which satisfied its acceptance criterion that 'lifecycle fixtures prove
+      each object class expires or remains according to policy'. Fixtures
+      proving a predicate are not enforcement: `config/lifecycle.yaml` is read
+      by no code, no Backblaze lifecycle rule is provisioned anywhere in `src/`
+      or `scripts/`, and `LifecyclePolicy` is threaded through
+      `compose_durable_delivery` as an unused field. Nothing deletes anything.
+      This feature carries the enforcement, the prompt-evidence class the
+      original object-class enum never had, and the access/erasure path. The
+      fragmentation is a consequence of the terminal-done rule, not of
+      decomposition."
+    acceptance_criteria:
+      - Bucket lifecycle rules matching config/lifecycle.yaml are provisioned
+        against the real bucket and their presence is verified, not assumed.
+      - An expired input object, failed attempt, scratch output, hidden version
+        and abandoned multipart upload are observably absent after their period
+        elapses.
+      - A committed deliverable is observably present until its period elapses
+        and absent after.
+      - job.prompt has a declared retention period and an enforcing mechanism,
+        and is absent from job evidence after it elapses.
+      - A principal can obtain what is held about them and request its erasure,
+        and the erasure is observable across prompt, input and output.
+      - The lifecycle policy version in effect on the bucket is reported
+        alongside the version in config, and a divergence is an actionable
+        failure.
+    scope_in:
+      - Load config/lifecycle.yaml and provision prefix/object-class lifecycle
+        rules against Backblaze B2.
+      - Verify provisioned rules against the declared policy and fail loudly on
+        drift.
+      - Extend retention to job.prompt, which is a request field committed to
+        job evidence rather than an object-store object and which no existing
+        ObjectClass covers.
+      - A principal-facing access and erasure path resolving against
+        job.principal_id.
+    scope_out:
+      - Changing the declared retention periods themselves — the periods in
+        config/lifecycle.yaml are the approved policy and this feature enforces
+        them rather than revising them.
+      - Cross-region replication or archival tiers.
+      - Deleting immutable release evidence (digests, manifest bindings,
+        provenance), which is a separate retention obligation from personal
+        information.

@@ -201,3 +201,123 @@ stories:
       - durable-delivery/slice/8
       - durable-delivery/slice/9
       - durable-delivery/slice/10
+  - name: provision-and-verify-bucket-lifecycle-rules
+    status: planned
+    display_name: Provision and verify bucket lifecycle rules
+    feature: enforced-retention
+    actor: Platform operator
+    intent: have the declared retention periods actually applied to the bucket, and
+      know immediately when what is declared and what is in force diverge
+    preconditions:
+      - config/lifecycle.yaml declares a period for every object class.
+      - Objects are written under prefixes that distinguish input,
+        failed-attempt, scratch, deliverable, hidden-version and multipart
+        classes.
+      - A credential with bucket-configuration capability is available and
+        scoped to the one bucket.
+    trigger_action: Lifecycle provisioning runs, or a drift check runs
+    steps:
+      - actor: Provisioner
+        action: loads config/lifecycle.yaml and maps each object class to a prefix rule
+        system_response: the declared policy version and the rule set it implies are
+          reported before any write
+      - actor: Provisioner
+        action: applies the rule set to the bucket
+        system_response: the bucket reports the rules now in force
+      - actor: Drift check
+        action: reads the rules in force and compares them to the declared policy
+        system_response: an exact match passes; any divergence fails loudly and names
+          the diverging class
+    acceptance_criteria:
+      - given: config/lifecycle.yaml declares input at 7 days
+        when: provisioning runs against the bucket
+        then: the bucket carries a rule deleting input-prefixed objects at 7 days
+      - given: a rule is removed or altered on the bucket out of band
+        when: the drift check runs
+        then: it fails and names the class whose in-force rule no longer matches the
+          declaration
+      - given: an input object older than its period
+        when: lifecycle processing has run
+        then: the object is absent and committed deliverables under their period are
+          untouched
+  - name: retain-and-erase-prompt-evidence
+    status: planned
+    display_name: Retain and erase prompt evidence
+    feature: enforced-retention
+    actor: Platform operator
+    intent: have caller-supplied prompt text expire on a declared period like every
+      other personal field, rather than persist indefinitely because it is not
+      an object-store object
+    preconditions:
+      - job.prompt and job.structured_prompt are request fields committed to job
+        evidence, not objects under a lifecycle-managed prefix.
+      - The prompt digest is a separate, non-reversible identity and is not
+        itself personal information.
+      - No existing ObjectClass covers prompt evidence.
+    trigger_action: Prompt-evidence retention processing runs
+    steps:
+      - actor: Operator
+        action: declares a retention period for prompt evidence alongside the object
+          classes
+        system_response: the period is versioned in the same policy that governs object classes
+      - actor: Retention processor
+        action: finds job evidence whose prompt exceeds the period
+        system_response: prompt text is erased while the prompt digest, generation
+          parameters and provenance evidence survive
+      - actor: Operator
+        action: audits a job whose prompt has expired
+        system_response: the record is intact and reproducible by digest, and the prompt
+          text is gone
+    acceptance_criteria:
+      - given: a job whose prompt exceeds its retention period
+        when: retention processing runs
+        then: job.prompt and job.structured_prompt are absent and the prompt digest
+          remains
+      - given: a job inside its retention period
+        when: retention processing runs
+        then: the prompt is untouched
+      - given: a prompt has been erased
+        when: the job record is read
+        then: the erasure is explicit rather than indistinguishable from a job that
+          never carried a prompt
+  - name: serve-principal-access-and-erasure-request
+    status: planned
+    display_name: Serve a principal access and erasure request
+    feature: enforced-retention
+    actor: Calling principal
+    intent: be told what personal information is held about me and have it erased on
+      request, ahead of its scheduled expiry
+    preconditions:
+      - job.principal_id is the field a request resolves against and is held in
+        the clear.
+      - The job identity is a SHA-256 over principal and request digest, so
+        records are not locatable from the digest alone.
+      - Erasure must reach prompt, input reference and output video together to
+        be meaningful.
+    trigger_action: A principal submits an access or erasure request
+    steps:
+      - actor: Principal
+        action: submits a request naming their principal id
+        system_response: the requester is authorised as that principal before any record
+          is disclosed
+      - actor: Access path
+        action: resolves every job held for that principal
+        system_response: the existence, use and disclosure of their information is
+          reported, including which fields are held and their scheduled expiry
+      - actor: Principal
+        action: requests erasure
+        system_response: prompt text, input objects and output objects for those jobs
+          are erased, and immutable release evidence is retained and identified
+          as such
+    acceptance_criteria:
+      - given: an authorised principal with committed jobs
+        when: they submit an access request
+        then: they receive the held fields and scheduled expiry for every job of theirs
+          and nothing belonging to another principal
+      - given: an unauthorised caller naming another principal's id
+        when: they submit an access request
+        then: the request is refused without disclosing whether records exist
+      - given: an authorised erasure request
+        when: it completes
+        then: prompt, input reference and output video are absent for those jobs and the
+          erasure is recorded
