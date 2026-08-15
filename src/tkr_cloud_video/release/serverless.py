@@ -151,12 +151,17 @@ def compose_serverless_deployment(
         )
     )
     result_store = ResultRcloneStore(output_client)
+    # One boundary, shared by the handler's preflight and the execution path
+    # that binds the wire text. Composing it twice would let a future caller
+    # narrow one check set without the other, so the preflight could accept a
+    # prompt the binder then refuses - after the cold start it exists to avoid.
+    prompts = compose_prompt_authoring()
     application = CloudVideoApplication(
         jobs,
         worker.startup,
         result_store,
         clock,
-        compose_prompt_authoring(),
+        prompts,
         principal_id=settings.principal_id,
         workspace_root=settings.workspace_root,
         output_root=settings.output_root,
@@ -170,6 +175,6 @@ def compose_serverless_deployment(
     )
     return ServerlessDeployment(
         worker,
-        RunPodHandler(application),
+        RunPodHandler(application, prompts),
         diagnostic_publisher,
     )

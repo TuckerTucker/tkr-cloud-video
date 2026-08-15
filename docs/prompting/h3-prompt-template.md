@@ -51,7 +51,9 @@ so a span that would act as structure is rejected instead of rewritten.
 
 ## Slot vocabularies
 
-Every value below is a closed set. Anything outside it is rejected before GPU work.
+Every value below is a closed set. Anything outside it is rejected at the request
+boundary, before the worker starts — a defect here costs a round trip, never a
+cold start.
 
 ### Visual style — `shots[0].style`, opening shot only
 
@@ -154,6 +156,26 @@ is a defect; the token is how absence is stated.
 A rejection names the **field path and the rule**, never the offending text —
 read your own payload for that. A `PromptValidationError` carries every defect at
 once, so one round trip is enough to fix them all.
+
+Over Serverless that arrives as a failed response with the error's own code —
+`prompt_structurally_invalid`, `section_set_mismatch_for_mode` — rather than a
+generic `invalid_request`. `error_context` names the first defect's field and
+rule; `defects` carries the whole list:
+
+```json
+{
+  "ok": false,
+  "error_code": "prompt_structurally_invalid",
+  "error_context": { "rule": "camera_motion_unknown", "field": "shots.0.camera.motion" },
+  "defects": [
+    { "rule": "camera_motion_unknown", "field": "shots.0.camera.motion" },
+    { "rule": "style_unknown", "field": "shots.0.style" }
+  ]
+}
+```
+
+The prompt is composed during request validation, so this response comes back
+without the worker being started. A defect costs a queue wait, not a cold start.
 
 An acceptance reports which checks ran **and which were skipped** for your mode,
 with the reason. A base-mode pass names the five full-reference checks it did not

@@ -1,0 +1,23 @@
+canonicalId: mem-HQSiepD2
+sourceId: find-YQkGbVF_
+kind: finding
+disposition: kept
+body:
+  type: observability
+  severity: medium
+  title: "A failure must name its subject: the failing node, exception class and
+    message existed at every layer and were dropped three times, costing a
+    build-and-deploy cycle each to recover"
+  status: resolved
+  file: src/tkr_cloud_video/adapters/comfy.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 713fd5f937881b22a76434949eb48912268a86118a893f64ed113e808aa16e9b
+  snapshotAt: 2026-08-15T15:55:55.255Z
+rationale: A failure must name its subject. The failing node, exception class
+  and message existed at every layer and were dropped three times; each recovery
+  cost a build-and-deploy cycle. Error plumbing that widens a message into a
+  category is a debugging tax paid on every future incident.
+who: tucker
+when: 2026-08-15T15:55:55.255Z

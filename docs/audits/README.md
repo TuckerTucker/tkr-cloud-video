@@ -44,3 +44,5 @@ which is the failure mode `2026-07-21-silent-failure-modes.md` exists to documen
 
 - [`2026-07-21-silent-failure-modes.md`](2026-07-21-silent-failure-modes.md) — code paths whose
   "did nothing" outcome is encoded identically to "nothing to do". 51 findings, 5 detection checks.
+- [`2026-08-15-generation-latency.md`](2026-08-15-generation-latency.md) — where a generation's
+  wall clock goes, and why the split is inferred rather than measured. 13 findings, 1 experiment.

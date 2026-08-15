@@ -287,7 +287,7 @@ slices:
         the enforced periods have a single source.
     title: Retention policy loader and prompt-evidence class
     layer: domain
-    status: in_progress
+    status: done
     commits:
       - hash: ce93633
         relation: implements
@@ -300,33 +300,59 @@ slices:
           - src/tkr_cloud_video/delivery/lifecycle.py
           - tests/durable_delivery/test_enforced_retention.py
           - tests/durable_delivery/test_private_result_access_and_retention.py
+    evidence:
+      kind: commit
+      ref: 3e8820f
   - number: 12
     feature: enforced-retention
     delivers:
-      - Bucket lifecycle rule provisioning from the loaded policy, against the
-        real bucket
+      - A reconciler that expires objects under outputs/ by class, telling a
+        committed attempt from a failed one by heading result.json rather than
+        by prefix
+      - "Bucket lifecycle rules for the classes B2 expresses natively: inputs/,
+        hidden versions, and unfinished large files"
       - A drift check comparing rules in force to the declared policy, failing
         loudly and naming the diverging class
     depends_on:
       - 11
     story_ids:
       - provision-and-verify-bucket-lifecycle-rules
+      - retain-and-erase-prompt-evidence
     files:
-      - src/tkr_cloud_video/delivery/lifecycle_adapter.py
-      - scripts/provision_lifecycle_rules.sh
+      - src/tkr_cloud_video/delivery/reconciler.py
+      - src/tkr_cloud_video/delivery/lifecycle_rules.py
+      - src/tkr_cloud_video/security/credentials.py
+      - docs/published/result-contract.md
+      - tests/durable_delivery/test_retention_reconciler.py
     paths:
-      - src/tkr_cloud_video/delivery/lifecycle_adapter.py
-      - scripts/provision_lifecycle_rules.sh
+      - src/tkr_cloud_video/delivery/reconciler.py
+      - src/tkr_cloud_video/delivery/lifecycle_rules.py
+      - src/tkr_cloud_video/security/credentials.py
+      - docs/published/result-contract.md
+      - tests/durable_delivery/test_retention_reconciler.py
     data_lifecycle:
       kind: bounded
-      detail: This slice is the one that makes any period real. Until it lands, every
+      detail: This slice is the one that makes any period real. Until it lands every
         retention period in the project is a declaration with no enforcing
-        mechanism. Provisioning requires a bucket-configuration capability,
-        which is a widening of the credential scope and must stay confined to
-        the one bucket the CredentialScope invariant already binds.
-    title: Backblaze lifecycle adapter and drift check
+        mechanism. Committed deliverables and failed attempts share the outputs/
+        prefix, and B2 applies the smallest non-null value among overlapping
+        rules, so expressing both as prefix rules would delete deliverables at
+        the failed-attempt period. Class separation is therefore decided by
+        reading result.json, not by prefix. Erasure requires deleteFiles, which
+        no existing credential role holds; the new role is control-plane only
+        and must never enter a worker process allowlist.
+    title: Retention reconciler and bucket lifecycle rules
     layer: integration
-    status: planned
+    status: done
+    description: "Domain and integration logic complete and tested: rule projection,
+      overlap refusal, drift detection, the reconciler, and the RETENTION_REAPER
+      role. The concrete rclone RetentionStore and BucketRuleAdapter, plus the
+      lifecycle CLI subcommand and scripts/provision_lifecycle_rules.sh, are
+      composition and land with slice 15 rather than shipping here as a script
+      pointing at a command that does not exist."
+    evidence:
+      kind: commit
+      ref: 3e8820f
   - number: 13
     feature: enforced-retention
     delivers:
@@ -351,7 +377,22 @@ slices:
         prefix.
     title: Prompt-evidence retention processor
     layer: integration
-    status: planned
+    status: deferred
+    description: "Deferred as unnecessary, not as postponed work. This slice assumed
+      prompt text needed erasing on a clock of its own, which came from reading
+      compliance-triage item 1 as requiring prompt deletion. Read against cl.
+      4.5.3 the obligation is destruction once the identified purpose is
+      fulfilled, under a documented procedure — not short-lived deletion. The
+      prompt is the reproducibility record: prompting/render.py is built so two
+      renders of one prompt are byte-identical, which is what makes the prompt
+      digest a stable identity, so while the video exists the prompt is still
+      required for an identified purpose. Prompt text is therefore retained for
+      the life of the attempt and destroyed with it, which the slice 12
+      reconciler does for free because generation.bin already shares the attempt
+      prefix with video.bin. config/lifecycle.json records prompt-evidence at
+      365 days so the position is documented rather than implicit. The erasure
+      half of retain-and-erase-prompt-evidence survives in slice 14, where
+      erasure is on request rather than on a clock."
   - number: 14
     feature: enforced-retention
     delivers:
@@ -361,13 +402,14 @@ slices:
         together, with release evidence retained and identified
     depends_on:
       - 12
-      - 13
     story_ids:
       - serve-principal-access-and-erasure-request
     files:
       - src/tkr_cloud_video/delivery/subject_requests.py
+      - tests/durable_delivery/test_subject_requests.py
     paths:
       - src/tkr_cloud_video/delivery/subject_requests.py
+      - tests/durable_delivery/test_subject_requests.py
     data_lifecycle:
       kind: bounded
       detail: Erasure on request runs ahead of scheduled expiry and must reach all
@@ -377,20 +419,24 @@ slices:
         holds.
     title: Principal access and erasure API
     layer: api
-    status: planned
+    status: done
+    evidence:
+      kind: commit
+      ref: 3e8820f
   - number: 15
     feature: enforced-retention
     delivers:
-      - IoC composition of loader, lifecycle adapter, prompt processor and
+      - IoC composition of loader, reconciler, lifecycle rules and
         subject-request path, replacing the unused LifecyclePolicy field in
         compose_durable_delivery
       - Coverage proving observable absence after expiry rather than a predicate
         returning true, plus authorisation and non-enumeration coverage for the
         subject-request path
+      - A test pinning that the retention credential appears in no worker
+        process-role allowlist
     depends_on:
       - 11
       - 12
-      - 13
       - 14
     story_ids:
       - provision-and-verify-bucket-lifecycle-rules
@@ -411,4 +457,4 @@ slices:
         close.
     title: Wire and test Enforced Retention and Erasure
     layer: integration
-    status: planned
+    status: in_progress

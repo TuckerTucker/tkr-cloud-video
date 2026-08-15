@@ -1,0 +1,23 @@
+canonicalId: mem-WsrfgqZQ
+sourceId: find-WatD1LyX
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: medium
+  title: "A pinned workflow asset carried a frontend export shape: the executor
+    matches a dynamic input against option keys, so a nested object resolved to
+    no option and the node ran without a required argument"
+  status: resolved
+  file: release-assets/minimax-h3-t2v/workflow-api.json
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 4e3bcefffb82fc41c5a00b66249c89ed86437afa72802a6a12bf934c37e7b531
+  snapshotAt: 2026-08-15T15:55:55.758Z
+rationale: A pinned workflow asset must be the API export, not the frontend
+  export. The executor matches a dynamic input against option keys, so a nested
+  object silently resolved to no option and the node ran without a required
+  argument. Pinning the wrong export shape fails quietly rather than at load.
+who: tucker
+when: 2026-08-15T15:55:55.758Z

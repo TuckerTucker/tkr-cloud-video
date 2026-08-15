@@ -11,12 +11,19 @@ from tkr_cloud_video.core.errors import AppError
 
 
 class CredentialRole(StrEnum):
-    """Distinct runtime storage trust boundaries."""
+    """Distinct runtime storage trust boundaries.
+
+    ``RETENTION_REAPER`` is the only role holding ``DELETE_FILES`` and the only
+    one that is not a worker role. Retention runs on the control plane: its
+    variables appear in no ``process_secrets.SECRET_VARIABLES`` allowlist, so
+    no worker subprocess can be handed a credential that deletes.
+    """
 
     MODEL_READER = "model-reader"
     INPUT_READER = "input-reader"
     OUTPUT_WRITER = "output-writer"
     DELIVERY_READER = "delivery-reader"
+    RETENTION_REAPER = "retention-reaper"
 
 
 class StorageCapability(StrEnum):
@@ -48,6 +55,17 @@ ROLE_CAPABILITIES: Final[dict[CredentialRole, frozenset[StorageCapability]]] = {
             StorageCapability.LIST_FILES,
             StorageCapability.READ_FILES,
             StorageCapability.SHARE_FILES,
+        }
+    ),
+    # Reads because expiry is decided by heading the commit marker, not by
+    # listing alone; deletes because retention that cannot delete is a
+    # declaration. Deliberately without shareFiles: the reaper never issues a
+    # link, and never writes, so it cannot replace what it removes.
+    CredentialRole.RETENTION_REAPER: frozenset(
+        {
+            StorageCapability.LIST_FILES,
+            StorageCapability.READ_FILES,
+            StorageCapability.DELETE_FILES,
         }
     ),
 }

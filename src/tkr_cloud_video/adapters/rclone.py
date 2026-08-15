@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -14,6 +15,7 @@ from tkr_cloud_video.artifacts.publisher import ObjectMetadata
 from tkr_cloud_video.core.context import validate_identifier
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
+from tkr_cloud_video.delivery.reconciler import StoredObject
 from tkr_cloud_video.delivery.uploader import RemoteMetadata
 from tkr_cloud_video.security.validation import ObjectKey, Sha256Digest
 
@@ -334,6 +336,82 @@ class RcloneB2Client:
             raise
         return result.stdout
 
+    def _prefix_target(self, prefix: str) -> str:
+        """Return the remote target for a namespace rather than one key.
+
+        ``ObjectKey`` rejects a trailing slash, so a prefix cannot be validated
+        as a key. The namespace rules are the same ones ``CredentialScope``
+        applies: normalized, relative, and unambiguous.
+        """
+        if (
+            not prefix
+            or prefix.startswith("/")
+            or not prefix.endswith("/")
+            or "//" in prefix
+            or "\\" in prefix
+            or any(
+                part in {"", ".", ".."} for part in prefix.removesuffix("/").split("/")
+            )
+            or any(ord(character) < 32 for character in prefix)
+        ):
+            raise AppError(
+                "invalid_boundary_value",
+                "Listing prefix is not one normalized object namespace.",
+                context={"field": "prefix"},
+            )
+        base = self._location.base_prefix
+        suffix = prefix if prefix.startswith(base) else base + prefix
+        remote = self._normalized_remote_name()
+        return f"{remote}:{self._location.bucket_name}/{suffix}"
+
+    async def list_objects(self, prefix: str) -> tuple[tuple[str, datetime], ...]:
+        """List every object beneath a namespace with its modification time.
+
+        Args:
+            prefix: Normalized namespace ending in a slash.
+
+        Returns:
+            Key and modification time pairs. Directories are excluded: B2 has
+            no materialized directories, and rclone's synthetic ones are not
+            objects that can expire.
+
+        """
+        result = await self._executor.run(
+            self._arguments(
+                "lsjson",
+                self._prefix_target(prefix),
+                "--recursive",
+                "--files-only",
+            ),
+            self._environment(),
+            timeout_seconds=self._transfer_timeout_seconds,
+        )
+        listed: list[tuple[str, datetime]] = []
+        for entry in _json_array(result.stdout):
+            path = entry.get("Path")
+            modified = entry.get("ModTime")
+            if not isinstance(path, str) or not isinstance(modified, str):
+                raise AppError(
+                    "provider_response_invalid",
+                    "Provider listing lacks a path or modification time.",
+                    context={"operation": "list_objects"},
+                )
+            listed.append((f"{prefix}{path}", _provider_timestamp(modified)))
+        return tuple(listed)
+
+    async def delete(self, key: str) -> None:
+        """Delete one exact object, treating an absent one as deleted."""
+        try:
+            await self._executor.run(
+                self._arguments("deletefile", self._target(key)),
+                self._environment(),
+                timeout_seconds=30,
+            )
+        except AppError as error:
+            if error.code == "adapter_command_failed" and _not_found(error.__cause__):
+                return
+            raise
+
     async def download(self, key: str, destination: Path) -> None:
         """Stream an exact object into a caller-owned partial path."""
         if destination.exists():
@@ -481,6 +559,115 @@ def _optional_json_object(content: bytes) -> dict[str, Any] | None:
             context={"operation": "parse_provider_response"},
         )
     return value
+
+
+def _json_array(content: bytes) -> list[dict[str, Any]]:
+    """Parse a provider listing, reporting empty output as no entries.
+
+    Args:
+        content: Raw provider output.
+
+    Returns:
+        The listed entries, empty when the namespace holds nothing.
+
+    Raises:
+        AppError: The output is neither empty nor a JSON array of objects.
+
+    """
+    if not content.strip():
+        return []
+    try:
+        value = json.loads(content)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise AppError(
+            "provider_response_invalid",
+            "Provider returned an invalid listing.",
+            context={"operation": "parse_provider_response"},
+            cause=error,
+        ) from error
+    if value is None:
+        return []
+    if not isinstance(value, list) or any(
+        not isinstance(entry, dict) for entry in value
+    ):
+        raise AppError(
+            "provider_response_invalid",
+            "Provider returned an invalid listing.",
+            context={"operation": "parse_provider_response"},
+        )
+    return value
+
+
+def _provider_timestamp(value: str) -> datetime:
+    """Parse a provider timestamp into an aware UTC instant.
+
+    rclone reports nanosecond precision, which :func:`datetime.fromisoformat`
+    does not accept, so the fraction is truncated to microseconds. Retention
+    decisions are made in days; nanoseconds were never load-bearing.
+
+    Args:
+        value: Provider-reported ISO 8601 timestamp.
+
+    Returns:
+        The parsed instant, always timezone-aware.
+
+    Raises:
+        AppError: The timestamp cannot be parsed or carries no offset.
+
+    """
+    normalized = value.strip().replace("Z", "+00:00")
+    if "." in normalized:
+        head, _, tail = normalized.partition(".")
+        # Only the digits leading the fraction belong to it. Collecting every
+        # digit in the tail would swallow the offset's own digits and leave the
+        # timestamp with no timezone at all.
+        length = 0
+        while length < len(tail) and tail[length].isdigit():
+            length += 1
+        normalized = f"{head}.{tail[:length][:6]}{tail[length:]}"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as error:
+        raise AppError(
+            "provider_response_invalid",
+            "Provider returned an unparseable timestamp.",
+            context={"operation": "parse_provider_response"},
+            cause=error,
+        ) from error
+    if parsed.tzinfo is None:
+        raise AppError(
+            "provider_response_invalid",
+            "Provider timestamp carries no timezone.",
+            context={"operation": "parse_provider_response"},
+        )
+    return parsed.astimezone(UTC)
+
+
+class RetentionRcloneStore:
+    """RetentionStore view over one delete-capable control-plane client.
+
+    The only store in the project that deletes. It is bound to the reaper
+    credential and is never constructed inside a worker process.
+    """
+
+    def __init__(self, client: RcloneB2Client) -> None:
+        """Initialize a retention view over one scoped client."""
+        self._client = client
+
+    async def list_objects(self, prefix: str) -> tuple[StoredObject, ...]:
+        """Return every object under a prefix with its upload time."""
+        return tuple(
+            StoredObject(key, uploaded)
+            for key, uploaded in await self._client.list_objects(prefix)
+        )
+
+    async def head_exists(self, key: str) -> bool:
+        """Return whether one exact object exists."""
+        return await self._client.head(key) is not None
+
+    async def delete(self, key: str) -> None:
+        """Delete one exact object."""
+        await self._client.delete(key)
 
 
 def _not_found(cause: BaseException | None) -> bool:

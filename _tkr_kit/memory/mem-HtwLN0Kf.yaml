@@ -1,0 +1,12 @@
+canonicalId: mem-HtwLN0Kf
+sourceId: find-xfjI7pbm
+kind: finding
+disposition: deferred
+body: null
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 04f2a3cb03c7f4d85f9d34fe2da6f26d4c2dc3e29ddda7a7f654b52d84a7ad81
+  snapshotAt: 2026-08-15T15:56:03.005Z
+rationale: null
+who: tucker
+when: 2026-08-15T15:56:03.005Z

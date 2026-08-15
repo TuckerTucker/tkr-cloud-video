@@ -27,6 +27,7 @@ from tkr_cloud_video.bootstrap import DoctorResult, run_doctor
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.core.logging import configure_logging, default_event_sink
 from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
+from tkr_cloud_video.operations.retention_command import run_retention
 from tkr_cloud_video.release.catalog import prepare_model_set
 from tkr_cloud_video.release.runpod_runtime import (
     normalize_runpod_runtime_environment,
@@ -71,6 +72,15 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--catalog", required=True, type=Path)
         command.add_argument("--license-approval-id", required=True)
         command.add_argument("--output", type=Path)
+    retention_parser = subparsers.add_parser(
+        "lifecycle", help="provision, verify, or run declared object retention"
+    )
+    retention_parser.add_argument(
+        "mode",
+        choices=("check", "apply", "sweep"),
+        help="report drift, write the declared rules, or expire aged-out objects",
+    )
+    retention_parser.add_argument("--root", type=Path, default=Path.cwd())
     return parser
 
 
@@ -97,6 +107,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_worker()
     if arguments.command == "serverless":
         return run_serverless()
+    if arguments.command == "lifecycle":
+        return run_retention(arguments.mode, arguments.root)
     if arguments.command == "release":
         if arguments.release_command == "prepare":
             return run_release_prepare(

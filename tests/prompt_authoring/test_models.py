@@ -113,26 +113,35 @@ def test_reference_only_section_is_rejected_in_a_base_mode() -> None:
     assert "summary" in str(raised.value.context["field"])
 
 
-def test_reordered_reference_sections_are_not_silently_accepted() -> None:
+def test_reordered_sections_compose_to_the_same_prompt() -> None:
+    """Key order carries no meaning, so reordering a payload changes nothing.
+
+    A JSON object is unordered, and the RunPod boundary was observed returning
+    a payload's sections sorted. Rejecting on key order therefore refused every
+    structured prompt submitted over Serverless whatever it said. Rendered
+    order is fixed by the mode at render time, so a reordered payload has to
+    compose to the same prompt rather than to an error.
+    """
     ordered = reference_payload()
-    reordered = {
-        key: ordered[key]
-        for key in [
-            "mode",
-            "duration_seconds",
-            "summary",
-            "subject_definitions",
-            "retention_analysis",
-            "shots",
-            "overall_soundscape",
-            "non_diegetic_music",
-        ]
-    }
+    reordered = {key: ordered[key] for key in sorted(ordered)}
+
+    assert list(reordered) != list(ordered)
+    assert compose_prompt(reordered) == compose_prompt(ordered)
+    assert (
+        compose_prompt(reordered).section_order == compose_prompt(ordered).section_order
+    )
+
+
+def test_missing_section_is_still_refused_when_order_is_ignored() -> None:
+    """Dropping the order check must not weaken the required-set check."""
+    payload = base_payload()
+    del payload["overall_soundscape"]
 
     with pytest.raises(PromptCompositionError) as raised:
-        compose_prompt(reordered)
+        compose_prompt(payload)
 
     assert raised.value.code == "section_set_mismatch_for_mode"
+    assert "overall_soundscape" in str(raised.value.context["field"])
 
 
 def test_unknown_field_is_refused_at_the_boundary() -> None:
