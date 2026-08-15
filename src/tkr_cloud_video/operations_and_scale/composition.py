@@ -8,6 +8,7 @@ import structlog
 
 from tkr_cloud_video.operations.logging import OperationalEventEmitter
 from tkr_cloud_video.operations.metrics import MetricsRecorder
+from tkr_cloud_video.prompt_authoring.composition import PromptServices
 from tkr_cloud_video.release.rollout import RolloutPolicy
 from tkr_cloud_video.release.runpod_handler import JobApplication, RunPodHandler
 
@@ -19,6 +20,7 @@ class OperationsDependencies:
     logger: structlog.typing.FilteringBoundLogger
     metrics: MetricsRecorder
     application: JobApplication
+    prompts: PromptServices
     minimum_readiness: float
     maximum_error_rate: float
     candidate_release_id: str
@@ -42,7 +44,7 @@ def compose_operations_and_scale(
     return OperationsServices(
         OperationalEventEmitter(dependencies.logger),
         dependencies.metrics,
-        RunPodHandler(dependencies.application),
+        RunPodHandler(dependencies.application, dependencies.prompts),
         RolloutPolicy(
             dependencies.minimum_readiness,
             dependencies.maximum_error_rate,

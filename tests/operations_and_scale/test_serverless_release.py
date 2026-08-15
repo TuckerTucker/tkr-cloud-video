@@ -16,6 +16,7 @@ from tkr_cloud_video.operations_and_scale.composition import (
     OperationsDependencies,
     compose_operations_and_scale,
 )
+from tkr_cloud_video.prompt_authoring.composition import compose_prompt_authoring
 from tkr_cloud_video.release.acceptance import (
     AcceptanceResult,
     AcceptanceScenario,
@@ -25,7 +26,11 @@ from tkr_cloud_video.release.rollout import (
     RolloutDecision,
     RolloutPolicy,
 )
-from tkr_cloud_video.release.runpod_handler import HandlerResponse, RunPodHandler
+from tkr_cloud_video.release.runpod_handler import (
+    HandlerResponse,
+    JobApplication,
+    RunPodHandler,
+)
 
 
 def request_payload() -> dict[str, object]:
@@ -38,6 +43,47 @@ def request_payload() -> dict[str, object]:
         "prompt": "Synthetic prompt",
         "seed": 42,
     }
+
+
+def structured_payload(motion: str = "Static Shot") -> dict[str, object]:
+    """Build the same contract carrying a structured prompt instead of freeform.
+
+    Args:
+        motion: The camera motion slot, so a caller can drive the accepted and
+            the closed-vocabulary-defect branches from one payload.
+
+    """
+    return {
+        "schema_version": "1",
+        "mode": "text-to-video",
+        "workflow_id": "h3-t2v-1",
+        "model_set_id": MODEL_SET_ID,
+        "seed": 42,
+        "structured_prompt": {
+            "mode": "T2VA",
+            "duration_seconds": 3.04,
+            "shots": [
+                {
+                    "number": 1,
+                    "style": "watercolor",
+                    "description": "A view across a mountain lake at sunrise.",
+                    "camera": {"motion": motion, "amplitude": None, "speed": None},
+                }
+            ],
+            "overall_soundscape": "Lapping lake waves under a light breeze.",
+            "non_diegetic_music": "N/A",
+        },
+    }
+
+
+def handler(application: JobApplication) -> RunPodHandler:
+    """Build the handler over the real prompt boundary.
+
+    The boundary is not faked: what these tests assert is that a prompt defect
+    is reported without application work, and a fake that never rejects would
+    make that assertion vacuous.
+    """
+    return RunPodHandler(application, compose_prompt_authoring())
 
 
 @dataclass
@@ -99,7 +145,7 @@ def test_acceptance_evidence_requires_digest_and_safe_release_id() -> None:
 async def test_serverless_handler_has_contract_parity_and_returns_references() -> None:
     """Serverless validates the shared request and never embeds media bytes."""
     application = Application()
-    response = await RunPodHandler(application).handle({"input": request_payload()})
+    response = await handler(application).handle({"input": request_payload()})
 
     assert response == HandlerResponse(
         True,
@@ -124,7 +170,7 @@ async def test_serverless_handler_rejects_before_application(
 ) -> None:
     """Malformed envelopes never reach downloads or GPU application work."""
     application = Application()
-    response = await RunPodHandler(application).handle(event)
+    response = await handler(application).handle(event)
 
     assert response == HandlerResponse(False, error_code=error_code)
     assert application.requests == []
@@ -141,7 +187,7 @@ async def test_serverless_handler_preserves_typed_retry_classification() -> None
         )
     )
 
-    response = await RunPodHandler(application).handle({"input": request_payload()})
+    response = await handler(application).handle({"input": request_payload()})
 
     assert response == HandlerResponse(
         False,
@@ -194,6 +240,7 @@ def test_operations_composition_wires_only_injected_dependencies() -> None:
             logger,
             metrics,
             application,
+            compose_prompt_authoring(),
             0.95,
             0.05,
             "release-candidate",
@@ -225,8 +272,7 @@ async def test_failure_response_names_what_failed() -> None:
                 context={"resource_id": "104"},
             )
 
-    handler = RunPodHandler(FailingApplication())
-    response = await handler.handle(
+    response = await handler(FailingApplication()).handle(
         {
             "input": {
                 "mode": "text-to-video",
@@ -241,3 +287,89 @@ async def test_failure_response_names_what_failed() -> None:
     assert response.ok is False
     assert response.error_code == "comfy_node_failed"
     assert response.error_context == {"resource_id": "104"}
+
+
+@pytest.mark.asyncio
+async def test_structured_prompt_defect_is_reported_before_application_work() -> None:
+    """A closed-vocabulary defect never reaches the application.
+
+    The deployment starts ComfyUI between validation and application work, so
+    a prompt rejected only at execution costs a full worker cold start to
+    learn that a slot carried the template's angle brackets. Asserting on an
+    untouched application is what pins the rejection ahead of that start.
+    """
+    application = Application()
+
+    response = await handler(application).handle(
+        {"input": structured_payload("<Static Shot>")}
+    )
+
+    assert response.ok is False
+    assert response.error_code == "prompt_structurally_invalid"
+    assert response.error_context == {
+        "rule": "camera_motion_unknown",
+        "field": "shots.0.camera.motion",
+    }
+    assert application.requests == []
+
+
+@pytest.mark.asyncio
+async def test_structured_prompt_rejection_carries_every_defect() -> None:
+    """One rejection reports every broken rule, so one round trip fixes them all.
+
+    `error_context` is a single flat mapping and can only name the first
+    defect. A caller correcting a prompt one rule per submission pays a queue
+    wait for each, which is the cost the defect list removes.
+    """
+    payload = structured_payload("<Static Shot>")
+    prompt = payload["structured_prompt"]
+    assert isinstance(prompt, dict)
+    prompt["shots"][0]["style"] = "oil-painting"
+
+    response = await handler(Application()).handle({"input": payload})
+
+    assert response.defects is not None
+    assert {defect["rule"] for defect in response.defects} == {
+        "camera_motion_unknown",
+        "style_unknown",
+    }
+
+
+@pytest.mark.asyncio
+async def test_valid_structured_prompt_reaches_the_application_unchanged() -> None:
+    """The preflight admits a renderable prompt without consuming it.
+
+    The handler discards its rendered text, so the request the application
+    receives must still carry the structured form for the binder to derive
+    wire text from.
+    """
+    application = Application()
+
+    response = await handler(application).handle({"input": structured_payload()})
+
+    assert response.ok is True
+    assert len(application.requests) == 1
+    assert application.requests[0].structured_prompt is not None
+    assert application.requests[0].prompt is None
+
+
+@pytest.mark.asyncio
+async def test_section_defect_is_reported_as_itself_before_application_work() -> None:
+    """A section defect is refused ahead of the worker start like any other.
+
+    Composition fails before the structural checks run, so this defect arrives
+    as a different error type carrying no defect list. It still has to name its
+    own rule rather than collapse into a generic invalid request.
+    """
+    payload = structured_payload()
+    prompt = payload["structured_prompt"]
+    assert isinstance(prompt, dict)
+    del prompt["non_diegetic_music"]
+    application = Application()
+
+    response = await handler(application).handle({"input": payload})
+
+    assert response.ok is False
+    assert response.error_code == "section_set_mismatch_for_mode"
+    assert response.defects is None
+    assert application.requests == []
