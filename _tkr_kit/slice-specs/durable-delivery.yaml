@@ -2295,3 +2295,302 @@ slice_specs:
       testing: pytest parametrization for the class-completeness table; the
         configuration source is faked rather than read from disk except in
         S11-T04.
+  - name: enforced-retention-12-spec
+    title: Retention reconciler and bucket lifecycle rules Specification
+    status: planned
+    format: full
+    capability: durable-delivery
+    feature: enforced-retention
+    slice: 12
+    source_story_ids:
+      - durable-delivery/story/provision-and-verify-bucket-lifecycle-rules
+      - durable-delivery/story/retain-and-erase-prompt-evidence
+    purpose: "Make every declared retention period actually delete something.
+      Enforcement splits by what the provider can express: B2 lifecycle rules
+      handle the classes that map cleanly to a prefix or a version state, and a
+      reconciler handles outputs/, where committed deliverables and failed
+      attempts share one prefix and cannot be separated by a rule. Until this
+      slice lands, every period in config/lifecycle.json is a declaration with
+      no mechanism behind it."
+    layer_assignment:
+      - component: RetentionReconciler
+        layer: integration
+        responsibility: Walk attempt prefixes under outputs/, classify each as committed
+          or failed by heading result.json, and delete those past their class
+          period
+      - component: LifecycleRuleSet
+        layer: domain
+        responsibility: Project the loaded policy onto the four B2 rule fields, covering
+          only the classes B2 expresses natively
+      - component: BucketRuleAdapter
+        layer: integration
+        responsibility: Apply and read back bucket lifecycle rules, and report drift
+          against the declared policy
+      - component: CredentialRole.RETENTION_REAPER
+        layer: integration
+        responsibility: Carry listFiles, readFiles and deleteFiles over one bucket and
+          one prefix, control-plane only
+    interfaces:
+      - name: RetentionReconciler.run
+        kind: integration_service
+        signature: "async def run(self, policy: LifecyclePolicy, evaluated_at: datetime,
+          *, dry_run: bool) -> ReconcileReport"
+        async: true
+        ownership: Constructed by the capability composition root with an injected
+          object store and clock; never constructed inside a worker process.
+      - name: LifecycleRuleSet.project
+        kind: domain_method
+        signature: "def project(self, policy: LifecyclePolicy) ->
+          tuple[BucketLifecycleRule, ...]"
+        async: false
+        ownership: Pure projection. Raises rather than emitting two rules whose prefixes
+          overlap with different periods.
+      - name: BucketRuleAdapter
+        kind: integration_adapter
+        signature: "async def apply(self, rules: tuple[BucketLifecycleRule, ...]) ->
+          None; async def read(self) -> tuple[BucketLifecycleRule, ...]"
+        async: true
+        ownership: Requires bucket-configuration capability. Operator-invoked through
+          scripts/provision_lifecycle_rules.sh, never reachable from a worker.
+      - name: RetentionError
+        kind: typed_error
+        signature: "code: str; safe_message: str; retryable: bool; context: Mapping[str,
+          str]"
+        async: false
+        ownership: Carries the class name and object count only; never an object key,
+          which embeds a job id.
+    data_models:
+      - name: BucketLifecycleRule
+        shape: frozen dataclass
+        fields: "file_name_prefix: str; days_from_uploading_to_hiding: int | None;
+          days_from_hiding_to_deleting: int | None;
+          days_from_starting_to_canceling_unfinished_large_files: int | None"
+        validation: Exactly the four fields B2 accepts and no others. B2 permits at most
+          100 rules per bucket; the projection must stay far under that and
+          assert it.
+      - name: AttemptPrefix
+        shape: frozen dataclass
+        fields: "job_id: str; attempt_id: str; uploaded_at: datetime; committed: bool"
+        validation: committed is decided by head on the attempt's result.json, never by
+          listing or by reading an object
+      - name: ReconcileReport
+        shape: frozen dataclass
+        fields: "evaluated: int; deleted_by_class: Mapping[RetainedClass, int];
+          skipped_by_class: Mapping[RetainedClass, int];
+          classes_with_no_objects: tuple[RetainedClass, ...]"
+        validation: every RetainedClass the reconciler owns appears in exactly one of
+          the three, so a class that matched nothing is reported rather than
+          silently absent
+    behavior:
+      - story_id: durable-delivery/story/provision-and-verify-bucket-lifecycle-rules
+        given: config/lifecycle.json declares input at 7 days
+        when: provisioning runs against the bucket
+        then: the bucket carries a rule whose fileNamePrefix is inputs/ and whose
+          combined hiding and deleting days total 7
+      - story_id: durable-delivery/story/provision-and-verify-bucket-lifecycle-rules
+        given: a rule is removed or altered on the bucket out of band
+        when: the drift check runs
+        then: it fails and names the class whose in-force rule no longer matches the
+          declaration
+      - story_id: durable-delivery/story/provision-and-verify-bucket-lifecycle-rules
+        given: an attempt with no result.json, older than the failed-attempt period
+        when: the reconciler runs
+        then: its objects are absent and no committed attempt under its period is
+          touched
+      - story_id: durable-delivery/story/provision-and-verify-bucket-lifecycle-rules
+        given: a committed attempt within the deliverable period
+        when: the reconciler runs
+        then: video, workflow, generation and result.json all remain
+      - story_id: durable-delivery/story/retain-and-erase-prompt-evidence
+        given: a committed attempt past the deliverable period
+        when: the reconciler runs
+        then: generation.bin is absent with the rest of the attempt, so the prompt text
+          inside it is destroyed with the deliverable it belonged to
+    error_handling:
+      - condition: overlapping_rules_with_different_periods
+        error: RetentionError
+        recovery: Refuse to project. B2 applies the smallest non-null value among
+          matching rules, so emitting an overlap would silently shorten the
+          longer period; this is the failure that would delete deliverables at
+          the failed-attempt period
+        retryable: false
+      - condition: commit_marker_unreadable
+        error: RetentionError
+        recovery: "Treat the attempt as committed and skip it. An attempt whose state
+          cannot be established is never deleted: fail closed toward retention,
+          because a wrong deletion is unrecoverable and a wrong retention is
+          not"
+        retryable: true
+      - condition: delete_rejected_by_provider
+        error: RetentionError
+        recovery: Record the object in the report as skipped, continue the sweep, and
+          exit non-zero so the run is not read as clean
+        retryable: true
+      - condition: credential_lacks_delete_capability
+        error: CredentialScopeError
+        recovery: Fail before the first delete rather than partway through a sweep
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - durable-delivery/slice/11
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+        - Backblaze B2 native API for bucket lifecycle rules
+        - rclone B2 backend for listing and deleting objects
+      inversion_of_control: Object store, bucket adapter and clock are Protocol
+        dependencies supplied by the capability composition root; tests drive
+        the reconciler against an in-memory store with controllable timestamps.
+    integration_points:
+      consumes:
+        - durable-delivery/slice/11
+      provides:
+        - Enforced expiry for every declared class
+        - A drift check over the rules in force
+      documented_routes: []
+      reference_documentation:
+        - https://www.backblaze.com/docs/cloud-storage-lifecycle-rules
+        - https://www.backblaze.com/docs/en/cloud-storage-application-keys
+    configuration:
+      - name: B2_REAPER_KEY_ID
+        type: string
+        default: ""
+        secret: true
+        validation: control-plane only; must appear in no ProcessRole allowlist in
+          security/process_secrets.py
+      - name: B2_REAPER_APPLICATION_KEY
+        type: string
+        default: ""
+        secret: true
+        validation: control-plane only; must appear in no ProcessRole allowlist in
+          security/process_secrets.py
+      - name: RETENTION_DRY_RUN
+        type: bool
+        default: "true"
+        secret: false
+        validation: defaults to reporting rather than deleting, so a first run in a new
+          environment cannot destroy data by omission
+    observability:
+      events:
+        - durable-delivery.enforced-retention.12.sweep_started
+        - durable-delivery.enforced-retention.12.sweep_completed
+        - durable-delivery.enforced-retention.12.rules_applied
+        - durable-delivery.enforced-retention.12.drift_detected
+      required_fields:
+        - event
+        - policy_version
+        - evaluated
+        - deleted_count
+        - skipped_count
+        - dry_run
+        - outcome
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - object keys
+        - job identifiers
+        - full prompts
+        - user-supplied filenames
+      logging_contract: "Use structlog JSON. Report counts by class, never keys: an
+        outputs/ key embeds a job id, and a job id is what a principal's records
+        are locatable by. A sweep that deleted nothing still emits
+        sweep_completed, so silence is never mistaken for success."
+    security_constraints:
+      - The reaper credential holds deleteFiles, which no worker role holds and
+        none may gain. Its variables must appear in no ProcessRole allowlist,
+        and slice 15 pins that as a test.
+      - Bucket-configuration capability is operator-invoked and never present in
+        a running worker or delivery process.
+      - "Fail closed toward retention: any attempt whose committed state cannot
+        be established is retained, not deleted."
+      - Dry run is the default. Deleting requires an explicit opt-in at the call
+        site.
+      - Object keys never enter an event or an error context, because they carry
+        job identity.
+    test_scenarios:
+      - id: S12-T01
+        level: contract
+        given: config/lifecycle.json declares input at 7 days
+        when: the rule set is projected
+        then: a rule with fileNamePrefix inputs/ expresses that period across the hiding
+          and deleting fields
+      - id: S12-T02
+        level: contract
+        given: a projection that would emit two rules over one prefix with different
+          periods
+        when: project runs
+        then: it raises rather than emitting them, because B2 would apply the smaller
+          and shorten the longer silently
+      - id: S12-T03
+        level: contract
+        given: an uncommitted attempt older than the failed-attempt period and a
+          committed attempt within the deliverable period
+        when: the reconciler runs
+        then: only the uncommitted attempt's objects are deleted
+      - id: S12-T04
+        level: contract
+        given: a committed attempt past the deliverable period
+        when: the reconciler runs
+        then: every object under the attempt prefix is deleted, including generation.bin
+          and the prompt text within it
+      - id: S12-T05
+        level: security
+        given: a store whose head of result.json raises
+        when: the reconciler runs
+        then: the attempt is retained and reported as skipped, never deleted
+      - id: S12-T06
+        level: security
+        given: the reaper secret variable names
+        when: every ProcessRole allowlist is inspected
+        then: none contains them
+      - id: S12-T07
+        level: contract
+        given: RETENTION_DRY_RUN is unset
+        when: the reconciler runs
+        then: it reports what it would delete and deletes nothing
+      - id: S12-T08
+        level: contract
+        given: a class with no matching objects
+        when: the sweep completes
+        then: the class appears in classes_with_no_objects rather than being absent from
+          the report
+      - id: S12-TF
+        level: failure_injection
+        given: each declared error condition is injected at its adapter boundary
+        when: the reconciler or the rule adapter runs
+        then: the recovery and retryability contract is observed and no committed
+          deliverable within its period is deleted
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - Deletion is proven by absence from the store after the sweep, never by a
+        predicate returning true.
+      - The reaper credential is absent from every ProcessRole allowlist, pinned
+        by test.
+      - Structured events cover sweep start, completion, rule application and
+        drift without keys or job identifiers.
+      - "docs/published/result-contract.md is corrected: its claim that classes
+        expire independently becomes true for the classes this slice enforces,
+        and stops overclaiming for any it does not."
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: The enforcing slice. Committed deliverables and failed attempts share
+        the outputs/ prefix and B2 applies the smallest non-null value among
+        overlapping rules, so class separation is decided by heading result.json
+        rather than by prefix. Prompt text is destroyed with the attempt that
+        carried it, which is the documented position recorded as prompt-evidence
+        in config/lifecycle.json.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, and
+        explicit exception wrapping with domain context.
+      logging: structlog only; counts by class, never object keys.
+      bash: scripts/provision_lifecycle_rules.sh remains Bash 3.2 compatible and
+        delegates all policy to typed Python.
+      testing: pytest parametrization over the class table; the store and clock are
+        faked so expiry is exercised without waiting.
