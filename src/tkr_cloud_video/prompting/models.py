@@ -130,15 +130,16 @@ def compose_prompt(payload: Mapping[str, Any]) -> StructuredPrompt:
     a caller learns every section defect at once rather than one per round trip.
 
     Args:
-        payload: The external prompt document, key order significant.
+        payload: The external prompt document. Key order carries no meaning: a
+            JSON object is unordered, so a payload's key order is an artifact of
+            whatever serialized it last rather than anything the caller chose.
 
     Returns:
         The composed immutable prompt.
 
     Raises:
-        PromptCompositionError: The payload omits a section its mode requires,
-            carries one its mode forbids, or orders its sections differently from
-            the order the mode fixes.
+        PromptCompositionError: The payload omits a section its mode requires or
+            carries one its mode forbids.
 
     """
     mode = payload.get("mode")
@@ -161,18 +162,22 @@ def compose_prompt(payload: Mapping[str, Any]) -> StructuredPrompt:
 
 
 def _section_defects(mode: str, payload: Mapping[str, Any]) -> set[str]:
-    """Return the section names that are missing, forbidden, or out of order."""
+    """Return the section names that are missing or forbidden for this mode.
+
+    Section order is deliberately not checked. A JSON object is unordered by
+    RFC 8259, so key order does not survive a round trip through a serializer
+    that does not promise to preserve it: submitting over Serverless returned
+    the payload's sections sorted, which failed an order check for every
+    structured prompt regardless of content. The rendered order is fixed by
+    :data:`SECTION_ORDER` at render time, so nothing downstream reads the
+    payload's key order and no correctness rests on it.
+    """
     defects: set[str] = set()
     required = _required_sections(mode)
 
     defects.update(name for name in required if payload.get(name) in (None, (), []))
     if mode != "Ref2VA":
         defects.update(name for name in REFERENCE_ONLY_SECTIONS if name in payload)
-
-    observed = [key for key in payload if key in required]
-    expected = [name for name in required if name in observed]
-    if observed != expected:
-        defects.update(observed)
     return defects
 
 
