@@ -1,0 +1,12 @@
+canonicalId: mem-d6esXLW2
+sourceId: find-vVGM4wix
+kind: finding
+disposition: deferred
+body: null
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: c26f2be26fb48f8f0b65aac69e4c84c8f7cf8c50f89ba864b186798cb1950e89
+  snapshotAt: 2026-08-15T04:03:27.872Z
+rationale: null
+who: tucker
+when: 2026-08-15T04:03:27.872Z
