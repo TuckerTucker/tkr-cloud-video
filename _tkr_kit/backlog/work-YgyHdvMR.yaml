@@ -1,0 +1,30 @@
+id: work-YgyHdvMR
+title: Retention is declared but never enforced for any personal field
+kind: debt
+severity: high
+status: open
+capabilityId: durable-delivery
+anchors:
+  - src/tkr_cloud_video/delivery/lifecycle.py
+  - config/lifecycle.yaml
+  - src/tkr_cloud_video/durable_delivery/composition.py
+createdAt: 2026-08-15T03:02:22.653Z
+updatedAt: 2026-08-15T03:02:22.653Z
+provenance:
+  source: compliance-triage
+  ref: .claude/rules/compliance-triage.md
+  fingerprint: retention-unimplemented-prompt-input-output
+remedy: Land durable-delivery/feature/enforced-retention, slices 11-15. Slice 12
+  (Backblaze lifecycle adapter) is the one that converts every declared period
+  into an enforced one; slice 13 covers job.prompt, which no object-class prefix
+  can reach.
+detail: config/lifecycle.yaml declares periods for six object classes and is
+  read by no code. delivery/lifecycle.py ships LifecyclePolicy plus a pure
+  expired() predicate and no adapter. No Backblaze lifecycle rule is provisioned
+  anywhere in src/ or scripts/. LifecyclePolicy is threaded through
+  compose_durable_delivery as an unused field. Nothing deletes anything, so
+  job.prompt, job.input_reference and job.output_video all persist in
+  ca-east-006 indefinitely.
+citations:
+  - S.C. 2000, c. 5, sch 1, cl 4.5.3
+  - S.C. 2000, c. 5, sch 1, cl 4.9

@@ -25,7 +25,7 @@ from tkr_cloud_video.delivery.contracts import (
 )
 from tkr_cloud_video.delivery.lifecycle import (
     LifecyclePolicy,
-    ObjectClass,
+    RetainedClass,
     RetentionRule,
 )
 from tkr_cloud_video.delivery.signed_links import LinkSigner, SignedLinkService
@@ -129,19 +129,24 @@ def lifecycle_policy() -> LifecyclePolicy:
     return LifecyclePolicy(
         "1",
         tuple(
-            RetentionRule(item, 365 if item is ObjectClass.DELIVERABLE else 7)
-            for item in ObjectClass
+            RetentionRule(item, 365 if item is RetainedClass.DELIVERABLE else 7)
+            for item in RetainedClass
         ),
     )
 
 
 def test_lifecycle_expires_failed_attempt_but_retains_deliverable() -> None:
-    """Class-specific cleanup never implies deleting retained delivery objects."""
+    """Class-specific cleanup never implies deleting retained delivery objects.
+
+    This asserts on the predicate only. It is deliberately not evidence that
+    anything is deleted; slice 15 carries the coverage that asserts on storage
+    state after a period elapses.
+    """
     policy = lifecycle_policy()
     created = datetime(2026, 1, 1, tzinfo=UTC)
     evaluated = created + timedelta(days=8)
-    assert policy.expired(ObjectClass.FAILED_ATTEMPT, created, evaluated)
-    assert not policy.expired(ObjectClass.DELIVERABLE, created, evaluated)
+    assert policy.expired(RetainedClass.FAILED_ATTEMPT, created, evaluated)
+    assert not policy.expired(RetainedClass.DELIVERABLE, created, evaluated)
 
 
 def test_composition_wires_separate_store_authorization_and_signer() -> None:

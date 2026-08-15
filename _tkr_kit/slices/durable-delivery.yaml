@@ -24,14 +24,14 @@ slices:
     paths:
       - src/tkr_cloud_video/delivery/contracts.py
       - schemas/result.schema.json
-    blocked_reason: Cross-capability prerequisites are not expressible as slice depends_on
-      edges in this tkr-kit version.
+    blocked_reason: Cross-capability prerequisites are not expressible as slice
+      depends_on edges in this tkr-kit version.
     external_prerequisites:
       - engineering-foundation
       - security-foundation
       - job-execution
-    unblock_condition: engineering-foundation/slice/5, security-foundation/slice/10, and
-      job-execution/slice/10 are done
+    unblock_condition: engineering-foundation/slice/5, security-foundation/slice/10,
+      and job-execution/slice/10 are done
   - delivers:
       - Role-based upload of exact local result set to immutable attempt prefixes
       - Remote head/list verification of every object by size and
@@ -260,3 +260,155 @@ slices:
     status: done
     paths:
       - tests/durable_delivery/test_private_result_access_and_retention.py
+  - number: 11
+    feature: enforced-retention
+    delivers:
+      - config/lifecycle.json parsed into the versioned LifecyclePolicy that
+        previously was constructed by nothing outside tests
+      - A prompt-evidence retention class extending the retained-class enum,
+        with its own declared period
+    depends_on: []
+    story_ids:
+      - provision-and-verify-bucket-lifecycle-rules
+      - retain-and-erase-prompt-evidence
+    files:
+      - src/tkr_cloud_video/delivery/lifecycle.py
+      - config/lifecycle.json
+      - tests/durable_delivery/test_enforced_retention.py
+    paths:
+      - src/tkr_cloud_video/delivery/lifecycle.py
+      - config/lifecycle.json
+      - tests/durable_delivery/test_enforced_retention.py
+    data_lifecycle:
+      kind: bounded
+      detail: Every retained class, including prompt evidence, carries an explicit
+        period in one versioned policy. The policy is loaded from configuration
+        rather than constructed in test fixtures, so the declared periods and
+        the enforced periods have a single source.
+    title: Retention policy loader and prompt-evidence class
+    layer: domain
+    status: in_progress
+    commits:
+      - hash: ce93633
+        relation: implements
+        message: "feat(delivery): load the declared retention policy and cover prompt
+          evidence"
+        author: TuckerTucker <34353433+TuckerTucker@users.noreply.github.com>
+        files:
+          - config/lifecycle.json
+          - config/lifecycle.yaml
+          - src/tkr_cloud_video/delivery/lifecycle.py
+          - tests/durable_delivery/test_enforced_retention.py
+          - tests/durable_delivery/test_private_result_access_and_retention.py
+  - number: 12
+    feature: enforced-retention
+    delivers:
+      - Bucket lifecycle rule provisioning from the loaded policy, against the
+        real bucket
+      - A drift check comparing rules in force to the declared policy, failing
+        loudly and naming the diverging class
+    depends_on:
+      - 11
+    story_ids:
+      - provision-and-verify-bucket-lifecycle-rules
+    files:
+      - src/tkr_cloud_video/delivery/lifecycle_adapter.py
+      - scripts/provision_lifecycle_rules.sh
+    paths:
+      - src/tkr_cloud_video/delivery/lifecycle_adapter.py
+      - scripts/provision_lifecycle_rules.sh
+    data_lifecycle:
+      kind: bounded
+      detail: This slice is the one that makes any period real. Until it lands, every
+        retention period in the project is a declaration with no enforcing
+        mechanism. Provisioning requires a bucket-configuration capability,
+        which is a widening of the credential scope and must stay confined to
+        the one bucket the CredentialScope invariant already binds.
+    title: Backblaze lifecycle adapter and drift check
+    layer: integration
+    status: planned
+  - number: 13
+    feature: enforced-retention
+    delivers:
+      - Erasure of expired prompt text from job evidence, preserving prompt
+        digest, generation parameters and provenance
+      - An explicit erased marker distinguishing an erased prompt from a job
+        that never carried one
+    depends_on:
+      - 11
+    story_ids:
+      - retain-and-erase-prompt-evidence
+    files:
+      - src/tkr_cloud_video/delivery/prompt_retention.py
+    paths:
+      - src/tkr_cloud_video/delivery/prompt_retention.py
+    data_lifecycle:
+      kind: bounded
+      detail: Prompt text expires on its declared period; the prompt digest survives
+        because it is a non-reversible identity and is what makes a job
+        reproducible after erasure. Bucket lifecycle rules cannot reach this
+        field, which is why it needs a processor of its own rather than a
+        prefix.
+    title: Prompt-evidence retention processor
+    layer: integration
+    status: planned
+  - number: 14
+    feature: enforced-retention
+    delivers:
+      - Authorised resolution of every job held for a principal, reporting held
+        fields and scheduled expiry
+      - On-request erasure reaching prompt, input reference and output video
+        together, with release evidence retained and identified
+    depends_on:
+      - 12
+      - 13
+    story_ids:
+      - serve-principal-access-and-erasure-request
+    files:
+      - src/tkr_cloud_video/delivery/subject_requests.py
+    paths:
+      - src/tkr_cloud_video/delivery/subject_requests.py
+    data_lifecycle:
+      kind: bounded
+      detail: Erasure on request runs ahead of scheduled expiry and must reach all
+        three personal fields or report that it could not. Refusal for an
+        unauthorised caller must not disclose whether records exist, matching
+        the enumeration property the existing result-access policy already
+        holds.
+    title: Principal access and erasure API
+    layer: api
+    status: planned
+  - number: 15
+    feature: enforced-retention
+    delivers:
+      - IoC composition of loader, lifecycle adapter, prompt processor and
+        subject-request path, replacing the unused LifecyclePolicy field in
+        compose_durable_delivery
+      - Coverage proving observable absence after expiry rather than a predicate
+        returning true, plus authorisation and non-enumeration coverage for the
+        subject-request path
+    depends_on:
+      - 11
+      - 12
+      - 13
+      - 14
+    story_ids:
+      - provision-and-verify-bucket-lifecycle-rules
+      - retain-and-erase-prompt-evidence
+      - serve-principal-access-and-erasure-request
+    files:
+      - src/tkr_cloud_video/durable_delivery/composition.py
+      - tests/durable_delivery/test_enforced_retention.py
+    paths:
+      - src/tkr_cloud_video/durable_delivery/composition.py
+      - tests/durable_delivery/test_enforced_retention.py
+    data_lifecycle:
+      kind: bounded
+      detail: Tests must assert on storage state after a period elapses, not on
+        LifecyclePolicy.expired returning true. The predecessor feature's
+        fixtures satisfied their acceptance criterion while nothing was ever
+        deleted, and that gap is exactly what this slice's coverage has to
+        close.
+    title: Wire and test Enforced Retention and Erasure
+    layer: integration
+    status: planned
