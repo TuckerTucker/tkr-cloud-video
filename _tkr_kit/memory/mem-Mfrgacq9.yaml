@@ -1,0 +1,12 @@
+canonicalId: mem-Mfrgacq9
+sourceId: find-bzHs2i6n
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 1f21955a-445a-4e22-a0e4-f8c6b864b122
+  sourceHash: 2d8c85e3038b9eab6c64072c7cdf3cbe3bea472f8b3a93b54797c982bdd73ca6
+  snapshotAt: 2026-08-15T04:03:39.495Z
+rationale: null
+who: tucker
+when: 2026-08-15T04:03:39.495Z

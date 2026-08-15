@@ -1,0 +1,24 @@
+canonicalId: mem-eg8AVg02
+sourceId: find-YQkGbVF_
+kind: finding
+disposition: kept
+body:
+  type: observability
+  severity: medium
+  title: "A failure must name its subject: the failing node, exception class and
+    message existed at every layer and were dropped three times, costing a
+    build-and-deploy cycle each to recover"
+  status: resolved
+  file: src/tkr_cloud_video/adapters/comfy.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 713fd5f937881b22a76434949eb48912268a86118a893f64ed113e808aa16e9b
+  snapshotAt: 2026-08-15T04:03:26.347Z
+rationale: A failure must name its subject. The failing node, exception class
+  and message existed at every layer and were dropped three times before
+  reaching an operator, costing a build-and-deploy cycle each time to recover
+  information the system already had. The rule is to carry the subject through
+  every wrapping boundary, not to re-derive it at the top.
+who: tucker
+when: 2026-08-15T04:03:26.347Z

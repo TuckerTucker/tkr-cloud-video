@@ -1,0 +1,26 @@
+canonicalId: mem-Rg9ulcXE
+sourceId: find-xfjI7pbm
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: medium
+  title: "Request defaults sit outside the model's trained envelope: the schema
+    defaults to 73 frames at 864x480 while the node declares 1344x768 and a
+    trained range of roughly 124 to 362 frames"
+  status: open
+  file: src/tkr_cloud_video/jobs/contracts.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 04f2a3cb03c7f4d85f9d34fe2da6f26d4c2dc3e29ddda7a7f654b52d84a7ad81
+  snapshotAt: 2026-08-15T04:03:27.374Z
+rationale: Request defaults must be resolved from the model set the request
+  names, never baked into the schema as static field defaults. The schema
+  defaulted to 73 frames at 864x480 while the node declared 1344x768 and a
+  trained range of roughly 124 to 362 frames, so the product shipped defaults
+  outside the envelope it was pinned to. Now fixed — contracts.py resolves
+  defaults through apply_trained_defaults and validates canvas, frame grid and
+  range — and the lesson is what keeps a second model set from reintroducing it.
+who: tucker
+when: 2026-08-15T04:03:27.374Z
