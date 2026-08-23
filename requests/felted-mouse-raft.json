@@ -1,0 +1,43 @@
+{
+  "input": {
+    "schema_version": "1",
+    "mode": "text-to-video",
+    "workflow_id": "minimax-h3-t2v",
+    "model_set_id": "minimax-h3-t2v-int8-20260809",
+    "seed": 11,
+    "width": 1344,
+    "height": 768,
+    "frames": 192,
+    "fps": 24,
+    "structured_prompt": {
+      "mode": "T2VA",
+      "duration_seconds": 8.0,
+      "shots": [
+        {
+          "number": 1,
+          "style": "Cinematic",
+          "description": "A low wide shot frames a needle-felted grey mouse standing at the centre of a small raft of lashed birch twigs as it drifts down a river of crumpled blue cellophane. Wool fibres catch the light along the mouse's back and ears, a scrap of red felt is knotted at its throat, and the raft rocks on the moving plastic while the mouse leans into a bent-twig tiller. Sheets of cellophane lift and settle in slow folds around the raft, and cotton-wool mist hangs low over paper reeds on the far bank.",
+          "camera": {
+            "motion": "Tracking Shot",
+            "amplitude": null,
+            "speed": "at slow speed"
+          }
+        },
+        {
+          "number": 2,
+          "cut_at_seconds": 3.2,
+          "cut_phrase": "the camera cuts to",
+          "description": "a macro close-up of the mouse's felted paws closing around the twig tiller, individual wool fibres and a single needle-felting pit visible on the knuckles as flecks of cellophane spray scatter across them"
+        },
+        {
+          "number": 3,
+          "cut_at_seconds": 5.6,
+          "cut_phrase": "the shot cuts to",
+          "description": "a low upstream angle looking past the raft's stern as the cellophane crumples into rapids, the raft tilting and righting itself while the mouse holds its stance and the river opens toward a painted-card horizon lit warm from below"
+        }
+      ],
+      "overall_soundscape": "Cellophane crackles and pops in slow waves beneath the raft, rising to a dense crumpling rush as the water quickens. Lashed birch twigs creak and knock against each other, and twine tightens with a dry rasp each time the raft rocks. Paper reeds rustle once as the raft passes them.",
+      "non_diegetic_music": "A plucked ukulele figure in steady eighth notes at a moderate tempo, joined by a soft brushed snare pulse and a glockenspiel countermelody midway through, thinning to a single sustained note at the end."
+    }
+  }
+}
