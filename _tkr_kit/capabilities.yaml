@@ -581,14 +581,17 @@ capabilities:
     layer: service
     status: planned
     display_name: Reference-Conditioned Generation
-    description: Turns the reference-to-video mode from a contract the request schema
+    description: 'Turns the reference-to-video mode from a contract the request schema
       already accepts into a path that can execute. The request type, the input stager,
       the Ref2VA prompt grammar, the input_0..input_3 binding allowlist and the inputs/
       retention class all shipped with their owning capabilities; what is absent is
       a published workflow whose graph carries reference inputs, a registered envelope
-      for the model set that workflow belongs to, an authorized way for a caller's
-      image to reach inputs/, and the assessment that must precede any worker outside
-      Quebec reading one.
+      for the model set that workflow belongs to, an authorized way for a caller''s
+      image to reach inputs/, and the assessments that must precede any worker outside
+      Quebec reading one. Audio is the same story one step further out: the grammar
+      defines audio labels, an audio-specific retention marker set and two audio task
+      types, while the intake path cannot describe a stream that has no dimensions
+      at all.'
     depends_on:
       - engineering-foundation
       - security-foundation
@@ -610,10 +613,12 @@ capabilities:
         defaults instead of being refused as unregistered.
       - A reviewer license approval bound to the new manifest digest, because republishing
         a workflow changes the digest the current approval binds.
-      - A privacy impact assessment covering reference images read by workers in the
-        approved territories, completed before any such read occurs.
+      - Dated assessments covering reference images and supplied audio, each completed
+        before material of that kind is read by a worker.
       - A principal-scoped inputs namespace and a write credential narrow enough that
         input authorization is structural rather than a lookup.
+      - An intake contract able to describe an audio stream, which has neither width
+        nor height, without weakening the dimension requirement images and videos carry.
     scope_out:
       - Image-to-video. It is a sibling mode that reuses this capability's intake and
         release slices but conditions on keyframes rather than references, so it needs
@@ -622,13 +627,15 @@ capabilities:
         and the Ref2VA sections are done and terminal.
       - Retention enforcement for uploaded inputs, owned by durable-delivery/feature/enforced-retention.
       - Model selection, fine-tuning, or judging whether a reference was honoured.
+      - Speaker identification, consent capture, or transcription of supplied audio.
       - Publishing the console beyond loopback, which uploading makes more tempting
         and no less out of scope.
     acceptance_criteria:
       - A reference-to-video request naming one to four authorized objects binds each
         into the pinned workflow and reaches a committed result.
-      - No worker reads a reference image before a dated assessment records the sensitivity,
-        purpose, territories and protection measures involved.
+      - No reference image or audio object is read by a worker before a dated assessment
+        covering material of that kind records its sensitivity, purpose, territories
+        and protection measures.
       - The published reference manifest's digest is covered by an unexpired reviewer
         approval, and an uncovered digest fails the release gate rather than the run.
       - A reference request naming a model set with no registered envelope is refused
@@ -637,6 +644,9 @@ capabilities:
         and no worker process role is handed the input-writing credential.
       - A reference object a principal does not own is refused before download, and
         the refusal is indistinguishable from the object being absent.
+      - Admitting a medium with no dimensions does not relax the dimension requirement
+        for the media that have them, and an absent measurement is never represented
+        as a zero.
     paths:
       - release-assets/**
       - docs/assurance/**
@@ -656,14 +666,15 @@ capabilities:
         - operator-console
       rule: Do not transition the capability's entry slice from blocked to planned
         until every prerequisite capability test slice is done.
-    deferred_reason: Reference images are the field the compliance triage record identifies
-      as the most sensitive this product holds, and ADR-002 already placed workers
-      in six territories without the assessment that placement requires. The capability
-      is planned rather than started so that assessment gates the work instead of trailing
-      it.
+    deferred_reason: Reference images and supplied audio are the material the compliance
+      triage record identifies as the most sensitive this product handles, and ADR-002
+      already placed workers in six territories without the assessment that placement
+      requires. The capability is planned rather than started so those assessments
+      gate the work instead of trailing it.
     resume_condition: Transition this capability to planned execution, then its entry
       slice from blocked to planned, only once operator-console has merged and the
-      cross-border assessment in slice 6 is recorded and accepted.
+      cross-border assessment in slice 6 is recorded and accepted. Slices 11 to 15
+      need their own assessment; the image record does not reach a voice sample.
     citations:
       - CQLR c. P-39.1, s 17
       - S.C. 2000, c. 5, sch 1, cl 4.1.3

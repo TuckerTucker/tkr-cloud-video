@@ -173,3 +173,77 @@ stories:
       - reference-generation/slice/7
       - reference-generation/slice/8
       - reference-generation/slice/10
+  - name: assess-voice-reference-processing
+    status: planned
+    display_name: Assess voice-reference processing
+    feature: audio-reference-intake
+    actor: Accountable operator
+    intent: record an assessment covering supplied audio before any is staged, rather than reading
+      the image assessment as though its scope reached a voice
+    preconditions:
+      - The reference-image assessment is recorded and accepted.
+      - No audio reference has yet been staged.
+    trigger_action: The operator conducts and records the audio assessment
+    steps:
+      - actor: Accountable operator
+        action: states what a supplied audio reference is and what the output becomes
+        system_response: the record describes a voice sample of an identifiable person and an output
+          that reproduces it, rather than treating audio as another file type
+      - actor: Accountable operator
+        action: weighs sensitivity, purpose, territories and measures
+        system_response: the record states which measures are enforced and which are asserted
+      - actor: Accountable operator
+        action: reaches a verdict
+        system_response: a qualified pass names the residual risk accepted and by whom
+    acceptance_criteria:
+      - given: only the reference-image assessment
+        when: an audio intake path would be enabled
+        then: the dependent slices stay blocked, because a scoped review does not extend to material
+          it did not consider
+      - given: a recorded audio assessment
+        when: territories or measures later change
+        then: renewal is a new dated record rather than an edit to the verdict
+    slice_ids:
+      - reference-generation/slice/11
+  - name: supply-an-audio-reference
+    status: planned
+    display_name: Supply an audio reference
+    feature: audio-reference-intake
+    actor: Caller
+    intent: supply a recording as an audio reference and have it staged, verified and bound, so a generation
+      can reuse or refer to it
+    preconditions:
+      - The audio assessment is recorded and accepted.
+      - Image and video reference intake is working.
+    trigger_action: The caller supplies an audio object with a reference request
+    steps:
+      - actor: Caller
+        action: supplies an audio object
+        system_response: it is authorized against the caller's namespace before any download
+      - actor: Input stager
+        action: inspects the staged file
+        system_response: an audio stream is located and its type derived from its own codec, rather
+          than from a video stream the file does not have
+      - actor: Input stager
+        action: checks the bounds that apply to audio
+        system_response: duration, channels and sample rate are checked; dimensions are neither required
+          nor invented
+    acceptance_criteria:
+      - given: an audio-only file
+        when: staging runs
+        then: it is described by its own stream rather than refused for lacking a video one
+      - given: an image reference with no dimensions
+        when: staging runs
+        then: it is still refused, because relaxing the requirement for audio must not relax it for
+          images
+      - given: a file whose container disagrees with its declared kind
+        when: staging runs
+        then: it is refused, so an audio type cannot be claimed for a video payload
+      - given: a staged audio reference
+        when: a generation is submitted
+        then: it binds through its allowlisted source and an audio task type is selectable
+    slice_ids:
+      - reference-generation/slice/12
+      - reference-generation/slice/13
+      - reference-generation/slice/14
+      - reference-generation/slice/15

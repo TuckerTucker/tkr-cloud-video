@@ -267,3 +267,133 @@ slices:
     title: Test Authorized Reference Intake
     layer: integration
     status: planned
+  - number: 11
+    feature: audio-reference-intake
+    delivers:
+      - A dated assessment covering supplied audio, weighing a voice sample of an identifiable person
+        and an output that reproduces it
+      - An explicit statement that the reference-image assessment's scope does not reach this material,
+        so the two are separate records rather than one renewed
+      - A verdict with any residual risk accepted and by whom
+    depends_on: []
+    story_ids:
+      - reference-generation/story/assess-voice-reference-processing
+    files:
+      - docs/assurance/audio-reference-cross-border.md
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The record is an append-only assurance document; renewal is a new
+        dated file rather than an edit to an existing verdict.
+    paths:
+      - docs/assurance/**
+    title: Voice-reference cross-border assessment
+    layer: data
+    status: planned
+    description: 'Gates the feature rather than documenting it, for the same reason slice 6 gates image
+      intake. It is a separate record because an assurance verdict is scoped: the image assessment
+      considered a likeness, not a voice, and a review that did not consider material cannot be read
+      as having cleared it.'
+  - number: 12
+    feature: audio-reference-intake
+    delivers:
+      - A staged-input contract able to describe a stream with no width or height, without inventing
+        values for it
+      - Permitted audio media types alongside the existing image and video ones
+      - A per-kind bounds check replacing the unconditional positive-dimension requirement, so images
+        and videos keep it and audio is checked on what it has
+    depends_on:
+      - 11
+    story_ids:
+      - reference-generation/story/supply-an-audio-reference
+    files:
+      - src/tkr_cloud_video/jobs/input_staging.py
+    data_lifecycle:
+      kind: bounded
+      detail: Creates objects under the inputs prefix, which already carries a declared retention class
+        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
+        what must not happen here is creating input objects outside the prefix those rules reach.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Audio input media contract
+    layer: domain
+    status: planned
+    description: This is the slice the audio gap actually lives in. The inspection port returns a media
+      type and two dimensions, the staged-input value carries them, and the stager requires both to
+      be positive; an audio stream has none of the three, so an allowlist entry alone would produce
+      a value the contract cannot express.
+  - number: 13
+    feature: audio-reference-intake
+    delivers:
+      - Inspection that locates an audio stream and derives the media type from its own codec and container,
+        rather than requiring a video stream and reading that
+      - Duration, channel-count and sample-rate bounds for a staged audio reference
+      - Refusal of a file whose container and streams disagree with the kind it is offered as, so a
+        declared type is never taken on trust
+    depends_on:
+      - 12
+    story_ids:
+      - reference-generation/story/supply-an-audio-reference
+    files:
+      - src/tkr_cloud_video/adapters/media.py
+      - src/tkr_cloud_video/jobs/media_validation.py
+    data_lifecycle:
+      kind: bounded
+      detail: Creates objects under the inputs prefix, which already carries a declared retention class
+        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
+        what must not happen here is creating input objects outside the prefix those rules reach.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Audio stream inspection and bounds
+    layer: service
+    status: planned
+  - number: 14
+    feature: audio-reference-intake
+    delivers:
+      - The audio reference surface on the console, with its own bounds and refusals
+      - The audio retention markers and the two audio task types made selectable, so a caller composes
+        a reuse relationship rather than describing one in prose
+      - A staged audio reference bound into the published reference workflow
+    depends_on:
+      - 13
+    story_ids:
+      - reference-generation/story/supply-an-audio-reference
+    files:
+      - src/tkr_cloud_video/console/uploads.py
+      - src/tkr_cloud_video/console/intake.py
+      - src/tkr_cloud_video/console/static/app.js
+    data_lifecycle:
+      kind: bounded
+      detail: Creates objects under the inputs prefix, which already carries a declared retention class
+        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
+        what must not happen here is creating input objects outside the prefix those rules reach.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Wire Audio Reference Intake
+    layer: integration
+    status: planned
+  - number: 15
+    feature: audio-reference-intake
+    delivers:
+      - Staging tests for an audio-only file, a video payload offered as audio, and an image whose
+        dimensions are absent
+      - A test that relaxing dimensions for audio did not relax them for images or videos
+      - Bounds tests for duration, channel count and sample rate
+      - An end-to-end test binding an audio reference alongside a visual one
+    depends_on:
+      - 14
+    story_ids:
+      - reference-generation/story/supply-an-audio-reference
+      - reference-generation/story/assess-voice-reference-processing
+    files:
+      - tests/console/test_audio_reference_intake.py
+      - tests/job_execution/test_validated_job_intake.py
+    data_lifecycle:
+      kind: bounded
+      detail: Creates objects under the inputs prefix, which already carries a declared retention class
+        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
+        what must not happen here is creating input objects outside the prefix those rules reach.
+    paths:
+      - tests/**
+    title: Test Audio Reference Intake
+    layer: integration
+    status: planned

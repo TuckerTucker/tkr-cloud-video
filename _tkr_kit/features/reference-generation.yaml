@@ -72,3 +72,49 @@ features:
     citations:
       - CQLR c. P-39.1, s 17
       - S.C. 2000, c. 5, sch 1, cl 4.1.3
+  - name: audio-reference-intake
+    status: planned
+    display_name: Audio Reference Intake
+    user_story: As a caller reusing a voice or a sound from material I already have, I want an audio
+      reference to be stageable and bindable, so that the audio reuse and audio reference task types
+      the grammar declares are reachable rather than only describable.
+    description: 'The prompt side of audio already exists and the intake side carries none of it: the
+      grammar defines <Audio N> labels, an audio-specific retention marker set, and the audio reuse
+      and audio reference task types, while the input path permits three media types and none of them
+      is audio. The blocker is not a missing allowlist entry. The input inspector locates a video stream
+      and derives the media type from its codec, so an audio-only file is refused before any allowlist
+      is consulted; the inspection port returns dimensions; the staged-input value carries dimensions;
+      and the stager requires both to be positive. An audio stream has none of them, so the contract
+      has to change shape before an audio file can be described at all. This is a separate feature
+      rather than more slices on image intake because it can ship after it and because the sensitivity
+      is different.'
+    acceptance_criteria:
+      - A dated assessment covering voice and sound references exists before any is staged; the image
+        assessment's scope does not reach a voice sample.
+      - An audio reference is staged, verified and bound, and an audio task type is selectable rather
+        than only expressible in prose.
+      - A file whose container and streams disagree with its declared kind is refused, so an audio
+        type cannot be claimed for a video payload or the reverse.
+      - The staged-input contract describes a stream with no dimensions without inventing any, and
+        an image reference is still refused if its dimensions are absent.
+    scope_in:
+      - A dated assessment for audio references, weighing the sensitivity of a voice sample of an identifiable
+        person and of an output that reproduces it.
+      - An input contract able to describe a stream that has no width or height, without weakening
+        the dimension requirement that image and video references still carry.
+      - Inspection that locates an audio stream rather than requiring a video one, with duration, channel
+        and sample-rate bounds.
+      - The <Audio N> label surface, the audio retention markers, and the two audio task types on the
+        operator console.
+    scope_out:
+      - Speaker identification, consent capture, or any judgement about who is speaking in a supplied
+        recording.
+      - Generating audio without video. Every mode this model declares produces both.
+      - Retention enforcement for the objects this feature creates, owned by durable-delivery/feature/enforced-retention.
+      - Transcription of reference audio. The grammar's unintelligible-span token exists precisely
+        so an unclear span is marked rather than guessed at.
+    depends_on:
+      - authorized-reference-intake
+    citations:
+      - CQLR c. P-39.1, s 17
+      - S.C. 2000, c. 5, sch 1, cl 4.1.3
