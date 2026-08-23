@@ -261,6 +261,37 @@ async def test_an_unobserved_run_still_reports_the_provider_status() -> None:
 
 
 @pytest.mark.asyncio
+async def test_an_unreadable_bucket_degrades_an_observation_not_ends_it() -> None:
+    """Where the run stands is still worth answering when delivery is unreadable.
+
+    Returning an error document for the whole observation loses the provider
+    status too, and the page renders such a document as a card that never
+    changes. The half the console does know is kept, and the half it does not is
+    named.
+    """
+    reader = FakeObjectReader(
+        fail_with=AppError(
+            "object_read_failed",
+            "Reading a committed result marker failed.",
+            context={"operation": "get_object"},
+        )
+    )
+    service, runs, _, _ = build(reader=reader)
+    await service.generate(REQUEST)
+    runs.statuses["run-1"] = RunStatus(
+        run_id="run-1", status="IN_PROGRESS", delay_time_ms=201_905
+    )
+
+    observed = await service.observe("run-1")
+
+    assert observed["ok"] is True
+    assert observed["status"] == "IN_PROGRESS"
+    assert observed["delay_time_ms"] == 201_905
+    assert observed["result_state"] is None
+    assert observed["result_error"] == "object_read_failed"
+
+
+@pytest.mark.asyncio
 async def test_the_committed_metadata_is_served_without_a_delivery_link() -> None:
     """Lookup and delivery are separate, and only delivery signs anything."""
     service, _, reader, registry = build()

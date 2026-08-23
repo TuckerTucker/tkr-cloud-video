@@ -84,8 +84,11 @@ class FakeObjectReader:
 
     objects: dict[str, bytes] = field(default_factory=dict)
     reads: list[str] = field(default_factory=list)
+    fail_with: Exception | None = None
 
     async def get(self, object_key: str) -> bytes | None:
         """Return the stored bytes, or None when nothing is stored."""
         self.reads.append(object_key)
+        if self.fail_with is not None:
+            raise self.fail_with
         return self.objects.get(object_key)

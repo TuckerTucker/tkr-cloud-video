@@ -131,7 +131,15 @@ class ConsoleService:
         if record is None:
             return payload
         payload["identity_matches"] = _identity_matches(status, record)
-        payload["result_state"] = await self._result_state(record, status)
+        try:
+            payload["result_state"] = await self._result_state(record, status)
+        except AppError as error:
+            # The provider already answered where the run stands, and that is
+            # the more useful half of an observation. A delivery bucket this
+            # console could not read degrades the answer rather than replacing
+            # it with an error document the page would render as nothing.
+            payload["result_state"] = None
+            payload["result_error"] = error.code
         return payload
 
     async def cancel(self, run_id: str) -> dict[str, object]:
