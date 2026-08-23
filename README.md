@@ -26,6 +26,23 @@ Application behavior is composed from injected provider-neutral interfaces.
 Provider credentials must never be placed in project metadata, command-line
 arguments, workflow files, or logs.
 
+## Operator console
+
+A loopback web page for submitting a generation and playing back what it
+committed, built on the standard library alone so the deployed dependency graph
+is unchanged:
+
+```bash
+scripts/console.sh
+```
+
+It runs the worker's own intake before submitting, so a malformed request or a
+closed-vocabulary prompt defect is refused in milliseconds rather than after a
+model hydration, and it reaches a committed video only through a reauthorized
+signed link. It binds loopback, holds the RunPod and delivery credentials so a
+browser never does, and composes none of the write side, so it cannot alter the
+delivery bucket. See `docs/models/operator-console.md`.
+
 ## Worker deployment
 
 The image defaults to the fail-closed `serverless` command; `worker` runs the
