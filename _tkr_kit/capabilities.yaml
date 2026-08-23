@@ -721,7 +721,8 @@ capabilities:
         ones rather than edits to them, committing exactly one image per attempt.
       - Output validation proving one contained image, since the video validator requires
         a video stream and a positive duration and would refuse every still.
-      - A reference sheet as a named set of already-committed stills for one principal,
+      - A reference sheet as a request-time set of already-committed stills for one
+        principal, assembled and used within one request rather than saved,
         and promotion of a committed still into that principal's input namespace so
         a video generation can name it.
       - The console surface for generating stills, assembling a sheet, and carrying

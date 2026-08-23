@@ -71,7 +71,7 @@ features:
   - name: reference-sheet-assembly
     status: planned
     display_name: Reference Sheet Assembly
-    user_story: As a caller, I want to gather several stills I have generated into a named sheet and
+    user_story: As a caller, I want to gather several stills I have generated into a sheet and
       use them as the references for a video generation, so that a subject stays recognisable across
       a clip without my having to find and upload the files by hand.
     description: A sheet here is an assembly, not an attempt. It names stills that are already committed
@@ -91,7 +91,8 @@ features:
     scope_in:
       - A dated assessment for generated likeness, distinct from the reference-image and audio records
         because it considers material neither of them did.
-      - A sheet as a named, principal-scoped set of committed still job identities.
+      - A sheet as a request-time, principal-scoped set of committed still job identities, assembled
+        for one request rather than persisted between them.
       - Digest-preserving promotion of a committed still into that principal's input namespace.
       - The console surface for generating, assembling, promoting and then naming a sheet in a reference
         request.

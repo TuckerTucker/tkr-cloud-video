@@ -1,0 +1,34 @@
+id: work-2PNiHrf9
+title: image-to-video is accepted at intake and executable by nothing
+kind: debt
+severity: medium
+status: open
+capabilityId: job-execution
+anchors:
+  - src/tkr_cloud_video/jobs/contracts.py
+  - release-assets/minimax-h3-t2v/catalog.json
+createdAt: 2026-08-23T23:23:21.894Z
+updatedAt: 2026-08-23T23:23:21.894Z
+provenance:
+  source: plan-review
+  ref: _tkr_kit/features/reference-generation.yaml
+  fingerprint: i2v-accepted-unexecutable
+remedy: Two routes, and the choice is a product decision. Either give the mode
+  its own graph revision, envelope registration and reviewer approval bound to
+  the new manifest digest — structurally a clone of
+  reference-generation/feature/reference-conditioned-release — or remove
+  ImageToVideoRequest from the request union so intake stops accepting a mode
+  nothing can run. Until one is chosen, an accepted image-to-video request fails
+  at binding rather than at intake.
+detail: >-
+  ImageToVideoRequest is live in the discriminated request union
+  (src/tkr_cloud_video/jobs/contracts.py) and prompt-authoring ships I2VA keyframe
+  alignment headers, so an image-to-video request validates and is accepted today.
+  No published workflow can execute it: the only catalog binds prompt, seed, width,
+  height, frames, fps and output_prefix, and the binder refuses a binding whose
+  input name is absent from the pinned graph. The mode is scoped out of
+  reference-generation in both capabilities.yaml and features/reference-generation.yaml
+  as a sibling mode needing a workflow revision of its own, and it appears in no
+  other capability, feature or work item, so nothing owns closing it. This is the
+  same latent condition reference-conditioned-release exists to fix for
+  reference-to-video, left unowned.
