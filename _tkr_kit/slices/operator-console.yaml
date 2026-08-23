@@ -1,0 +1,328 @@
+capability: operator-console
+slices:
+  - number: 1
+    feature: local-generation-console
+    delivers:
+      - Validated non-secret settings whose bind address is constrained to loopback in the settings
+        rather than in the launch command
+      - A credential value holding the Serverless bearer token and the delivery-read pair that renders
+        none of them, refusing an empty secret at construction
+      - The reviewed Canadian endpoint and region rule, extracted so the console and the existing storage
+        adapter enforce one rule rather than two copies
+    depends_on: []
+    story_ids:
+      - operator-console/story/submit-a-validated-generation
+      - operator-console/story/keep-console-credentials-out-of-the-browser
+    files:
+      - src/tkr_cloud_video/console/settings.py
+      - src/tkr_cloud_video/console/__init__.py
+      - src/tkr_cloud_video/core/storage.py
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - src/tkr_cloud_video/**
+    title: Console settings and credential boundary
+    layer: data
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 2
+    feature: local-generation-console
+    delivers:
+      - Preflight running the request contract and the prompt boundary in the handler's own order,
+        returning either the accepted request with its wire text or the rejection the handler would
+        have returned
+      - Field-scoped defects carrying the location, the rule and the validator's own message, and never
+        the value that caused them
+      - Form constraints and closed vocabularies read from the pinned trained-envelope and grammar
+        tables rather than restated
+      - A packaged structured-prompt example that validates, so the surface opens on a document that
+        passes rather than a fill-in template that cannot
+    depends_on:
+      - 1
+    story_ids:
+      - operator-console/story/refuse-a-defective-request-before-gpu-spend
+      - operator-console/story/submit-a-validated-generation
+    files:
+      - src/tkr_cloud_video/console/intake.py
+      - src/tkr_cloud_video/console/static/structured-example.json
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - src/tkr_cloud_video/**
+    title: Local intake preflight
+    layer: domain
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 3
+    feature: local-generation-console
+    delivers:
+      - A bounded client for the asynchronous run, status and cancel routes, never the synchronous
+        route, because a cold worker hydrates before it accepts work
+      - A paused endpoint surfaced as a distinct retryable state rather than a failure
+      - Provider timings carried across only when usable, so a boolean is never read as one millisecond
+      - A run port the console composes against, so the surface is exercised without a provider
+    depends_on:
+      - 1
+    story_ids:
+      - operator-console/story/follow-a-run-to-a-terminal-state
+    files:
+      - src/tkr_cloud_video/console/run_client.py
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - src/tkr_cloud_video/**
+    title: Serverless run client
+    layer: service
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 4
+    feature: local-generation-console
+    delivers:
+      - Routing independent of any socket, so the whole surface is exercised as function calls and
+        the server stays small enough to read in one sitting
+      - A loopback server checking the Host header, keeping no access log, and serving one fixed content-security
+        policy whose only permitted cross-origin load is the video
+      - 'The page itself: model set, prompt form, dimensions, live preflight, wire text, envelope departure
+        and run cards'
+      - A console command beside doctor and serverless, and a launcher resolving the three secrets
+        exactly as the existing scripts do
+    depends_on:
+      - 2
+      - 3
+    story_ids:
+      - operator-console/story/submit-a-validated-generation
+      - operator-console/story/follow-a-run-to-a-terminal-state
+    files:
+      - src/tkr_cloud_video/console/service.py
+      - src/tkr_cloud_video/console/routes.py
+      - src/tkr_cloud_video/console/server.py
+      - src/tkr_cloud_video/console/static/index.html
+      - src/tkr_cloud_video/console/static/app.css
+      - src/tkr_cloud_video/console/static/app.js
+      - src/tkr_cloud_video/cli.py
+      - scripts/console.sh
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - src/tkr_cloud_video/**
+      - scripts/**
+    title: Wire Local Generation Console
+    layer: integration
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 5
+    feature: local-generation-console
+    delivers:
+      - A pinning test asserting the console's local decision equals the handler's across a request
+        matrix, so a divergence fails here rather than as a request the console accepted and the endpoint
+        refused
+      - A test proving no defect, message or payload carries the caller's prompt text
+      - Run-client tests for submission, a paused endpoint, unusable timings, an unreachable provider
+        and a response that is not an object
+      - A socket test binding an ephemeral port, asserting the security headers and refusing a rebound
+        Host
+    depends_on:
+      - 4
+    story_ids:
+      - operator-console/story/refuse-a-defective-request-before-gpu-spend
+      - operator-console/story/follow-a-run-to-a-terminal-state
+    files:
+      - tests/console/conftest.py
+      - tests/console/test_intake_preflight.py
+      - tests/console/test_run_client.py
+      - tests/console/test_console_settings.py
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - tests/**
+    title: Test Local Generation Console
+    layer: integration
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 6
+    feature: authorized-console-delivery
+    delivers:
+      - Job and attempt identity derived from the principal and the canonical request hash, mirroring
+        the generation path so the console knows the result key before the worker has written it
+      - A thread-safe session registry addressable by run identifier and by job identifier
+      - An authorizer admitting only a job this console derived for its own principal, so an unknown
+        job resolves exactly as an absent one
+      - A repository reading the marker at the derived attempt key, requiring no listing and therefore
+        no enumeration capability
+    depends_on:
+      - 1
+    story_ids:
+      - operator-console/story/play-back-a-committed-video
+      - operator-console/story/detect-a-principal-mismatch
+    files:
+      - src/tkr_cloud_video/console/results.py
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - src/tkr_cloud_video/**
+    title: Session registry and derived authorization
+    layer: domain
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 7
+    feature: authorized-console-delivery
+    delivers:
+      - Signature Version 4 query presigning for one bucket in one reviewed Canadian region, computed
+        from the standard library, GET only, incapable of creating, overwriting or deleting
+      - A signing scope fixed at construction, so a request can vary the key and never the bucket
+      - Satisfaction of the existing delivery signing port, so the one-hour policy cap sits above this
+        and narrows it
+    depends_on:
+      - 1
+    story_ids:
+      - operator-console/story/play-back-a-committed-video
+      - operator-console/story/keep-console-credentials-out-of-the-browser
+    files:
+      - src/tkr_cloud_video/console/presign.py
+    data_lifecycle:
+      kind: bounded
+      detail: 'Issues a value with a lifetime rather than storing one. The link is response-only: it
+        is returned to the caller that asked for it, is excluded from logs and error contexts by the
+        existing forbidden-key rule, and expires on the delivery policy''s clock.'
+    paths:
+      - src/tkr_cloud_video/**
+    title: Delivery presigner
+    layer: service
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 8
+    feature: authorized-console-delivery
+    delivers:
+      - A bounded read of one committed result marker over a short-lived presigned URL, so the process
+        needs no second credential mechanism and no provider client
+      - Absence returned as absence rather than as failure, because a job with nothing committed yet
+        is a state
+      - A ceiling on the readable body, so a wrong or redirected key cannot stream an unbounded response
+        into the process
+      - Failures reported without naming the URL, which is a secret for its lifetime
+    depends_on:
+      - 7
+    story_ids:
+      - operator-console/story/play-back-a-committed-video
+    files:
+      - src/tkr_cloud_video/console/objects.py
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - src/tkr_cloud_video/**
+    title: Committed-result reader
+    layer: service
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 9
+    feature: authorized-console-delivery
+    delivers:
+      - Composition of the access policy, the signing service and the private result service, and of
+        nothing on the write side, so uploading and deleting are absent rather than unused
+      - The run's terminal status overlaid onto committed state, because the bucket cannot distinguish
+        a failed attempt from one still sampling
+      - The worker's reported job identity compared with the derived one, so a principal mismatch is
+        named rather than presenting as a missing result
+      - A model record of the surface with a verify command on every volatile claim
+    depends_on:
+      - 6
+      - 8
+    story_ids:
+      - operator-console/story/play-back-a-committed-video
+      - operator-console/story/detect-a-principal-mismatch
+    files:
+      - src/tkr_cloud_video/console/service.py
+      - docs/models/operator-console.md
+      - README.md
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - src/tkr_cloud_video/**
+      - docs/models/**
+    title: Wire Authorized Console Delivery
+    layer: integration
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - number: 10
+    feature: authorized-console-delivery
+    delivers:
+      - A presigning vector pinned against an independent implementation, so a change to the signer
+        must restate the signature it produces
+      - Tests that the derived identity equals the one the generation path mints, pinned against that
+        function rather than against a literal
+      - A source-level test that no uploader, committer, reconciler or erasure path exists in the package
+      - A served-response test asserting no page, asset or answer carries a credential
+    depends_on:
+      - 9
+    story_ids:
+      - operator-console/story/play-back-a-committed-video
+      - operator-console/story/keep-console-credentials-out-of-the-browser
+      - operator-console/story/detect-a-principal-mismatch
+    files:
+      - tests/console/test_signed_delivery.py
+      - tests/console/test_console_service.py
+      - tests/console/test_console_server.py
+    data_lifecycle:
+      kind: exempt
+      detail: 'Introduces no store. The console''s only state is a per-process registry of the jobs
+        it derived this session, held in memory and lost on restart. That is deliberate: a durable
+        registry would be a new record of job identities and request hashes with no retention clock,
+        which is the gap already recorded against the fields this product does persist.'
+    paths:
+      - tests/**
+    title: Test Authorized Console Delivery
+    layer: integration
+    status: done
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632

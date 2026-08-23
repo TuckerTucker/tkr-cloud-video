@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tkr-cloud-video console</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="bar">
+  <h1>tkr-cloud-video</h1>
+  <dl class="scope" id="scope"></dl>
+</header>
+
+<main>
+  <section class="panel" id="compose">
+    <h2>Compose</h2>
+
+    <div class="field">
+      <label for="model-set">Model set</label>
+      <select id="model-set"></select>
+      <p class="hint" id="model-set-hint"></p>
+    </div>
+
+    <div class="field">
+      <span class="label">Prompt form</span>
+      <div class="segmented" role="tablist">
+        <button type="button" id="tab-freeform" role="tab" aria-selected="true">Freeform</button>
+        <button type="button" id="tab-structured" role="tab" aria-selected="false">Structured</button>
+      </div>
+    </div>
+
+    <div class="field" id="pane-freeform">
+      <label for="prompt">Prompt text</label>
+      <textarea id="prompt" rows="6" spellcheck="false"
+        placeholder="A calm wide shot of a snow-covered pine forest at dawn, low mist drifting between the trees, soft golden light."></textarea>
+      <p class="hint"><span id="prompt-count">0</span> / <span class="prompt-limit"></span> characters</p>
+    </div>
+
+    <div class="field hidden" id="pane-structured">
+      <label for="structured">Structured prompt (JSON)</label>
+      <textarea id="structured" rows="16" spellcheck="false"></textarea>
+      <p class="hint">
+        Composed, validated, rendered and digested server-side. Every closed
+        vocabulary is listed under <a href="#vocabularies">allowed values</a>.
+      </p>
+    </div>
+
+    <div class="grid">
+      <div class="field">
+        <label for="seed">Seed</label>
+        <div class="row">
+          <input id="seed" type="number" min="0" step="1" value="7">
+          <button type="button" id="reseed" class="ghost">New</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="width">Width</label>
+        <input id="width" type="number" step="1">
+      </div>
+      <div class="field">
+        <label for="height">Height</label>
+        <input id="height" type="number" step="1">
+      </div>
+      <div class="field">
+        <label for="frames">Frames</label>
+        <input id="frames" type="number" step="1">
+        <p class="hint" id="frames-hint"></p>
+      </div>
+    </div>
+
+    <div id="envelope" class="note hidden"></div>
+    <div id="estimate" class="note hidden"></div>
+
+    <div id="defects" class="defects hidden">
+      <h3>Refused before submission</h3>
+      <p id="defects-message"></p>
+      <ul id="defects-list"></ul>
+    </div>
+
+    <details id="wire" class="wire hidden">
+      <summary>Wire text — exactly what reaches the workflow</summary>
+      <pre id="wire-text"></pre>
+    </details>
+
+    <div class="actions">
+      <button type="button" id="generate" class="primary" disabled>Generate</button>
+      <span class="hint" id="preflight-state">Checking…</span>
+    </div>
+  </section>
+
+  <section class="panel" id="runs-panel">
+    <h2>Runs</h2>
+    <p class="hint" id="runs-empty">Nothing submitted in this session.</p>
+    <ul class="runs" id="runs"></ul>
+  </section>
+
+  <section class="panel" id="vocabularies-panel">
+    <h2 id="vocabularies">Allowed values</h2>
+    <p class="hint">
+      The closed vocabularies of grammar revision <span id="grammar-revision"></span>.
+      A structured prompt using anything else is refused by field and rule.
+    </p>
+    <div id="vocabularies-list"></div>
+  </section>
+</main>
+
+<template id="run-template">
+  <li class="run">
+    <div class="run-head">
+      <span class="status" data-status></span>
+      <code class="run-id" data-run-id></code>
+      <span class="hint" data-model-set></span>
+      <button type="button" class="ghost" data-cancel>Cancel</button>
+    </div>
+    <dl class="run-facts">
+      <dt>Job</dt><dd><code data-job-id></code></dd>
+      <dt>Queued</dt><dd data-delay>—</dd>
+      <dt>Executing</dt><dd data-execution>—</dd>
+      <dt>Committed</dt><dd data-result-state>—</dd>
+    </dl>
+    <div class="run-note hidden" data-note></div>
+    <div class="delivery hidden" data-delivery>
+      <video controls preload="metadata" data-video></video>
+      <p class="hint">Link expires <span data-expiry></span>. <a data-download download>Download</a></p>
+    </div>
+  </li>
+</template>
+
+<script src="/app.js"></script>
+</body>
+</html>

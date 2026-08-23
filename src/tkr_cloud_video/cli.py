@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, cast
 
+from pydantic import ValidationError
 from structlog.typing import FilteringBoundLogger
 
 from tkr_cloud_video.adapters.process import SubprocessCommandExecutor
@@ -24,6 +25,12 @@ from tkr_cloud_video.adapters.rclone import (
 )
 from tkr_cloud_video.artifacts.streaming_publisher import StreamingArtifactPublisher
 from tkr_cloud_video.bootstrap import DoctorResult, run_doctor
+from tkr_cloud_video.console.server import serve
+from tkr_cloud_video.console.service import compose_console
+from tkr_cloud_video.console.settings import (
+    credentials_from_environment,
+    settings_from_environment,
+)
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.core.logging import configure_logging, default_event_sink
 from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
@@ -72,6 +79,14 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--catalog", required=True, type=Path)
         command.add_argument("--license-approval-id", required=True)
         command.add_argument("--output", type=Path)
+    console_parser = subparsers.add_parser(
+        "console", help="serve the loopback operator console"
+    )
+    console_parser.add_argument(
+        "--port",
+        type=int,
+        help="override the console's loopback port",
+    )
     retention_parser = subparsers.add_parser(
         "lifecycle", help="provision, verify, or run declared object retention"
     )
@@ -107,6 +122,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return run_worker()
     if arguments.command == "serverless":
         return run_serverless()
+    if arguments.command == "console":
+        return run_console(arguments.port)
     if arguments.command == "lifecycle":
         return run_retention(arguments.mode, arguments.root)
     if arguments.command == "release":
@@ -123,6 +140,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 arguments.output,
             )
     return 2
+
+
+def run_console(port: int | None = None) -> int:
+    """Serve the operator console, reporting a missing secret as an exit status.
+
+    The three secrets are read from the environment rather than from a vault
+    directly, so the console never learns how the operator's secrets are stored
+    and `scripts/console.sh` stays the one place that knows.
+    """
+    environment = dict(os.environ)
+    try:
+        settings = settings_from_environment(environment)
+        if port is not None:
+            settings = settings.model_copy(update={"bind_port": port})
+        credentials = credentials_from_environment(environment)
+    except (ValidationError, ValueError) as error:
+        print(f"console configuration is incomplete: {error}", file=sys.stderr)
+        return 2
+    serve(compose_console(settings, credentials))
+    return 0
 
 
 def run_worker() -> int:

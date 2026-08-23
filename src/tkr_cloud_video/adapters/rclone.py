@@ -14,7 +14,11 @@ from tkr_cloud_video.adapters.process import CommandExecutor
 from tkr_cloud_video.artifacts.publisher import ObjectMetadata
 from tkr_cloud_video.core.context import validate_identifier
 from tkr_cloud_video.core.errors import AppError
-from tkr_cloud_video.core.storage import B2_S3_ENDPOINT, B2_S3_REGION
+from tkr_cloud_video.core.storage import (
+    B2_S3_ENDPOINT,
+    B2_S3_REGION,
+    validate_canadian_b2_endpoint,
+)
 from tkr_cloud_video.delivery.reconciler import StoredObject
 from tkr_cloud_video.delivery.uploader import RemoteMetadata
 from tkr_cloud_video.security.validation import ObjectKey, Sha256Digest
@@ -62,20 +66,7 @@ class RcloneLocation:
         validate_identifier(self.remote_name, "resource_id")
         validate_identifier(self.bucket_name, "resource_id")
         validate_identifier(self.region, "resource_id")
-        parsed_endpoint = urlparse(self.endpoint)
-        expected_hostname = f"s3.{self.region}.backblazeb2.com"
-        if (
-            parsed_endpoint.scheme != "https"
-            or not self.region.startswith("ca-")
-            or parsed_endpoint.hostname != expected_hostname
-            or parsed_endpoint.path not in {"", "/"}
-            or parsed_endpoint.params
-            or parsed_endpoint.query
-            or parsed_endpoint.fragment
-        ):
-            raise ValueError(
-                "endpoint must match its reviewed Canadian Backblaze S3 region"
-            )
+        validate_canadian_b2_endpoint(self.endpoint, self.region)
         if (
             not self.base_prefix
             or self.base_prefix.startswith("/")

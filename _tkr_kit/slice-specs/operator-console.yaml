@@ -1,0 +1,1634 @@
+capability: operator-console
+slice_specs:
+  - name: local-generation-console-1-spec
+    title: Console settings and credential boundary Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: local-generation-console
+    slice: 1
+    source_story_ids:
+      - operator-console/story/submit-a-validated-generation
+      - operator-console/story/keep-console-credentials-out-of-the-browser
+    purpose: 'Hold what the console is pointed at and what it holds, so neither can be wrong quietly.
+      The bind address is constrained here rather than in the launch command because the surface authenticates
+      nothing: on loopback the operating system has already answered who the caller is, and off loopback
+      that answer is gone while two credentials remain.'
+    layer_assignment:
+      - component: ConsoleSettings
+        layer: data
+        responsibility: Validated non-secret configuration, loopback-constrained
+      - component: ConsoleCredentials
+        layer: data
+        responsibility: The three secrets, held in a value that renders none of them
+      - component: validate_canadian_b2_endpoint
+        layer: domain
+        responsibility: The one endpoint and region rule, shared with the storage adapter rather than
+          copied
+    interfaces:
+      - name: ConsoleSettings
+        kind: config_model
+        signature: immutable pydantic model; extra=forbid, frozen
+        async: false
+        ownership: Refuses a non-loopback bind and a privileged port in validators, so an unsafe address
+          cannot be reached by any launch path.
+      - name: settings_from_environment
+        kind: factory
+        signature: 'def settings_from_environment(environment: Mapping[str, str]) -> ConsoleSettings'
+        async: false
+        ownership: Reads the mapping it is handed, never the ambient process environment, so no test
+          depends on the machine it runs on.
+      - name: credentials_from_environment
+        kind: factory
+        signature: 'def credentials_from_environment(environment: Mapping[str, str]) -> ConsoleCredentials'
+        async: false
+        ownership: Names every absent variable together; a message names variables and never values.
+      - name: validate_canadian_b2_endpoint
+        kind: domain_function
+        signature: 'def validate_canadian_b2_endpoint(endpoint: str, region: str) -> None'
+        async: false
+        ownership: Checks the pair together, because either half alone is satisfiable while the transfer
+          still leaves the country.
+    data_models:
+      - name: ConsoleSettings
+        shape: immutable pydantic model
+        fields: endpoint_id; principal_id; bucket_name; b2_s3_endpoint; b2_s3_region; signed_link_ttl_seconds;
+          read_link_ttl_seconds; bind_host; bind_port; runpod_api_base; request_timeout_seconds
+        validation: bind_host is loopback only; bind_port is zero or unprivileged; the storage pair
+          names one reviewed Canadian region; link lifetimes are bounded
+      - name: ConsoleCredentials
+        shape: frozen dataclass with non-repr fields
+        fields: runpod_api_key; delivery_key_id; delivery_application_key
+        validation: every field is excluded from repr; an empty secret is refused at construction
+    behavior:
+      - story_id: operator-console/story/keep-console-credentials-out-of-the-browser
+        given: a bind address that is not loopback
+        when: settings are built
+        then: construction fails, because the surface's whole authorization argument is the loopback
+          address
+      - story_id: operator-console/story/keep-console-credentials-out-of-the-browser
+        given: a credential value
+        when: it is rendered or logged
+        then: no secret appears, because a credential in a traceback would be the entire failure
+      - story_id: operator-console/story/submit-a-validated-generation
+        given: an exported but empty variable
+        when: settings are built
+        then: the default applies, because an empty export is absence rather than a value
+    error_handling:
+      - condition: non_loopback_bind
+        error: ValueError
+        recovery: Refuse construction; there is no launch flag that overrides it
+        retryable: false
+      - condition: privileged_port
+        error: ValueError
+        recovery: Refuse; nothing about a single-operator tool wants that elevation
+        retryable: false
+      - condition: storage_pair_outside_reviewed_region
+        error: ValueError
+        recovery: Refuse the pair rather than either half
+        retryable: false
+      - condition: missing_or_empty_secret
+        error: ValueError
+        recovery: Name every absent variable and start nothing
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the process environment as an explicit mapping
+      provides:
+        - validated console configuration
+        - the three console secrets
+        - the shared reviewed-region rule
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.local-generation-console.1.started
+        - operator-console.local-generation-console.1.succeeded
+        - operator-console.local-generation-console.1.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The surface may bind loopback only; the constraint lives in the settings so no operator command
+        can widen it.
+      - Secrets are read from the environment, so the console never learns how they are stored and
+        the launcher stays the one thing that knows.
+    test_scenarios:
+      - id: S1-T01
+        level: unit
+        given: a non-loopback bind address
+        when: settings are built
+        then: construction fails naming loopback
+      - id: S1-T02
+        level: unit
+        given: port 443 and port 0
+        when: settings are built
+        then: 443 is refused and 0 is accepted as an ephemeral request
+      - id: S1-T03
+        level: unit
+        given: a US region and endpoint pair
+        when: settings are built
+        then: construction fails naming the reviewed region
+      - id: S1-T04
+        level: unit
+        given: two absent secrets
+        when: credentials are read
+        then: both variables are named and no value appears
+      - id: S1-TF
+        level: failure_injection
+        given: each declared condition at its boundary
+        when: settings or credentials are built
+        then: the recovery contract holds and no secret reaches a message, repr or log
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No secret appears in any repr, str, message or event.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store; the session registry is in-process and lost on restart, which is
+        the deliberate alternative to a durable record of job identities with no retention clock.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: local-generation-console-2-spec
+    title: Local intake preflight Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: local-generation-console
+    slice: 2
+    source_story_ids:
+      - operator-console/story/refuse-a-defective-request-before-gpu-spend
+      - operator-console/story/submit-a-validated-generation
+    purpose: 'Run the worker''s own intake before anything is submitted. This is the single largest
+      thing the surface does for the product: the same two steps in the same order, so a contract or
+      prompt defect costs a round trip to this process rather than the model hydration the latency
+      audit puts at about seven minutes.'
+    layer_assignment:
+      - component: preflight
+        layer: domain
+        responsibility: Parse the request contract, then compose and render the prompt
+      - component: Accepted / Rejection
+        layer: domain
+        responsibility: One shape for what would happen, whichever way it goes
+      - component: form_constraints
+        layer: domain
+        responsibility: Serve the pinned envelope and grammar tables as form bounds
+    interfaces:
+      - name: preflight
+        kind: domain_function
+        signature: 'def preflight(payload: object, prompts: PromptServices) -> Accepted | Rejection'
+        async: false
+        ownership: Calls the same two functions the handler calls, in the handler's order; agreement
+          is pinned by test rather than by importing the handler, which would need an application this
+          surface must not be given.
+      - name: form_constraints
+        kind: domain_function
+        signature: def form_constraints() -> dict[str, Any]
+        async: false
+        ownership: Reads the registries, so a newly registered model set reaches the surface by being
+          registered.
+      - name: structured_example
+        kind: domain_function
+        signature: def structured_example() -> dict[str, Any]
+        async: false
+        ownership: Returns a packaged prompt that validates; pinned by test against the request file
+          it came from so the two cannot drift.
+    data_models:
+      - name: Accepted
+        shape: frozen dataclass
+        fields: 'request: GenerationRequest; request_hash: str; wire_text: str; below_trained_envelope:
+          bool'
+        validation: wire_text is returned to the caller that supplied the prompt and to nothing else
+      - name: Rejection
+        shape: frozen dataclass
+        fields: 'error_code: str; message: str; error_context: Mapping | None; defects: tuple[Mapping[str,
+          str], ...]'
+        validation: each defect carries field, rule and message; the offending value never crosses
+    behavior:
+      - story_id: operator-console/story/refuse-a-defective-request-before-gpu-spend
+        given: a frame count off the model set's temporal grid
+        when: preflight runs
+        then: it is refused naming the grid, and the discriminator location is replaced by the request
+      - story_id: operator-console/story/refuse-a-defective-request-before-gpu-spend
+        given: a prompt beyond the bound the freeform field enforces
+        when: preflight runs
+        then: the bound is reported and the prompt text appears in no defect or payload
+      - story_id: operator-console/story/submit-a-validated-generation
+        given: a structured prompt
+        when: preflight runs
+        then: the rendered wire text is returned, because a structured prompt is derived rather than
+          supplied
+      - story_id: operator-console/story/submit-a-validated-generation
+        given: a request naming no dimensions
+        when: preflight runs
+        then: they are filled from the trained envelope of the model set named
+    error_handling:
+      - condition: invalid_request
+        error: Rejection
+        recovery: Report every field-scoped defect together and submit nothing
+        retryable: false
+      - condition: prompt_validation_failed
+        error: Rejection
+        recovery: Carry the prompt error's own code and its full defect list rather than collapsing
+          to invalid_request
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 1
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the pinned trained-envelope registry
+        - the composed prompt boundary
+      provides:
+        - a local accept-or-refuse decision matching the worker's
+        - form bounds and closed vocabularies
+        - the wire text a prompt renders to
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.local-generation-console.2.started
+        - operator-console.local-generation-console.2.succeeded
+        - operator-console.local-generation-console.2.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - A defect names the field and the rule and carries the validator's own message; the value that
+        caused it never crosses, because for a prompt field that value is the prompt.
+      - The wire text is returned to the caller that supplied the prompt and is never logged.
+    test_scenarios:
+      - id: S2-T01
+        level: unit
+        given: a frame count off the grid
+        when: preflight runs
+        then: refused, located at the request, naming the grid
+      - id: S2-T02
+        level: unit
+        given: a six thousand character prompt
+        when: preflight runs
+        then: the bound is reported and no prompt text appears in the payload
+      - id: S2-T03
+        level: unit
+        given: a closed-vocabulary violation in a structured prompt
+        when: preflight runs
+        then: every defect is reported by field and rule
+      - id: S2-T04
+        level: unit
+        given: the packaged structured example
+        when: preflight runs
+        then: it is accepted and equals the request file it came from
+      - id: S2-TF
+        level: failure_injection
+        given: each declared condition
+        when: preflight runs
+        then: the shape is identical to the handler's rejection
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - Agreement with the handler is asserted across the request matrix, not merely for the happy
+        path.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store; the session registry is in-process and lost on restart, which is
+        the deliberate alternative to a durable record of job identities with no retention clock.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: local-generation-console-3-spec
+    title: Serverless run client Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: local-generation-console
+    slice: 3
+    source_story_ids:
+      - operator-console/story/follow-a-run-to-a-terminal-state
+    purpose: Submit and observe a run without holding a connection open for it. Submission is asynchronous
+      by construction and never synchronous, because a cold worker hydrates the full model set before
+      it accepts work and the recorded runs took twelve and twenty-five minutes end to end.
+    layer_assignment:
+      - component: RunClient
+        layer: service
+        responsibility: The port the console composes against
+      - component: RunPodRunClient
+        layer: integration
+        responsibility: The provider adapter for the run routes
+      - component: RunStatus
+        layer: service
+        responsibility: One observation, separating provider state from handler response
+    interfaces:
+      - name: RunClient
+        kind: port
+        signature: async def submit(payload) -> str; async def status(run_id) -> RunStatus; async def
+          cancel(run_id) -> str
+        async: true
+        ownership: Injected, so the surface is exercised end to end without a provider.
+      - name: RunPodRunClient
+        kind: integration_adapter
+        signature: 'def __init__(self, settings: ConsoleSettings, credentials: ConsoleCredentials)'
+        async: false
+        ownership: Scoped to one endpoint at construction; a request varies the run, never the endpoint.
+      - name: EndpointPausedError
+        kind: typed_error
+        signature: 'code: str; safe_message: str; retryable: bool; context: Mapping[str, str]'
+        async: false
+        ownership: 'A distinct type because a paused endpoint is a state to wait out, not a failure:
+          raising a worker ceiling reaches the configuration plane before the run plane.'
+    data_models:
+      - name: RunStatus
+        shape: frozen dataclass
+        fields: 'run_id: str; status: str; output: dict | None; error: str | None; delay_time_ms: int
+          | None; execution_time_ms: int | None'
+        validation: terminal is derived from the status set rather than stored; timings are dropped
+          when unusable, so a boolean is never read as one millisecond
+    behavior:
+      - story_id: operator-console/story/follow-a-run-to-a-terminal-state
+        given: a submission
+        when: it is sent
+        then: it goes to the asynchronous run route and returns a run identifier
+      - story_id: operator-console/story/follow-a-run-to-a-terminal-state
+        given: a paused endpoint
+        when: a submission is attempted
+        then: a distinct retryable state is raised rather than a failure
+      - story_id: operator-console/story/follow-a-run-to-a-terminal-state
+        given: a provider answering without a run identifier
+        when: a submission completes
+        then: it is refused, because there is nothing left to poll
+    error_handling:
+      - condition: endpoint_paused
+        error: EndpointPausedError
+        recovery: Report as a state to wait out; the caller may retry unchanged
+        retryable: true
+      - condition: provider_call_failed
+        error: AppError
+        recovery: Report with the status class; five-hundreds are retryable
+        retryable: true
+      - condition: provider_response_invalid
+        error: AppError
+        recovery: Refuse a document that is not an object or names no status
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 1
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the Serverless run, status and cancel routes
+      provides:
+        - a submitted run identifier
+        - one observation of a run
+        - cancellation of a run this console started
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.local-generation-console.3.started
+        - operator-console.local-generation-console.3.succeeded
+        - operator-console.local-generation-console.3.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The bearer credential reaches the provider and appears in no response, log or error context.
+      - Response bodies are read under a ceiling, so a provider answer cannot stream unbounded into
+        the process.
+    test_scenarios:
+      - id: S3-T01
+        level: unit
+        given: a submission
+        when: it is sent
+        then: the asynchronous route is used and the envelope is unchanged
+      - id: S3-T02
+        level: unit
+        given: a paused endpoint response
+        when: a submission is attempted
+        then: EndpointPausedError is raised and is retryable
+      - id: S3-T03
+        level: unit
+        given: a status carrying a boolean timing
+        when: it is observed
+        then: the timing is dropped rather than coerced
+      - id: S3-T04
+        level: unit
+        given: a transport failure
+        when: a status is requested
+        then: the error is retryable
+      - id: S3-TF
+        level: failure_injection
+        given: each declared condition
+        when: a route is called
+        then: the recovery contract holds and the credential never appears
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - The credential is asserted present on the request and absent from every rendering.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store; the session registry is in-process and lost on restart, which is
+        the deliberate alternative to a durable record of job identities with no retention clock.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: local-generation-console-4-spec
+    title: Wire Local Generation Console Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: local-generation-console
+    slice: 4
+    source_story_ids:
+      - operator-console/story/submit-a-validated-generation
+      - operator-console/story/follow-a-run-to-a-terminal-state
+    purpose: Join the preflight, the run client and the page into one surface, keeping routing independent
+      of any socket so the whole API is exercised as function calls and the server stays small enough
+      to read in one sitting, which matters for a process holding two credentials.
+    layer_assignment:
+      - component: dispatch
+        layer: integration
+        responsibility: Route one request to the console service, independent of any socket
+      - component: ConsoleRequestHandler
+        layer: integration
+        responsibility: The loopback socket shell and its fixed security headers
+      - component: ConsoleService
+        layer: service
+        responsibility: The use cases the routes call
+      - component: static page
+        layer: integration
+        responsibility: The form, the live preflight, the wire text and the run cards
+    interfaces:
+      - name: dispatch
+        kind: integration_function
+        signature: 'async def dispatch(service: ConsoleService, method: str, path: str, body: bytes)
+          -> Response'
+        async: true
+        ownership: Pure with respect to sockets; an application error becomes an error document rather
+          than a traceback, because the page renders every failure the same way.
+      - name: content_security_policy
+        kind: integration_function
+        signature: 'def content_security_policy(media_origin: str) -> str'
+        async: false
+        ownership: 'Written around the fact that the page holds a delivery URL: the only permitted
+          cross-origin load is the video itself.'
+      - name: build_server
+        kind: integration_factory
+        signature: 'def build_server(console: ComposedConsole) -> ThreadingHTTPServer'
+        async: false
+        ownership: Binding is separated from serving so a caller can bind an ephemeral port.
+      - name: run_console
+        kind: cli_entrypoint
+        signature: 'def run_console(port: int | None = None) -> int'
+        async: false
+        ownership: Exits rather than serving when configuration is incomplete.
+    data_models:
+      - name: Response
+        shape: frozen dataclass
+        fields: 'status: int; body: bytes; content_type: str; headers: Mapping[str, str]'
+        validation: every response is served no-store, because preflight echoes the wire text and delivery
+          carries a signed URL
+    behavior:
+      - story_id: operator-console/story/submit-a-validated-generation
+        given: a valid request
+        when: it is posted to the generate route
+        then: it is preflighted, then submitted, and its derived identity is recorded
+      - story_id: operator-console/story/follow-a-run-to-a-terminal-state
+        given: a run identifier
+        when: its route is polled
+        then: the provider status and the handler response are reported separately
+      - story_id: operator-console/story/submit-a-validated-generation
+        given: a request naming an unexpected host
+        when: it arrives
+        then: it is refused before it reaches a route
+    error_handling:
+      - condition: request_too_large
+        error: AppError
+        recovery: Refuse at the socket and again in the router
+        retryable: false
+      - condition: invalid_envelope
+        error: AppError
+        recovery: Report a body that is not JSON as a named error document
+        retryable: false
+      - condition: not_found
+        error: routing failure
+        recovery: Answer an unknown route as an error document the page can render
+        retryable: false
+      - condition: host_not_permitted
+        error: routing failure
+        recovery: Refuse a request whose Host is not this loopback server
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 2
+        - 3
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the local preflight
+        - the run port
+      provides:
+        - a submitted and observable generation
+        - the operator page and its assets
+      documented_routes:
+        - GET /
+        - GET /app.css
+        - GET /app.js
+        - GET /api/constraints
+        - GET /api/scope
+        - GET /api/history
+        - POST /api/preflight
+        - POST /api/generate
+        - GET /api/runs/{run_id}
+        - POST /api/runs/{run_id}/cancel
+        - GET /api/jobs/{job_id}/result
+        - POST /api/jobs/{job_id}/link
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.local-generation-console.4.started
+        - operator-console.local-generation-console.4.succeeded
+        - operator-console.local-generation-console.4.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+      logging_contract: No access log is kept. Request lines name job identities and would sit beside
+        the response that issued a signed link.
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The Host header is checked, because a browser resolves any name to any address and this surface
+        authenticates nothing.
+      - 'No access log is kept: a request line names the job and would sit beside the response that
+        issued a link.'
+      - Static assets are served by exact name; no request path is mapped onto the filesystem.
+    test_scenarios:
+      - id: S4-T01
+        level: integration
+        given: each static path
+        when: it is requested
+        then: the asset is served and a traversal path is not
+      - id: S4-T02
+        level: integration
+        given: a wrong method on a served path
+        when: it is requested
+        then: the method is refused as an error document
+      - id: S4-T03
+        level: integration
+        given: a rebound Host header
+        when: a request arrives
+        then: it is refused before routing
+      - id: S4-T04
+        level: integration
+        given: an oversized body
+        when: it is posted
+        then: it is refused at the socket and in the router
+      - id: S4-TF
+        level: failure_injection
+        given: each declared condition
+        when: a request is dispatched
+        then: an error document is produced, never a traceback
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - The served security headers are asserted on a real socket, not only in the router.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store; the session registry is in-process and lost on restart, which is
+        the deliberate alternative to a durable record of job identities with no retention clock.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: local-generation-console-5-spec
+    title: Test Local Generation Console Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: local-generation-console
+    slice: 5
+    source_story_ids:
+      - operator-console/story/refuse-a-defective-request-before-gpu-spend
+      - operator-console/story/follow-a-run-to-a-terminal-state
+    purpose: 'Prove the property the surface exists for: that its local refusal is the worker''s refusal.
+      Everything else here is ordinary coverage; the agreement test is the one that keeps a caller
+      from being told a request is fine and then having the endpoint reject it.'
+    layer_assignment:
+      - component: agreement test
+        layer: integration
+        responsibility: Pin the console's decision against the handler's across a matrix
+      - component: boundary tests
+        layer: integration
+        responsibility: Cover settings, credentials, run routes and the socket
+    interfaces:
+      - name: test matrix
+        kind: test_suite
+        signature: parametrized payloads driven through both preflight and RunPodHandler.validate
+        async: false
+        ownership: The handler is constructed with an application that raises if reached, so validation
+          cannot submit.
+    data_models:
+      - name: fake run client
+        shape: in-memory double
+        fields: recorded submissions; configured statuses; configured failures
+        validation: records rather than asserts, so each test states its own expectation
+    behavior:
+      - story_id: operator-console/story/refuse-a-defective-request-before-gpu-spend
+        given: each payload in the request matrix
+        when: both paths validate it
+        then: the decisions agree, and for a refusal the error codes agree
+      - story_id: operator-console/story/refuse-a-defective-request-before-gpu-spend
+        given: a prompt carrying distinctive caller text
+        when: it is refused for length
+        then: that text appears nowhere in the serialized rejection
+      - story_id: operator-console/story/follow-a-run-to-a-terminal-state
+        given: a served page, asset or answer
+        when: it is fetched over a real socket
+        then: it carries no credential this process holds
+    error_handling:
+      - condition: agreement_divergence
+        error: test failure
+        recovery: Fail here rather than in production, where it would surface as an accepted request
+          the endpoint refused
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 4
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the console surface and the release handler
+      provides:
+        - evidence that local and remote refusal agree
+        - evidence that no credential reaches the browser
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.local-generation-console.5.started
+        - operator-console.local-generation-console.5.succeeded
+        - operator-console.local-generation-console.5.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - Tests assert absence of secrets by searching served bodies, not by inspection.
+    test_scenarios:
+      - id: S5-T01
+        level: unit
+        given: the request matrix
+        when: both validators run
+        then: decisions and error codes agree
+      - id: S5-T02
+        level: unit
+        given: distinctive caller prompt text
+        when: a refusal is serialized
+        then: the text is absent
+      - id: S5-T03
+        level: integration
+        given: a bound ephemeral port
+        when: each route is fetched
+        then: no credential appears in any body
+      - id: S5-T04
+        level: integration
+        given: a rebound Host
+        when: a request is made
+        then: it is refused with the declared status
+      - id: S5-TF
+        level: failure_injection
+        given: provider and storage failures
+        when: the surface is driven
+        then: every failure renders as an error document
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - Coverage for the console package meets the repository threshold with branch coverage enabled.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store; the session registry is in-process and lost on restart, which is
+        the deliberate alternative to a durable record of job identities with no retention clock.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: authorized-console-delivery-6-spec
+    title: Session registry and derived authorization Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: authorized-console-delivery
+    slice: 6
+    source_story_ids:
+      - operator-console/story/play-back-a-committed-video
+      - operator-console/story/detect-a-principal-mismatch
+    purpose: Make authorization structural rather than asserted. A job's identity is a one-way digest
+      over the principal and the canonical request hash, so this surface can only name a job whose
+      request it holds; a job identifier typed into an address bar resolves exactly as an absent one,
+      which is the property the delivery policy already holds against outsiders.
+    layer_assignment:
+      - component: derive_identity
+        layer: domain
+        responsibility: Recompute the job and attempt identity the generation path mints
+      - component: JobRegistry
+        layer: domain
+        responsibility: The session's own record of what it submitted
+      - component: RegisteredJobAuthorizer
+        layer: domain
+        responsibility: Admit only a job this console derived for its principal
+      - component: AttemptResultRepository
+        layer: integration
+        responsibility: Read committed state at the derived attempt key
+    interfaces:
+      - name: derive_identity
+        kind: domain_function
+        signature: 'def derive_identity(principal_id: str, request_hash: str) -> tuple[str, str]'
+        async: false
+        ownership: 'Mirrors the generation path exactly. Duplicated rather than imported for the same
+          reason the subject-request path duplicates it, and pinned by test against that function:
+          a console deriving differently would report every successful generation as missing.'
+      - name: JobRegistry
+        kind: domain_service
+        signature: def register(...) -> JobRecord; def by_job(job_id) -> JobRecord | None; def by_run(run_id)
+          -> JobRecord | None
+        async: false
+        ownership: 'Guarded by a threading lock, not an asyncio one: each request runs its own event
+          loop, and a lock bound to one loop cannot be awaited from another.'
+      - name: RegisteredJobAuthorizer
+        kind: domain_service
+        signature: 'async def allowed(self, principal_id: str, job_id: str) -> bool'
+        async: true
+        ownership: Returns false for a job nothing here derived and for any other principal.
+      - name: AttemptResultRepository
+        kind: integration_adapter
+        signature: async def state(job_id) -> ResultState; async def manifest(job_id) -> ResultManifest
+          | None
+        async: true
+        ownership: Addresses the exact commit key, so no listing and therefore no enumeration capability
+          is needed.
+    data_models:
+      - name: JobRecord
+        shape: frozen dataclass
+        fields: job_id; attempt_id; request_hash; run_id; submitted_at; model_set_id; below_trained_envelope
+        validation: commit_key is derived from job and attempt identity rather than stored
+    behavior:
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a job this console derived
+        when: it is looked up
+        then: its committed state is answered
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a job identifier nothing here derived
+        when: it is looked up
+        then: the answer is indistinguishable from an absent job
+      - story_id: operator-console/story/detect-a-principal-mismatch
+        given: a marker naming a different job than its key
+        when: it is read
+        then: it is refused rather than trusted
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a registered job with no committed marker
+        when: it is looked up
+        then: it reads as in progress rather than absent
+    error_handling:
+      - condition: result_marker_invalid
+        error: AppError
+        recovery: Refuse a marker that does not satisfy the result contract
+        retryable: false
+      - condition: result_marker_mismatched
+        error: AppError
+        recovery: Refuse a marker naming a different job than the key it sits under
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 1
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the derived job identity
+        - the committed result marker
+      provides:
+        - session-scoped authorization
+        - committed state for a derived job
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.authorized-console-delivery.6.started
+        - operator-console.authorized-console-delivery.6.succeeded
+        - operator-console.authorized-console-delivery.6.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - Authorization is derived from what the caller already holds, so no table can disagree with
+        the identity.
+      - Unauthorized and absent are one outcome, matching the non-enumeration property of the result-access
+        path.
+      - 'The registry is in memory by choice: a durable one would be a new record of job identities
+        with no retention clock.'
+    test_scenarios:
+      - id: S6-T01
+        level: unit
+        given: a derived job
+        when: authorization is checked
+        then: it is admitted for its own principal and refused for another
+      - id: S6-T02
+        level: unit
+        given: a principal and request hash
+        when: identity is derived
+        then: it equals what the generation path mints
+      - id: S6-T03
+        level: unit
+        given: a marker naming another job
+        when: it is read
+        then: it is refused naming the mismatch
+      - id: S6-T04
+        level: unit
+        given: a registered job with no marker
+        when: state is read
+        then: it reads as in progress, and an unknown job as absent
+      - id: S6-TF
+        level: failure_injection
+        given: a malformed marker
+        when: it is read
+        then: it is refused rather than partially trusted
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - Derived identity is asserted against the generation path's own function, not a literal.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store; the session registry is in-process and lost on restart, which is
+        the deliberate alternative to a durable record of job identities with no retention clock.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: authorized-console-delivery-7-spec
+    title: Delivery presigner Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: authorized-console-delivery
+    slice: 7
+    source_story_ids:
+      - operator-console/story/play-back-a-committed-video
+      - operator-console/story/keep-console-credentials-out-of-the-browser
+    purpose: 'Hand a browser a private object without proxying its bytes. Presigning is the only way
+      to do that, so it is implemented rather than avoided, and implemented narrowly: one method, one
+      immutable object, GET only, a lifetime the caller must state, and no capability to create, overwrite
+      or delete.'
+    layer_assignment:
+      - component: SigV4Presigner
+        layer: service
+        responsibility: Issue read-only presigned URLs for one bucket in one reviewed region
+      - component: LinkSigner port
+        layer: integration
+        responsibility: The existing delivery signing port this satisfies
+    interfaces:
+      - name: SigV4Presigner.presign_get
+        kind: service_method
+        signature: 'def presign_get(self, object_key: str, ttl_seconds: int) -> str'
+        async: false
+        ownership: The bucket, endpoint and region are fixed at construction, so a request varies the
+          key and never the bucket.
+      - name: SigV4Presigner.sign
+        kind: port_implementation
+        signature: 'async def sign(self, object_key: str, ttl_seconds: int) -> str'
+        async: true
+        ownership: Satisfies the delivery signing port; the computation is local, so the one-hour policy
+          cap sits above this and narrows it.
+    data_models:
+      - name: presigned URL
+        shape: returned value
+        fields: path-style URL carrying algorithm, credential scope, date, expiry, signed headers and
+          signature
+        validation: path-style addressing keeps the bucket inside the signed path, so a key can never
+          be read as a bucket
+    behavior:
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a key, region, credential and instant
+        when: a link is issued
+        then: the URL matches the pinned vector, byte for byte with an independent implementation
+      - story_id: operator-console/story/keep-console-credentials-out-of-the-browser
+        given: an endpoint outside a reviewed Canadian region
+        when: a presigner is constructed
+        then: construction fails, rather than the first issued link failing
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a lifetime a signature cannot express
+        when: a link is requested
+        then: it is refused before the provider sees it
+    error_handling:
+      - condition: unreviewed_region_pair
+        error: ValueError
+        recovery: Refuse at construction, using the shared endpoint rule
+        retryable: false
+      - condition: unsignable_lifetime
+        error: ValueError
+        recovery: Refuse a lifetime outside the signable range
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 1
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the delivery-read credential
+        - the injected clock
+      provides:
+        - a short-lived read-only URL for one committed object
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.authorized-console-delivery.7.started
+        - operator-console.authorized-console-delivery.7.succeeded
+        - operator-console.authorized-console-delivery.7.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - GET only. Nothing here can create, overwrite or delete, so the surface cannot alter the bucket
+        through it.
+      - The issued URL carries the credential identifier and a signature, so it is a secret for its
+        lifetime and never enters a log, an error context or anything persisted.
+      - Signing uses the standard library, because the delivery credential is the most sensitive value
+        this process holds and hmac and hashlib are already in the trusted base.
+    test_scenarios:
+      - id: S7-T01
+        level: unit
+        given: the pinned credential, key, region, lifetime and instant
+        when: a link is issued
+        then: it equals the pinned vector
+      - id: S7-T02
+        level: unit
+        given: a US endpoint or a US region
+        when: a presigner is constructed
+        then: construction fails naming the reviewed region
+      - id: S7-T03
+        level: unit
+        given: a zero, negative or oversized lifetime
+        when: a link is requested
+        then: it is refused
+      - id: S7-T04
+        level: unit
+        given: a lifetime beyond the delivery policy cap
+        when: a link is issued through the policy
+        then: the issued lifetime is the cap
+      - id: S7-TF
+        level: failure_injection
+        given: each declared condition
+        when: signing runs
+        then: no signature or credential reaches a message
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - The signature is pinned against a vector verified against an independent implementation.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: 'Issues a value with a lifetime rather than storing one. The link is response-only: returned
+        to the caller that asked, excluded from logs and error contexts by the existing forbidden-key
+        rule, and expired by the delivery policy''s clock.'
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: authorized-console-delivery-8-spec
+    title: Committed-result reader Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: authorized-console-delivery
+    slice: 8
+    source_story_ids:
+      - operator-console/story/play-back-a-committed-video
+    purpose: Read the one object this surface needs for itself, the marker that says a generation committed,
+      the same way a browser reads the video. Reusing the presigner means the process needs no second
+      credential mechanism, no provider client and no external binary.
+    layer_assignment:
+      - component: ObjectReader
+        layer: service
+        responsibility: The read port the repository composes against
+      - component: PresignedObjectReader
+        layer: integration
+        responsibility: Fetch one object over a short-lived presigned URL
+    interfaces:
+      - name: ObjectReader
+        kind: port
+        signature: 'async def get(self, object_key: str) -> bytes | None'
+        async: true
+        ownership: Absence is None rather than an error, because a job with nothing committed yet is
+          a state.
+      - name: PresignedObjectReader
+        kind: integration_adapter
+        signature: 'def __init__(self, presigner: SigV4Presigner, *, ttl_seconds: int, timeout_seconds:
+          float)'
+        async: false
+        ownership: Signs a link per read, lasting seconds and used once.
+    data_models:
+      - name: marker bytes
+        shape: returned value
+        fields: the committed result document, under a ceiling
+        validation: a body beyond the ceiling is refused rather than read into memory
+    behavior:
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: an object that does not exist
+        when: it is read
+        then: absence is returned as absence, not as failure
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a provider failure
+        when: it is read
+        then: the error names the operation and never the URL
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a body beyond the readable ceiling
+        when: it is read
+        then: it is refused rather than buffered
+    error_handling:
+      - condition: object_read_failed
+        error: AppError
+        recovery: Report with the status class; five-hundreds and transport failures are retryable
+        retryable: true
+      - condition: object_too_large
+        error: AppError
+        recovery: Refuse; a wrong or redirected key must not stream unbounded into this process
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 7
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - a short-lived presigned URL
+      provides:
+        - the bytes of one committed result marker
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.authorized-console-delivery.8.started
+        - operator-console.authorized-console-delivery.8.succeeded
+        - operator-console.authorized-console-delivery.8.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The URL is constructed by this process from a validated endpoint and a validated key, never
+        taken from a caller.
+      - No error, message or context carries the signed URL.
+    test_scenarios:
+      - id: S8-T01
+        level: unit
+        given: a not-found response
+        when: an object is read
+        then: None is returned
+      - id: S8-T02
+        level: unit
+        given: a server error
+        when: an object is read
+        then: the error is retryable and carries no signature
+      - id: S8-T03
+        level: unit
+        given: a transport failure
+        when: an object is read
+        then: the error is retryable
+      - id: S8-T04
+        level: unit
+        given: a body one byte over the ceiling
+        when: an object is read
+        then: it is refused
+      - id: S8-TF
+        level: failure_injection
+        given: each declared condition
+        when: a read runs
+        then: the recovery contract holds and no URL appears
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store; the session registry is in-process and lost on restart, which is
+        the deliberate alternative to a durable record of job identities with no retention clock.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: authorized-console-delivery-9-spec
+    title: Wire Authorized Console Delivery Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: authorized-console-delivery
+    slice: 9
+    source_story_ids:
+      - operator-console/story/play-back-a-committed-video
+      - operator-console/story/detect-a-principal-mismatch
+    purpose: Compose the delivery half and nothing beside it. Only the access policy, the signing service
+      and the private result service are constructed here; the uploader, committer, reconciler and
+      erasure path are absent rather than unused, which is the same reasoning the delivery composition
+      already gives for making its retention store optional.
+    layer_assignment:
+      - component: compose_console
+        layer: integration
+        responsibility: Construct only the read and sign side of delivery
+      - component: ConsoleService.delivery_link
+        layer: service
+        responsibility: Reauthorize, then issue one link for the committed video
+      - component: ConsoleService.observe
+        layer: service
+        responsibility: Overlay the run's terminal status onto committed state
+    interfaces:
+      - name: compose_console
+        kind: composition_root
+        signature: def compose_console(settings, credentials, clock=None) -> ComposedConsole
+        async: false
+        ownership: Constructs no write-side service, so the capability is absent from the object graph
+          rather than merely unexercised.
+      - name: ConsoleService.delivery_link
+        kind: service_method
+        signature: 'async def delivery_link(self, job_id: str, ttl_seconds: int | None = None) -> dict[str,
+          object]'
+        async: true
+        ownership: Reauthorizes at issue rather than inheriting the lookup that preceded it.
+      - name: ConsoleService.observe
+        kind: service_method
+        signature: 'async def observe(self, run_id: str) -> dict[str, object]'
+        async: true
+        ownership: Reports the provider status and the handler response separately, because a run can
+          complete carrying a request the worker refused.
+    data_models:
+      - name: delivery response
+        shape: serialized mapping
+        fields: job_id; url; expires_at
+        validation: the URL is returned to the caller and is present in no log or error context
+      - name: observation
+        shape: serialized mapping
+        fields: run_id; status; terminal; timings; handler; run; identity_matches; result_state
+        validation: identity_matches is None when the worker reported no identity, false only on a
+          real disagreement
+    behavior:
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a committed result
+        when: a link is requested
+        then: one link is issued for the video role only
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a job with no committed video
+        when: a link is requested
+        then: nothing is signed and the outcome names it
+      - story_id: operator-console/story/detect-a-principal-mismatch
+        given: a worker job identity differing from the derived one
+        when: a run is observed
+        then: the mismatch is reported, because the console is computing keys for objects the worker
+          never wrote
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: a run that failed after submission
+        when: it is observed
+        then: committed state stops reading as in progress
+    error_handling:
+      - condition: result_not_deliverable
+        error: outcome
+        recovery: Report that no committed video exists; sign nothing
+        retryable: false
+      - condition: provider_or_storage_failure
+        error: AppError
+        recovery: Render as an error document, because the page renders every failure the same way
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - 6
+        - 8
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the session registry
+        - the presigner
+        - the committed-result reader
+      provides:
+        - short-lived playback of a committed video
+        - committed metadata without a link
+        - a named principal mismatch
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.authorized-console-delivery.9.started
+        - operator-console.authorized-console-delivery.9.succeeded
+        - operator-console.authorized-console-delivery.9.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The composition omits every write and delete capability, so the property is structural rather
+        than asserted.
+      - A signed URL is a response value only; it is never logged, recorded or placed in an error context.
+    test_scenarios:
+      - id: S9-T01
+        level: integration
+        given: a committed job
+        when: delivery is requested
+        then: one link is issued for the video role
+      - id: S9-T02
+        level: integration
+        given: an uncommitted job
+        when: delivery is requested
+        then: nothing is signed
+      - id: S9-T03
+        level: integration
+        given: a worker identity disagreeing with the derived one
+        when: a run is observed
+        then: the mismatch is reported
+      - id: S9-T04
+        level: integration
+        given: a completed run carrying a handler refusal
+        when: it is observed
+        then: it is not shown as a success
+      - id: S9-TF
+        level: failure_injection
+        given: provider and storage failures
+        when: any use case runs
+        then: an error document is produced
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - The absence of every write-side capability is asserted, not assumed.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: 'Issues a value with a lifetime rather than storing one. The link is response-only: returned
+        to the caller that asked, excluded from logs and error contexts by the existing forbidden-key
+        rule, and expired by the delivery policy''s clock.'
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: authorized-console-delivery-10-spec
+    title: Test Authorized Console Delivery Specification
+    status: approved
+    format: full
+    capability: operator-console
+    feature: authorized-console-delivery
+    slice: 10
+    source_story_ids:
+      - operator-console/story/play-back-a-committed-video
+      - operator-console/story/keep-console-credentials-out-of-the-browser
+      - operator-console/story/detect-a-principal-mismatch
+    purpose: 'Prove the three properties that would be expensive to discover later: that the signature
+      is one an object store will accept, that the derived identity is the one the generation path
+      mints, and that the package cannot write to the bucket.'
+    layer_assignment:
+      - component: signing vector
+        layer: integration
+        responsibility: Pin the presigned URL against an independent implementation
+      - component: structural test
+        layer: integration
+        responsibility: Assert the write side is absent from the package source
+      - component: socket tests
+        layer: integration
+        responsibility: Assert served responses carry no credential
+    interfaces:
+      - name: pinned vector
+        kind: test_fixture
+        signature: one exact URL for one credential, bucket, key, region, lifetime and instant
+        async: false
+        ownership: Frozen rather than recomputed, so a change to the signer must restate the signature
+          it produces.
+    data_models:
+      - name: in-memory bucket
+        shape: test double
+        fields: object key to bytes
+        validation: serves the derived commit key only
+    behavior:
+      - story_id: operator-console/story/play-back-a-committed-video
+        given: the pinned inputs
+        when: a link is issued
+        then: it equals the frozen vector exactly
+      - story_id: operator-console/story/keep-console-credentials-out-of-the-browser
+        given: the console package source
+        when: it is inspected
+        then: no uploader, committer, reconciler or erasure path appears in it
+      - story_id: operator-console/story/detect-a-principal-mismatch
+        given: a principal and request hash
+        when: identity is derived
+        then: it equals what the generation path mints
+    error_handling:
+      - condition: signature_drift
+        error: test failure
+        recovery: Fail here rather than as a link the object store refuses
+        retryable: false
+      - condition: write_capability_introduced
+        error: test failure
+        recovery: Fail here rather than as a surface that can alter the bucket
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 9
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the composed console
+      provides:
+        - evidence that the signature is correct
+        - evidence that the write side is absent
+        - evidence that authorization is derived
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - operator-console.authorized-console-delivery.10.started
+        - operator-console.authorized-console-delivery.10.succeeded
+        - operator-console.authorized-console-delivery.10.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - Tests assert equality of the unauthorized and absent outcomes directly, not merely that both
+        are falsy.
+    test_scenarios:
+      - id: S10-T01
+        level: unit
+        given: the pinned inputs
+        when: a link is issued
+        then: it equals the frozen vector
+      - id: S10-T02
+        level: unit
+        given: the package source
+        when: it is scanned
+        then: no write-side capability name appears
+      - id: S10-T03
+        level: unit
+        given: a principal and request hash
+        when: identity is derived
+        then: it equals the generation path's own derivation
+      - id: S10-T04
+        level: integration
+        given: an unauthorized job and an absent job
+        when: both are looked up
+        then: the outcomes are equal
+      - id: S10-TF
+        level: failure_injection
+        given: a malformed or mismatched marker
+        when: delivery is requested
+        then: it is refused as an error document
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - The signing vector is verified against an independent implementation before it is pinned.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: 'Issues a value with a lifetime rather than storing one. The link is response-only: returned
+        to the caller that asked, excluded from logs and error contexts by the existing forbidden-key
+        rule, and expired by the delivery policy''s clock.'
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.

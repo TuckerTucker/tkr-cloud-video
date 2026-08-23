@@ -1,0 +1,244 @@
+capability: operator-console
+stories:
+  - name: submit-a-validated-generation
+    status: done
+    display_name: Submit a validated generation
+    feature: local-generation-console
+    actor: Operator
+    intent: compose a generation on a page and submit it, without hand-writing a request envelope or
+      looking up the bounds the model set imposes
+    preconditions:
+      - The Serverless endpoint is deployed and not paused.
+      - The console holds the Serverless credential and the delivery-read credential.
+      - The console's principal equals the endpoint's principal.
+    trigger_action: The operator fills the form and submits
+    steps:
+      - actor: Operator
+        action: opens the console
+        system_response: the form is built from the pinned envelope and grammar tables, defaulted to
+          the trained dimensions of the model set it names
+      - actor: Operator
+        action: supplies a prompt in either form
+        system_response: the request is validated locally and the wire text that would reach the workflow
+          is shown back
+      - actor: Operator
+        action: submits
+        system_response: the request goes to the asynchronous run route and the derived job identity
+          is recorded before any status is known
+    acceptance_criteria:
+      - given: a request naming no canvas or frame count
+        when: the form is built
+        then: the fields carry the trained dimensions of the named model set, because a request that
+          names none has to land where that model was trained
+      - given: a valid request
+        when: the operator submits
+        then: a run identifier is returned and the job identity is derived from the principal and the
+          canonical request hash before the worker reports anything
+      - given: an endpoint that has not resumed
+        when: the operator submits
+        then: the refusal is reported as a state to wait out rather than as a failure
+    slice_ids:
+      - operator-console/slice/1
+      - operator-console/slice/2
+      - operator-console/slice/3
+      - operator-console/slice/4
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - name: refuse-a-defective-request-before-gpu-spend
+    status: done
+    display_name: Refuse a defective request before GPU spend
+    feature: local-generation-console
+    actor: Operator
+    intent: learn that a frame count is off the temporal grid or a prompt term is outside a closed
+      vocabulary in milliseconds, rather than after a worker has hydrated a model set to tell me
+    preconditions:
+      - The pinned envelope and grammar tables load and verify their digests.
+    trigger_action: The operator changes any field on the form
+    steps:
+      - actor: Operator
+        action: changes a field
+        system_response: the request is validated locally
+      - actor: Console
+        action: parses the request contract, then composes and renders the prompt
+        system_response: the two steps run in the worker's own order, so an unparseable request reports
+          its own defect rather than a prompt defect
+      - actor: Console
+        action: reports the outcome
+        system_response: an acceptance shows the wire text; a refusal names every field-scoped defect
+          at once
+    acceptance_criteria:
+      - given: a frame count off the model set's temporal grid
+        when: validation runs
+        then: the request is refused naming the grid it broke, and nothing is submitted
+      - given: a structured prompt using a term outside a closed vocabulary
+        when: validation runs
+        then: every defect is reported by field and rule together, so the operator corrects them in
+          one pass rather than once per round trip
+      - given: a prompt that exceeds the bound the freeform field enforces
+        when: validation runs
+        then: the bound is reported and the offending text appears in no defect, no message and no
+          log
+    slice_ids:
+      - operator-console/slice/2
+      - operator-console/slice/5
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - name: follow-a-run-to-a-terminal-state
+    status: done
+    display_name: Follow a run to a terminal state
+    feature: local-generation-console
+    actor: Operator
+    intent: watch a submitted run without holding a browser connection open for the twenty-odd minutes
+      a generation takes
+    preconditions:
+      - A run has been submitted in this console session.
+    trigger_action: The console observes the run on an interval
+    steps:
+      - actor: Console
+        action: polls the run's status
+        system_response: the provider's queue and execution state are reported with their timings
+      - actor: Console
+        action: reads the handler's own response
+        system_response: an accept and a refusal are distinguished, because a run can complete carrying
+          a request the worker rejected
+      - actor: Operator
+        action: cancels a run they no longer want
+        system_response: the run is cancelled and the state it reports afterwards is shown
+    acceptance_criteria:
+      - given: a run the worker refused
+        when: it reaches COMPLETED
+        then: the refusal and its defects are shown, and the run is not presented as a success
+      - given: a run that failed, was cancelled, or timed out
+        when: it is observed
+        then: the committed state stops reading as in progress, because the bucket cannot distinguish
+          a failed attempt from one still sampling
+      - given: a run submitted in another session
+        when: it is observed by identifier
+        then: the provider status is reported and no job is looked up, because none was derived here
+    slice_ids:
+      - operator-console/slice/3
+      - operator-console/slice/4
+      - operator-console/slice/5
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - name: play-back-a-committed-video
+    status: done
+    display_name: Play back a committed video
+    feature: authorized-console-delivery
+    actor: Operator
+    intent: watch the video a generation committed in the page I submitted from, rather than reaching
+      into the delivery bucket by hand
+    preconditions:
+      - A generation submitted in this session has committed its result marker.
+      - The console holds the delivery-read credential.
+    trigger_action: The console observes the run as committed
+    steps:
+      - actor: Console
+        action: reads the result marker at the derived attempt key
+        system_response: no listing is required, because the attempt identity is derived alongside
+          the job identity
+      - actor: Console
+        action: reauthorizes the principal against the job
+        system_response: authorization is checked at issue rather than inherited from the lookup that
+          preceded it
+      - actor: Console
+        action: issues one signed link for the video artifact
+        system_response: the link is bounded by the delivery policy's maximum lifetime and the page
+          plays it
+    acceptance_criteria:
+      - given: a committed result
+        when: delivery is requested
+        then: one link is issued for the video role only, and the workflow and generation artifacts
+          are not signed for
+      - given: a lifetime longer than the delivery policy permits
+        when: delivery is requested
+        then: the issued lifetime is the policy's maximum, not the requested one
+      - given: a job with no committed video
+        when: delivery is requested
+        then: nothing is signed and the outcome names that no video is deliverable
+    slice_ids:
+      - operator-console/slice/6
+      - operator-console/slice/7
+      - operator-console/slice/8
+      - operator-console/slice/9
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - name: keep-console-credentials-out-of-the-browser
+    status: done
+    display_name: Keep console credentials out of the browser
+    feature: authorized-console-delivery
+    actor: Operator
+    intent: hold the Serverless and delivery credentials in a process I control rather than in a page,
+      and know that the surface cannot alter the delivery bucket even if it is reached
+    preconditions:
+      - The console binds loopback.
+    trigger_action: The console serves any response
+    steps:
+      - actor: Console
+        action: reads its secrets from the environment
+        system_response: they are held in a value that renders none of them
+      - actor: Console
+        action: serves a page or an answer
+        system_response: no credential and no signed URL for anything but a committed video appears
+          in it
+      - actor: Console
+        action: receives a request naming an unexpected host
+        system_response: the request is refused, because a page on another origin can point a name
+          at the loopback address
+    acceptance_criteria:
+      - given: any page, asset or API response
+        when: it is served
+        then: it carries no Serverless credential and neither delivery credential
+      - given: a request whose Host header is not this loopback server
+        when: it arrives
+        then: it is refused before it reaches a route
+      - given: the composed console
+        when: its package is inspected
+        then: no uploader, committer, reconciler or erasure path exists in it, so writing and deleting
+          are absent rather than merely unused
+    slice_ids:
+      - operator-console/slice/7
+      - operator-console/slice/9
+      - operator-console/slice/10
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - name: detect-a-principal-mismatch
+    status: done
+    display_name: Detect a principal mismatch
+    feature: authorized-console-delivery
+    actor: Operator
+    intent: be told when my console's principal is not the endpoint's, instead of watching every successful
+      generation report as never committed
+    preconditions:
+      - A run has completed and the worker returned its own job identity.
+    trigger_action: The console compares the reported identity with the one it derived
+    steps:
+      - actor: Console
+        action: derives job identity from its principal and the request hash
+        system_response: the derivation mirrors the generation path exactly
+      - actor: Worker
+        action: returns the job identity it minted
+        system_response: the two are compared
+      - actor: Console
+        action: reports a difference
+        system_response: the mismatch is named as a principal misconfiguration rather than left to
+          present as a missing result
+    acceptance_criteria:
+      - given: a console whose principal differs from the endpoint's
+        when: a generation completes
+        then: the mismatch is reported explicitly, because the console is computing keys for objects
+          the worker never wrote
+      - given: a console whose principal matches
+        when: a generation completes
+        then: the identities agree and the committed result is readable at the derived key
+    slice_ids:
+      - operator-console/slice/6
+      - operator-console/slice/10
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632

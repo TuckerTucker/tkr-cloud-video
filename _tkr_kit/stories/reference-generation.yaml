@@ -1,0 +1,249 @@
+capability: reference-generation
+stories:
+  - name: publish-a-reference-conditioned-workflow
+    status: planned
+    display_name: Publish a reference-conditioned workflow
+    feature: reference-conditioned-release
+    actor: Platform operator
+    intent: publish a workflow whose graph carries reference-image inputs, so a staged reference has
+      a declared node input to bind into
+    preconditions:
+      - The pinned ComfyUI revision's reference node signature has been read.
+      - The model set the workflow belongs to is decided and named.
+    trigger_action: The operator publishes a reference workflow revision
+    steps:
+      - actor: Platform operator
+        action: authors the graph with its reference inputs present
+        system_response: the binder can address them, because it mutates declared inputs and refuses
+          an absent one
+      - actor: Platform operator
+        action: declares the binding map
+        system_response: each reference maps through an existing input_0..input_3 allowlist entry and
+          no new binding source is introduced
+      - actor: Release path
+        action: renders the manifest and publishes the workflow last
+        system_response: the workflow becomes resolvable only after every artifact it needs is verified
+    acceptance_criteria:
+      - given: a graph whose reference node input is absent
+        when: a reference request is bound
+        then: binding fails naming the missing input, rather than silently generating without the reference
+      - given: a binding map naming a source outside the allowlist
+        when: the manifest is rendered
+        then: publication fails, because the binding vocabulary is release-approved
+      - given: a republished workflow
+        when: the manifest digest is computed
+        then: it differs from the current one, so the existing reviewer approval no longer covers it
+    slice_ids:
+      - reference-generation/slice/1
+      - reference-generation/slice/3
+  - name: register-the-reference-model-set-envelope
+    status: planned
+    display_name: Register the reference model-set envelope
+    feature: reference-conditioned-release
+    actor: Platform operator
+    intent: register the trained range of the model set a reference workflow belongs to, so a reference
+      request resolves its defaults rather than being refused
+    preconditions:
+      - The reference model set's trained canvas, frame grid and range are known.
+    trigger_action: The operator registers the envelope and restates its digest
+    steps:
+      - actor: Platform operator
+        action: adds the trained range keyed by model-set identity
+        system_response: defaults resolve per model set rather than from a shared constant
+      - actor: Platform operator
+        action: restates the envelope digest
+        system_response: the tables verify at import, so an edited default cannot land without the
+          revision that describes it
+      - actor: Intake
+        action: resolves a reference request naming that model set
+        system_response: absent dimensions are filled from the registered range
+    acceptance_criteria:
+      - given: a reference request naming an unregistered model set
+        when: intake runs
+        then: it is refused naming the model set, rather than given another model set's numbers
+      - given: an edited trained range with the digest unchanged
+        when: the tables load
+        then: the import fails, because the recorded revision would no longer describe where default
+          requests land
+      - given: a reference request below the trained floor
+        when: intake runs
+        then: it is permitted and reported as a departure, matching the existing rule that the ceiling
+          bounds and the floor reports
+    slice_ids:
+      - reference-generation/slice/2
+      - reference-generation/slice/5
+  - name: assess-cross-border-reference-processing
+    status: planned
+    display_name: Assess cross-border reference processing
+    feature: authorized-reference-intake
+    actor: Accountable operator
+    intent: record an assessment of what it means for a reference image to be read by workers in six
+      territories, before any worker reads one
+    preconditions:
+      - ADR-002 has placed workers across the approved territories.
+      - No reference image has yet been staged for a worker read.
+    trigger_action: The operator conducts and records the assessment
+    steps:
+      - actor: Accountable operator
+        action: states the scope, sensitivity and purpose
+        system_response: the record names what is processed and why, not merely that processing occurs
+      - actor: Accountable operator
+        action: states the territories and protection measures
+        system_response: the credential model and retention position are described as they are, including
+          what is asserted rather than enforced
+      - actor: Accountable operator
+        action: reaches a verdict
+        system_response: a qualified pass names the residual risk accepted and by whom
+    acceptance_criteria:
+      - given: no recorded assessment
+        when: an intake path would be enabled
+        then: the slice remains blocked, because the assessment precedes the processing rather than
+          documenting it afterwards
+      - given: a recorded assessment
+        when: the territories or measures later change
+        then: renewal is a new dated record, not an edit to the existing verdict
+    slice_ids:
+      - reference-generation/slice/6
+  - name: supply-one-to-four-reference-images
+    status: planned
+    display_name: Supply one to four reference images
+    feature: authorized-reference-intake
+    actor: Caller
+    intent: supply between one and four reference images and have each staged, verified and bound,
+      so a reference generation runs from images I provided
+    preconditions:
+      - The cross-border assessment is recorded and accepted.
+      - A reference-conditioned workflow and its envelope are published.
+    trigger_action: The caller supplies references with a reference-to-video request
+    steps:
+      - actor: Caller
+        action: supplies up to four reference objects
+        system_response: each is authorized against the caller's principal before any download
+      - actor: Input stager
+        action: downloads each within its bound and verifies it
+        system_response: size, declared digest and media type are checked before promotion
+      - actor: Binder
+        action: binds each staged path through its allowlisted source
+        system_response: the graph receives server-owned paths, never caller-supplied names
+    acceptance_criteria:
+      - given: five reference objects
+        when: the request is parsed
+        then: it is refused, because the contract bounds references at four and the binding allowlist
+          carries exactly four sources
+      - given: a reference whose bytes do not match its declared digest
+        when: staging runs
+        then: it is refused before it reaches a workflow and nothing partial is promoted
+      - given: a reference that is not an image or video
+        when: staging runs
+        then: it is refused on media type rather than passed to the graph
+    slice_ids:
+      - reference-generation/slice/7
+      - reference-generation/slice/9
+      - reference-generation/slice/10
+  - name: refuse-a-reference-a-principal-does-not-own
+    status: planned
+    display_name: Refuse a reference a principal does not own
+    feature: authorized-reference-intake
+    actor: Caller
+    intent: be unable to condition a generation on another principal's uploaded image, and be unable
+      to learn whether that image exists by trying
+    preconditions:
+      - Inputs are written under a principal-scoped namespace.
+    trigger_action: A caller names a reference object outside their own namespace
+    steps:
+      - actor: Caller
+        action: names a reference object
+        system_response: authorization is derived from the key's namespace rather than looked up in
+          a table
+      - actor: Input stager
+        action: refuses an unauthorized key
+        system_response: the refusal happens before any download, so no bytes are transferred
+      - actor: Console
+        action: reports the refusal
+        system_response: an unauthorized object and an absent object give the same answer
+    acceptance_criteria:
+      - given: a reference key in another principal's namespace
+        when: staging runs
+        then: it is refused before download, indistinguishably from the object being absent
+      - given: the input-writing credential
+        when: its capabilities are inspected
+        then: it can write the principal-scoped inputs namespace and nothing else, and it appears in
+          no worker process-role allowlist
+    slice_ids:
+      - reference-generation/slice/7
+      - reference-generation/slice/8
+      - reference-generation/slice/10
+  - name: assess-voice-reference-processing
+    status: planned
+    display_name: Assess voice-reference processing
+    feature: audio-reference-intake
+    actor: Accountable operator
+    intent: record an assessment covering supplied audio before any is staged, rather than reading
+      the image assessment as though its scope reached a voice
+    preconditions:
+      - The reference-image assessment is recorded and accepted.
+      - No audio reference has yet been staged.
+    trigger_action: The operator conducts and records the audio assessment
+    steps:
+      - actor: Accountable operator
+        action: states what a supplied audio reference is and what the output becomes
+        system_response: the record describes a voice sample of an identifiable person and an output
+          that reproduces it, rather than treating audio as another file type
+      - actor: Accountable operator
+        action: weighs sensitivity, purpose, territories and measures
+        system_response: the record states which measures are enforced and which are asserted
+      - actor: Accountable operator
+        action: reaches a verdict
+        system_response: a qualified pass names the residual risk accepted and by whom
+    acceptance_criteria:
+      - given: only the reference-image assessment
+        when: an audio intake path would be enabled
+        then: the dependent slices stay blocked, because a scoped review does not extend to material
+          it did not consider
+      - given: a recorded audio assessment
+        when: territories or measures later change
+        then: renewal is a new dated record rather than an edit to the verdict
+    slice_ids:
+      - reference-generation/slice/11
+  - name: supply-an-audio-reference
+    status: planned
+    display_name: Supply an audio reference
+    feature: audio-reference-intake
+    actor: Caller
+    intent: supply a recording as an audio reference and have it staged, verified and bound, so a generation
+      can reuse or refer to it
+    preconditions:
+      - The audio assessment is recorded and accepted.
+      - Image and video reference intake is working.
+    trigger_action: The caller supplies an audio object with a reference request
+    steps:
+      - actor: Caller
+        action: supplies an audio object
+        system_response: it is authorized against the caller's namespace before any download
+      - actor: Input stager
+        action: inspects the staged file
+        system_response: an audio stream is located and its type derived from its own codec, rather
+          than from a video stream the file does not have
+      - actor: Input stager
+        action: checks the bounds that apply to audio
+        system_response: duration, channels and sample rate are checked; dimensions are neither required
+          nor invented
+    acceptance_criteria:
+      - given: an audio-only file
+        when: staging runs
+        then: it is described by its own stream rather than refused for lacking a video one
+      - given: an image reference with no dimensions
+        when: staging runs
+        then: it is still refused, because relaxing the requirement for audio must not relax it for
+          images
+      - given: a file whose container disagrees with its declared kind
+        when: staging runs
+        then: it is refused, so an audio type cannot be claimed for a video payload
+      - given: a staged audio reference
+        when: a generation is submitted
+        then: it binds through its allowlisted source and an audio task type is selectable
+    slice_ids:
+      - reference-generation/slice/12
+      - reference-generation/slice/13
+      - reference-generation/slice/14
+      - reference-generation/slice/15

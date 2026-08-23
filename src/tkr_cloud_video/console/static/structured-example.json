@@ -1,0 +1,18 @@
+{
+  "duration_seconds": 3.04,
+  "mode": "T2VA",
+  "non_diegetic_music": "A sparse sustained string pad at slow tempo, joined by a single low piano note, fading gently at the end.",
+  "overall_soundscape": "Wind moves steadily through the pine branches. Snow settles from a bough with a soft collapse, and a distant raven calls twice.",
+  "shots": [
+    {
+      "camera": {
+        "amplitude": "with small amplitude",
+        "motion": "Push In",
+        "speed": "at slow speed"
+      },
+      "description": "A wide shot frames a snow-covered pine forest at dawn. Low mist drifts between the trees and soft golden light reaches the upper branches.",
+      "number": 1,
+      "style": "live-action"
+    }
+  ]
+}

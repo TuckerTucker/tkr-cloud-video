@@ -16,6 +16,9 @@ capabilities:
       - durable-delivery
       - operations-and-scale
       - prompt-authoring
+      - operator-console
+      - reference-generation
+      - stills-authoring
     scope_in:
       - Backblaze bucket and single-prefix application-key topology with
         distinct read, input-read, output-write, and delivery-read capabilities.
@@ -73,6 +76,8 @@ capabilities:
     provides_to:
       - worker-runtime
       - operations-and-scale
+      - reference-generation
+      - stills-authoring
     scope_in:
       - Private B2 object layout for content-addressed model blobs, versioned
         manifests, workflows, and immutable provenance records.
@@ -127,6 +132,7 @@ capabilities:
     provides_to:
       - job-execution
       - operations-and-scale
+      - stills-authoring
     scope_in:
       - Pinned container image containing ComfyUI, approved custom nodes,
         bootstrap package, rclone, health tooling, and runtime dependencies.
@@ -185,6 +191,9 @@ capabilities:
       - durable-delivery
       - operations-and-scale
       - prompt-authoring
+      - operator-console
+      - reference-generation
+      - stills-authoring
     scope_in:
       - Versioned request schema for text-to-video, image-to-video, and
         reference-to-video jobs with strict job-id and path validation.
@@ -242,6 +251,9 @@ capabilities:
     optional_depends_on: []
     provides_to:
       - operations-and-scale
+      - operator-console
+      - reference-generation
+      - stills-authoring
     scope_in:
       - Unique immutable job-attempt prefixes and a versioned result manifest.
       - Upload of media and metadata with remote verification of every required
@@ -298,7 +310,9 @@ capabilities:
       - job-execution
       - durable-delivery
     optional_depends_on: []
-    provides_to: []
+    provides_to:
+      - operator-console
+      - stills-authoring
     scope_in:
       - Structured JSON event model and correlation across boot, hydration,
         readiness, generation, upload, commit, and delivery.
@@ -363,6 +377,9 @@ capabilities:
       - durable-delivery
       - operations-and-scale
       - prompt-authoring
+      - operator-console
+      - reference-generation
+      - stills-authoring
     scope_in:
       - Python 3.11+ src-layout packaging with committed pyproject metadata, uv
         lockfile, typed package marker, documented developer commands, and
@@ -422,7 +439,9 @@ capabilities:
       - security-foundation
       - job-execution
     optional_depends_on: []
-    provides_to: []
+    provides_to:
+      - operator-console
+      - reference-generation
     scope_in:
       - Typed models for the H3 base-mode prompt
         (integrated_multimodal_description, overall_soundscape,
@@ -479,3 +498,298 @@ capabilities:
     evidence:
       kind: commit
       ref: 3abb15cb91703e2f4068971d141f42cff5d9e858
+  - name: operator-console
+    layer: service
+    status: in_progress
+    display_name: Operator Console
+    description: 'A loopback web surface that submits a generation and plays back what
+      it committed. It exists because the two things the Serverless endpoint cannot
+      do for a caller are the two it most needs: refuse a defective request before
+      a cold start, and return a video. The handler answers with references and never
+      media bytes, and a run''s status reports that the worker answered rather than
+      that anything was generated.'
+    depends_on:
+      - engineering-foundation
+      - security-foundation
+      - job-execution
+      - durable-delivery
+      - prompt-authoring
+      - operations-and-scale
+    optional_depends_on: []
+    provides_to:
+      - reference-generation
+      - stills-authoring
+    scope_in:
+      - A loopback HTTP surface holding the Serverless bearer credential and the delivery-read
+        credential so a browser never does, bound to loopback in its settings rather
+        than in its launch command.
+      - Local intake preflight running the worker's own two validation steps in the
+        worker's order, so a contract or prompt defect is refused in milliseconds rather
+        than after model hydration.
+      - Form constraints served from the pinned trained-envelope and grammar tables,
+        so a newly registered model set or corrected bound reaches the surface by being
+        registered.
+      - Asynchronous submission, bounded observation of a run to a terminal state,
+        cancellation, and separation of the provider's status from the handler's own
+        accept-or-refuse response.
+      - Session-derived job identity and authorization, and short-lived signed playback
+        of a committed video through the existing delivery services.
+    scope_out:
+      - Any non-loopback deployment. The surface authenticates nothing because the
+        operating system has already answered who the caller is; publishing it needs
+        authentication, per-principal identity and a durable registry, and is a separate
+        capability rather than a configuration change here.
+      - Multi-tenant isolation. One console serves one principal, so every job it derived
+        is reachable by whoever reaches the port.
+      - Uploading a reference or keyframe image, owned by reference-generation.
+      - Changing the request contract, the prompt grammar, the workflow graph, or any
+        delivery guarantee. The console composes existing services and adds no generation
+        behavior of its own.
+      - Durable job history. The registry is in memory for the life of the process.
+    acceptance_criteria:
+      - A request the worker would refuse is refused locally, with the same code and
+        the same field-scoped defects, before it reaches the endpoint.
+      - The local refusal and the worker's refusal agree decision for decision across
+        the request matrix, and disagreement fails a test rather than surfacing as
+        a request the console accepted and the endpoint rejected.
+      - No response the browser receives carries the Serverless credential, either
+        delivery credential, or a signed URL for anything but the committed video.
+      - A committed video is playable through a link that is reauthorized at issue,
+        bounded by the delivery policy's maximum lifetime, and absent from every log
+        and error context.
+      - The surface composes no uploader, committer, reconciler or erasure path, so
+        it cannot write to or delete from the delivery bucket.
+      - A console whose principal differs from the endpoint's is detected and named,
+        rather than reporting every successful generation as never committed.
+    paths:
+      - src/tkr_cloud_video/console/**
+      - tests/console/**
+      - docs/models/operator-console.md
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+        - artifact-foundation
+        - worker-runtime
+        - job-execution
+        - durable-delivery
+        - prompt-authoring
+        - operations-and-scale
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    resume_condition: The capability closes when its implementing commit reaches the
+      default branch. Until then its slices carry commit evidence for work that exists
+      on an open pull request, which is why the capability is in_progress while every
+      slice beneath it is done.
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - name: reference-generation
+    layer: service
+    status: planned
+    display_name: Reference-Conditioned Generation
+    description: 'Turns the reference-to-video mode from a contract the request schema
+      already accepts into a path that can execute. The request type, the input stager,
+      the Ref2VA prompt grammar, the input_0..input_3 binding allowlist and the inputs/
+      retention class all shipped with their owning capabilities; what is absent is
+      a published workflow whose graph carries reference inputs, a registered envelope
+      for the model set that workflow belongs to, an authorized way for a caller''s
+      image to reach inputs/, and the assessments that must precede any worker outside
+      Quebec reading one. Audio is the same story one step further out: the grammar
+      defines audio labels, an audio-specific retention marker set and two audio task
+      types, while the intake path cannot describe a stream that has no dimensions
+      at all.'
+    depends_on:
+      - engineering-foundation
+      - security-foundation
+      - artifact-foundation
+      - job-execution
+      - durable-delivery
+      - prompt-authoring
+      - operator-console
+    optional_depends_on: []
+    provides_to:
+      - stills-authoring
+    scope_in:
+      - A published ComfyUI API workflow whose reference-conditioning node inputs exist
+        in the graph, because the binder mutates declared inputs and refuses a binding
+        whose input name is absent.
+      - A binding map drawn from the existing input_0..input_3 allowlist, so the release
+        binding vocabulary is unchanged.
+      - A trained-envelope registration for the model set the reference workflow belongs
+        to, with the envelope digest restated, so a reference request resolves its
+        defaults instead of being refused as unregistered.
+      - A reviewer license approval bound to the new manifest digest, because republishing
+        a workflow changes the digest the current approval binds.
+      - Dated assessments covering reference images and supplied audio, each completed
+        before material of that kind is read by a worker.
+      - A principal-scoped inputs namespace and a write credential narrow enough that
+        input authorization is structural rather than a lookup.
+      - An intake contract able to describe an audio stream, which has neither width
+        nor height, without weakening the dimension requirement images and videos carry.
+    scope_out:
+      - Image-to-video. It is a sibling mode that reuses this capability's intake and
+        release slices but conditions on keyframes rather than references, so it needs
+        a workflow revision of its own and is not delivered by riding along here.
+      - Changing the generation request contract or the prompt grammar. ReferenceToVideoRequest
+        and the Ref2VA sections are done and terminal.
+      - Retention enforcement for uploaded inputs, owned by durable-delivery/feature/enforced-retention.
+      - Model selection, fine-tuning, or judging whether a reference was honoured.
+      - Speaker identification, consent capture, or transcription of supplied audio.
+      - Publishing the console beyond loopback, which uploading makes more tempting
+        and no less out of scope.
+    acceptance_criteria:
+      - A reference-to-video request naming one to four authorized objects binds each
+        into the pinned workflow and reaches a committed result.
+      - No reference image or audio object is read by a worker before a dated assessment
+        covering material of that kind records its sensitivity, purpose, territories
+        and protection measures.
+      - The published reference manifest's digest is covered by an unexpired reviewer
+        approval, and an uncovered digest fails the release gate rather than the run.
+      - A reference request naming a model set with no registered envelope is refused
+        at intake, not given another model set's numbers.
+      - No credential gains write access outside the principal-scoped inputs prefix,
+        and no worker process role is handed the input-writing credential.
+      - A reference object a principal does not own is refused before download, and
+        the refusal is indistinguishable from the object being absent.
+      - Admitting a medium with no dimensions does not relax the dimension requirement
+        for the media that have them, and an absent measurement is never represented
+        as a zero.
+    paths:
+      - release-assets/**
+      - docs/assurance/**
+      - src/tkr_cloud_video/**
+      - tests/**
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+        - artifact-foundation
+        - worker-runtime
+        - job-execution
+        - durable-delivery
+        - prompt-authoring
+        - operations-and-scale
+        - operator-console
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: Reference images and supplied audio are the material the compliance
+      triage record identifies as the most sensitive this product handles, and ADR-002
+      already placed workers in six territories without the assessment that placement
+      requires. The capability is planned rather than started so those assessments
+      gate the work instead of trailing it.
+    resume_condition: Transition this capability to planned execution, then its entry
+      slice from blocked to planned, only once operator-console has merged and the
+      cross-border assessment in slice 6 is recorded and accepted. Slices 11 to 15
+      need their own assessment; the image record does not reach a voice sample.
+    citations:
+      - CQLR c. P-39.1, s 17
+      - S.C. 2000, c. 5, sch 1, cl 4.1.3
+  - name: stills-authoring
+    layer: service
+    status: planned
+    display_name: Stills Authoring
+    description: 'A second endpoint that generates single still images and lets a principal
+      assemble committed stills into a reference sheet their video generations can
+      condition on. It exists because reference-conditioned video needs reference images
+      and nothing in this product can produce one. The build dependency runs the opposite
+      way to the data flow, which is worth stating plainly: this capability depends
+      on reference-generation for the principal-scoped input namespace and the write
+      credential, while at run time its output feeds that capability''s input.'
+    depends_on:
+      - engineering-foundation
+      - security-foundation
+      - artifact-foundation
+      - worker-runtime
+      - job-execution
+      - durable-delivery
+      - operations-and-scale
+      - operator-console
+      - reference-generation
+    optional_depends_on: []
+    provides_to: []
+    scope_in:
+      - 'A published stills model set: its own weights, its own workflow ending in
+        an image save rather than a video composition, and its own reviewer license
+        approval bound to that manifest digest.'
+      - A pinned canvas registry for stills, keyed by model-set identity and covered
+        by its own digest, mirroring the trained-envelope pattern rather than extending
+        it, because a frame grid and a frame rate describe nothing about a still.
+      - A stills request contract and a stills result contract, sibling to the video
+        ones rather than edits to them, committing exactly one image per attempt.
+      - Output validation proving one contained image, since the video validator requires
+        a video stream and a positive duration and would refuse every still.
+      - A reference sheet as a named set of already-committed stills for one principal,
+        and promotion of a committed still into that principal's input namespace so
+        a video generation can name it.
+      - The console surface for generating stills, assembling a sheet, and carrying
+        it into a reference-conditioned request.
+    scope_out:
+      - Producing several images in one attempt. A sheet is an assembly of independently
+        committed stills, so the result contract stays singular and the plural-result
+        question is not decided by accident.
+      - The MiniMax H3 prompt grammar. It is a video grammar with shots, cuts, soundscape
+        and dialogue; a still has none of them, so this capability prompts in its own
+        terms and prompt-authoring is deliberately not a dependency.
+      - Adding a second model set to the video worker. A worker resolves one model
+        set at startup and refuses a manifest naming another, so this is an endpoint
+        of its own.
+      - Bumping the pinned ComfyUI revision. If the stills nodes are absent at the
+        pinned revision the bump belongs to worker-runtime and affects the video endpoint
+        too; it is a precondition for this capability, not a task inside it.
+      - Editing an existing image. Instruction-based editing takes an image as input
+        and needs its own staging, authorization and assessment; it is a later capability,
+        not a slice here.
+      - Judging likeness, identity, or whether a generated person resembles a real
+        one.
+    acceptance_criteria:
+      - A stills request reaches a committed result carrying exactly one image, and
+        a request that would produce none or several is refused rather than partially
+        committed.
+      - The video result contract and the video output validator are unchanged; the
+        stills path uses its own and neither is loosened to accommodate the other.
+      - A still is usable as a reference only after it is committed and then promoted
+        into the requesting principal's input namespace, so nothing conditions on an
+        object that carries no commit evidence.
+      - A sheet names only stills the same principal committed, and a sheet naming
+        another principal's still is refused indistinguishably from one naming an absent
+        still.
+      - No generated likeness is produced before a dated assessment covers generating
+        a person from a description, which neither existing assessment considers.
+      - The stills model set carries an unexpired reviewer approval bound to its manifest
+        digest, and an uncovered digest fails publication rather than a run.
+    paths:
+      - src/tkr_cloud_video/stills/**
+      - tests/stills/**
+      - release-assets/**
+      - docs/assurance/**
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+        - artifact-foundation
+        - worker-runtime
+        - job-execution
+        - durable-delivery
+        - prompt-authoring
+        - operations-and-scale
+        - operator-console
+        - reference-generation
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: 'Three facts this plan asserts nothing about have to be established
+      first: whether the stills nodes exist at the pinned ComfyUI revision, what the
+      model''s licence actually permits and whether a reviewer can approve it for the
+      same territories ADR-002 placed workers in, and what the weights cost in disk
+      and VRAM against an endpoint sized for stills rather than for a 42.5 GB video
+      model set. Slice 1 records all three; none is assumed here.'
+    resume_condition: Transition this capability to planned execution only once reference-generation
+      has landed its principal-scoped input namespace and write credential, and once
+      slice 1 has recorded the node availability, licence and capacity findings. The
+      likeness assessment in slice 11 gates the sheet feature separately.
+    citations:
+      - CQLR c. P-39.1, s 17
+      - S.C. 2000, c. 5, sch 1, cl 4.1.3

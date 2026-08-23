@@ -1,0 +1,2199 @@
+capability: stills-authoring
+slice_specs:
+  - name: stills-release-1-spec
+    title: Stills model facts of record Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-release
+    slice: 1
+    source_story_ids:
+      - stills-authoring/story/establish-the-stills-model-facts
+    purpose: 'Establish three facts the rest of this capability is written against and that nothing
+      here asserts: whether the nodes the graph needs exist at the pinned ComfyUI revision, what the
+      licence permits against the territories workers are already placed in, and what the weights cost.
+      Each blocks differently, so each is recorded rather than assumed.'
+    layer_assignment:
+      - component: model facts record
+        layer: data
+        responsibility: A dated record of node availability, licence terms and capacity
+    interfaces:
+      - name: stills model facts
+        kind: document
+        signature: pinned revision checked; nodes present or absent; licence terms against deployed
+          territories; weight sizes; disk and accelerator need
+        async: false
+        ownership: States what each finding was verified against, so a reader can re-check it rather
+          than trust the prose, the way the trained envelope records its source.
+    data_models:
+      - name: model facts record
+        shape: markdown document
+        fields: Date; the revision checked; node findings; licence findings; capacity findings
+        validation: a finding that could not be established is recorded as unestablished rather than
+          omitted
+    behavior:
+      - story_id: stills-authoring/story/establish-the-stills-model-facts
+        given: nodes absent at the pinned revision
+        when: the finding is recorded
+        then: the capability stays blocked, because bumping the revision is worker-runtime's work and
+          reaches the video endpoint
+      - story_id: stills-authoring/story/establish-the-stills-model-facts
+        given: a licence that does not reach a deployed territory
+        when: the finding is recorded
+        then: the capability stays blocked rather than proceeding toward an approval no reviewer could
+          sign
+      - story_id: stills-authoring/story/establish-the-stills-model-facts
+        given: a later revision or model version
+        when: it changes
+        then: the findings are restated rather than inherited, because they were about the version
+          checked
+    error_handling:
+      - condition: nodes_absent_at_pinned_revision
+        error: execution gate
+        recovery: Keep the capability blocked and raise the revision bump as worker-runtime work
+        retryable: false
+      - condition: licence_does_not_reach_territory
+        error: execution gate
+        recovery: Keep the capability blocked; an unapprovable licence is not a smaller problem than
+          an absent node
+        retryable: false
+      - condition: capacity_exceeds_endpoint_sizing
+        error: execution gate
+        recovery: Reconsider the separate endpoint, whose whole justification is that stills cost less
+          than a video model set
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the pinned ComfyUI revision
+        - the deployed territories
+        - the endpoint sizing
+      provides:
+        - a record of what is true about the candidate stills model
+      documented_routes: []
+      reference_documentation:
+        - The pinned revision is an argument of the worker image build; the territories are recorded
+          in the placement decision record.
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-release.1.facts_recorded
+      required_fields:
+        - event
+        - outcome
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - A licence finding is recorded as read, never as inferred from a family or a sibling model.
+    test_scenarios:
+      - id: S1-T01
+        level: review
+        given: the pinned revision
+        when: the graph's nodes are looked for
+        then: presence or absence is recorded
+      - id: S1-T02
+        level: review
+        given: the licence text
+        when: it is read against the deployed territories
+        then: the reach is recorded
+      - id: S1-T03
+        level: review
+        given: the published weights
+        when: their size and capacity need are measured
+        then: both are recorded
+      - id: S1-T04
+        level: review
+        given: any finding that cannot be established
+        when: the record is written
+        then: it is recorded as unestablished
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-release-2-spec
+    title: Stills workflow graph and canvas registry Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-release
+    slice: 2
+    source_story_ids:
+      - stills-authoring/story/publish-a-stills-model-set
+    purpose: Publish a graph that ends in an image and a canvas table that describes a still. The registry
+      is a sibling of the trained envelope rather than an extension of it, because that envelope carries
+      a frame floor, a frame ceiling and a temporal grid, and registering a stills model there would
+      mean inventing three values that describe nothing and are then enforced.
+    layer_assignment:
+      - component: stills workflow graph
+        layer: data
+        responsibility: A ComfyUI graph ending in an image save
+      - component: stills binding map
+        layer: data
+        responsibility: Request sources mapped to node inputs, temporal sources absent
+      - component: StillsCanvas registry
+        layer: data
+        responsibility: Canvas bounds keyed by model-set identity, digest-verified at import
+    interfaces:
+      - name: workflow-api.json
+        kind: artifact
+        signature: ComfyUI API-format graph terminating in an image save
+        async: false
+        ownership: Immutable once published and addressed by digest; a change is a new revision.
+      - name: STILLS_CANVASES
+        kind: registry
+        signature: mapping of model-set identity to StillsCanvas
+        async: false
+        ownership: Keyed on the full identifier, so a rebuild has to affirm its bounds rather than
+          inherit them by prefix.
+      - name: CANVAS_DIGEST
+        kind: integrity_constant
+        signature: the digest the table must reproduce at import
+        async: false
+        ownership: Restating it is the act that records a deliberate change to where a default still
+          lands.
+    data_models:
+      - name: StillsCanvas
+        shape: frozen dataclass
+        fields: model_set_id; default_width; default_height; max_edge; canvas_multiple; source
+        validation: construction rejects a table that cannot describe a reachable request; source names
+          what the bounds were verified against
+      - name: WorkflowBinding
+        shape: existing release model
+        fields: source; node_id; input_name
+        validation: a temporal source is refused for a stills graph, because a still has no frames
+          and no frame rate
+    behavior:
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: a binding map naming a frame or frame-rate source
+        when: the catalog is validated
+        then: it is refused, because those sources describe nothing a still has
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: an edited canvas table with an unchanged digest
+        when: the module is imported
+        then: the import fails rather than serving a silently changed default
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: a stills request naming no canvas
+        when: it is resolved
+        then: it lands on the registered defaults for the model set it names
+    error_handling:
+      - condition: temporal_binding_on_stills_graph
+        error: ValidationError
+        recovery: Refuse the catalog at render time
+        retryable: false
+      - condition: canvas_digest_mismatch
+        error: StillsCanvasIntegrityError
+        recovery: Fail at import rather than serve a changed default
+        retryable: false
+      - condition: no_registered_canvas
+        error: ValueError
+        recovery: Refuse a request naming an unregistered stills model set
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 1
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the recorded model facts
+        - the existing binding allowlist
+      provides:
+        - a graph a stills request can bind into
+        - canvas defaults and bounds for stills
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-release.2.started
+        - stills-authoring.stills-release.2.succeeded
+        - stills-authoring.stills-release.2.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The graph is immutable and digest-addressed; a revision is published, never edited in place.
+      - No new binding source is introduced; the release binding vocabulary is unchanged.
+    test_scenarios:
+      - id: S2-T01
+        level: unit
+        given: a map naming a frames source
+        when: the catalog is validated
+        then: it is refused
+      - id: S2-T02
+        level: unit
+        given: an unregistered stills model set
+        when: a request is resolved
+        then: it is refused rather than defaulted
+      - id: S2-T03
+        level: unit
+        given: a canvas off the registered multiple
+        when: a request is validated
+        then: it is refused naming the multiple
+      - id: S2-TF
+        level: failure_injection
+        given: an edited table with a stale digest
+        when: the module is imported
+        then: the import fails
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-release-3-spec
+    title: Stills release approval and publication Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-release
+    slice: 3
+    source_story_ids:
+      - stills-authoring/story/publish-a-stills-model-set
+    purpose: Publish the stills release under an approval that covers it. The gate compares the approval's
+      model set and manifest digest against the rendered manifest, so a stills model set without its
+      own signed approval is unpublishable rather than merely undocumented.
+    layer_assignment:
+      - component: stills manifest
+        layer: data
+        responsibility: The rendered manifest for the stills catalog
+      - component: licence approval
+        layer: data
+        responsibility: A reviewer approval bound to that manifest digest
+      - component: publication path
+        layer: service
+        responsibility: The existing publish flow, workflow last
+    interfaces:
+      - name: prepare/publish release
+        kind: service
+        signature: the existing release commands, given the stills catalog and approval identifier
+        async: false
+        ownership: Reused unchanged; the stills release is a release like any other.
+      - name: release gate
+        kind: service
+        signature: compares approval model set and manifest digest against the rendered manifest
+        async: false
+        ownership: Reused unchanged, which is why an uncovered digest fails publication rather than
+          a run.
+    data_models:
+      - name: licence approval
+        shape: existing model
+        fields: approval_id; reviewer_id; model_set_id; manifest_digest; deployment_use; territories;
+          approved_at; expires_at; constraints
+        validation: territories are those the recorded licence findings support, not those the video
+          approval happens to carry
+    behavior:
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: an approval bound to a different digest
+        when: publication runs
+        then: the gate refuses
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: an expired approval
+        when: publication runs
+        then: it is refused
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: territories beyond what the licence findings support
+        when: an approval is drafted
+        then: it is not signed, because the findings are what the reviewer is signing against
+    error_handling:
+      - condition: approval_digest_mismatch
+        error: release gate failure
+        recovery: Refuse publication and require a signature bound to the new digest
+        retryable: false
+      - condition: approval_expired
+        error: release gate failure
+        recovery: Refuse; an expired approval is not a weaker approval
+        retryable: false
+      - condition: territory_beyond_licence_findings
+        error: review failure
+        recovery: Refuse to draft an approval wider than the recorded findings support
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 2
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the stills catalog
+        - the recorded licence findings
+      provides:
+        - a published, digest-addressed stills release
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-release.3.started
+        - stills-authoring.stills-release.3.succeeded
+        - stills-authoring.stills-release.3.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The approval is human-signed; nothing in this slice may mint one.
+      - Territories are derived from the recorded findings, never copied from the video approval.
+    test_scenarios:
+      - id: S3-T01
+        level: unit
+        given: a digest not matching the approval
+        when: the gate runs
+        then: publication is refused
+      - id: S3-T02
+        level: unit
+        given: an expired approval
+        when: the gate runs
+        then: publication is refused
+      - id: S3-T03
+        level: integration
+        given: a valid approval and catalog
+        when: publication runs
+        then: the workflow is published last
+      - id: S3-TF
+        level: failure_injection
+        given: a partial publication
+        when: it is retried
+        then: no consumer-visible release exists for an unverified artifact set
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-release-4-spec
+    title: Wire Stills Release Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-release
+    slice: 4
+    source_story_ids:
+      - stills-authoring/story/publish-a-stills-model-set
+    purpose: 'Stand the stills endpoint up as its own endpoint. A worker resolves one model set at
+      startup and refuses a manifest naming another, so this is a deployment, not a mode: the separation
+      is what keeps a request producing one image from paying a video model set''s hydration.'
+    layer_assignment:
+      - component: stills deployment
+        layer: integration
+        responsibility: A second Serverless endpoint resolving the stills manifest
+      - component: stills composition
+        layer: integration
+        responsibility: The composed stills runtime, sharing the worker's supervision
+    interfaces:
+      - name: compose_stills_deployment
+        kind: composition_root
+        signature: def compose_stills_deployment(environment, event_sink) -> StillsDeployment
+        async: false
+        ownership: Reuses the supervised runtime and hydration path; only the model set, workflow and
+          result path differ.
+      - name: endpoint configuration
+        kind: deployment
+        signature: TKR_MODEL_SET_ID and TKR_MANIFEST_DIGEST naming the stills release
+        async: false
+        ownership: Each endpoint resolves exactly one model set, which is what makes the separation
+          structural.
+    data_models:
+      - name: stills endpoint settings
+        shape: validated settings
+        fields: the worker settings, naming the stills model set and digest
+        validation: a manifest whose model set differs from the configured one is refused at startup
+    behavior:
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: the stills endpoint
+        when: it starts
+        then: it resolves the stills manifest and validates its workflow and models
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: a manifest naming another model set
+        when: it is resolved
+        then: startup refuses, as it already does for the video endpoint
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: the video endpoint
+        when: the stills endpoint is deployed
+        then: its configuration, contracts and image are unchanged
+    error_handling:
+      - condition: model_set_identity_mismatch
+        error: AppError
+        recovery: Refuse startup; a worker serving a model set it was not configured for is unreproducible
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 3
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the published stills release
+        - the existing supervised runtime
+      provides:
+        - a running stills endpoint
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-release.4.started
+        - stills-authoring.stills-release.4.succeeded
+        - stills-authoring.stills-release.4.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The two endpoints share no credential beyond what each needs for its own prefixes.
+      - The video endpoint is not reconfigured to accommodate this one.
+    test_scenarios:
+      - id: S4-T01
+        level: integration
+        given: the stills manifest
+        when: the endpoint starts
+        then: readiness follows workflow and model validation
+      - id: S4-T02
+        level: unit
+        given: a mismatched manifest
+        when: startup runs
+        then: it is refused
+      - id: S4-T03
+        level: unit
+        given: the video endpoint configuration
+        when: the stills endpoint is added
+        then: it is unchanged
+      - id: S4-TF
+        level: failure_injection
+        given: an unresolvable manifest digest
+        when: startup runs
+        then: readiness stays false
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-release-5-spec
+    title: Test Stills Release Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-release
+    slice: 5
+    source_story_ids:
+      - stills-authoring/story/publish-a-stills-model-set
+    purpose: Prove the release refuses what it should before anything runs, and prove once that the
+      graph executes at all, since nothing has ever run it.
+    layer_assignment:
+      - component: release tests
+        layer: integration
+        responsibility: Binding, gate and import refusals
+      - component: live validation
+        layer: integration
+        responsibility: One stills generation to a committed result
+    interfaces:
+      - name: live run evidence
+        kind: test_artifact
+        signature: a committed result for one stills generation
+        async: false
+        ownership: Recorded as run evidence on the slice, because the graph has no execution history.
+    data_models:
+      - name: stills fixture
+        shape: test double
+        fields: a catalog, a binding map and a canvas table
+        validation: fixtures are built in a per-test temporary directory removed by the runner
+    behavior:
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: a map naming a temporal source
+        when: the catalog is validated
+        then: it is refused
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: an uncovered manifest digest
+        when: publication runs
+        then: it is refused
+      - story_id: stills-authoring/story/publish-a-stills-model-set
+        given: an edited canvas table
+        when: the module is imported
+        then: the import fails
+    error_handling:
+      - condition: live_generation_failure
+        error: test failure
+        recovery: Treat as a blocker; the graph is unproven until one run commits
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 4
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the published stills release
+      provides:
+        - evidence the stills path publishes and executes
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-release.5.started
+        - stills-authoring.stills-release.5.succeeded
+        - stills-authoring.stills-release.5.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+    test_scenarios:
+      - id: S5-T01
+        level: unit
+        given: a temporal binding source
+        when: validation runs
+        then: it is refused
+      - id: S5-T02
+        level: unit
+        given: an uncovered digest
+        when: publication runs
+        then: it is refused
+      - id: S5-T03
+        level: unit
+        given: a stale canvas digest
+        when: import runs
+        then: it fails
+      - id: S5-T04
+        level: integration
+        given: one stills generation
+        when: it runs on the endpoint
+        then: a result marker commits and the image verifies
+      - id: S5-TF
+        level: failure_injection
+        given: each declared condition
+        when: the path runs
+        then: the recovery contract holds
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-generation-6-spec
+    title: Stills request contract Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-generation
+    slice: 6
+    source_story_ids:
+      - stills-authoring/story/generate-one-still
+    purpose: Describe a still in its own terms. A temporal field is refused as unknown rather than
+      ignored, because a request carrying a frame count is a request the caller misunderstood, and
+      silently dropping it would produce an image they did not ask for and cannot explain.
+    layer_assignment:
+      - component: StillsRequest
+        layer: domain
+        responsibility: The versioned request for one still
+      - component: canvas resolution
+        layer: domain
+        responsibility: Defaults and bounds from the stills registry
+      - component: job identity
+        layer: domain
+        responsibility: The same principal-scoped derivation the video path uses
+    interfaces:
+      - name: parse_stills_request
+        kind: domain_function
+        signature: 'def parse_stills_request(payload: object, canvases: Mapping[str, StillsCanvas]
+          | None = None) -> StillsRequest'
+        async: false
+        ownership: Injectable canvas population, so a test can parse against a population of one.
+      - name: StillsRequest.request_hash
+        kind: domain_method
+        signature: def request_hash(self) -> str
+        async: false
+        ownership: Canonical and principal-independent, so job identity derives the same way it does
+          for video.
+    data_models:
+      - name: StillsRequest
+        shape: immutable pydantic model
+        fields: schema_version; workflow_id; model_set_id; prompt; seed; width; height
+        validation: extra fields are forbidden, so frames and fps are refused by name rather than dropped;
+          absent dimensions resolve from the registered canvas
+    behavior:
+      - story_id: stills-authoring/story/generate-one-still
+        given: a request carrying a frame count
+        when: it is parsed
+        then: it is refused naming the unknown field, rather than generating an image the caller did
+          not describe
+      - story_id: stills-authoring/story/generate-one-still
+        given: a request naming no canvas
+        when: it is parsed
+        then: it lands on the registered defaults for its model set
+      - story_id: stills-authoring/story/generate-one-still
+        given: a canvas off the registered multiple or over the ceiling
+        when: it is parsed
+        then: it is refused naming the rule
+      - story_id: stills-authoring/story/generate-one-still
+        given: the same request twice
+        when: identity is derived
+        then: the same job and attempt identity result
+    error_handling:
+      - condition: invalid_request
+        error: ValidationError
+        recovery: Report every field-scoped defect together and submit nothing
+        retryable: false
+      - condition: no_registered_canvas
+        error: ValueError
+        recovery: Refuse an unregistered stills model set rather than guessing its canvas
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 5
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the stills canvas registry
+      provides:
+        - a validated stills request and its canonical hash
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-generation.6.started
+        - stills-authoring.stills-generation.6.succeeded
+        - stills-authoring.stills-generation.6.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - Unknown fields are refused rather than ignored, so a misunderstood request fails loudly.
+      - 'The prompt is a caller value: it is never logged and never enters an error context.'
+    test_scenarios:
+      - id: S6-T01
+        level: unit
+        given: a request carrying frames or fps
+        when: parsing runs
+        then: it is refused naming the field
+      - id: S6-T02
+        level: unit
+        given: a request naming no canvas
+        when: parsing runs
+        then: the registered defaults are filled
+      - id: S6-T03
+        level: unit
+        given: a canvas over the ceiling and one off the multiple
+        when: parsing runs
+        then: each is refused naming its rule
+      - id: S6-TF
+        level: failure_injection
+        given: a payload that is not an object
+        when: parsing runs
+        then: it is refused as an envelope defect
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The contract types are in-process values constructed per request
+        and discarded with it.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-generation-7-spec
+    title: Stills result contract Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-generation
+    slice: 7
+    source_story_ids:
+      - stills-authoring/story/generate-one-still
+      - stills-authoring/story/leave-the-video-contract-untouched
+    purpose: Commit a still under a contract of its own. The video result requires exactly one artifact
+      per role and its roles include a video; durable-delivery is done and terminal and that contract
+      is a published assertion, so admitting an image into it would loosen something other things depend
+      on being tight. This is a sibling, and the attempt stays singular.
+    layer_assignment:
+      - component: StillsResultManifest
+        layer: domain
+        responsibility: The commit marker for one still
+      - component: StillsResultRole
+        layer: domain
+        responsibility: Image, workflow and generation
+      - component: published description
+        layer: data
+        responsibility: The stills result assertion, sibling to the video one
+    interfaces:
+      - name: StillsResultManifest
+        kind: contract_model
+        signature: immutable pydantic model; extra=forbid, frozen
+        async: false
+        ownership: Requires exactly one artifact per role and one role per artifact, the same shape
+          the video contract holds.
+      - name: StillsResultManifest.commit_key
+        kind: property
+        signature: the final consumer-visible marker key
+        async: false
+        ownership: Under the same immutable attempt prefix layout, so the reconciler reaches it unchanged.
+    data_models:
+      - name: StillsResultRole
+        shape: string enum
+        fields: IMAGE; WORKFLOW; GENERATION
+        validation: no video role exists here, and no image role is added to the video contract
+      - name: StillsResultManifest
+        shape: immutable pydantic model
+        fields: schema_version; job_id; attempt_id; workflow_digest; model_set_id; request_hash; committed_at;
+          artifacts
+        validation: every artifact key must start with the attempt prefix, so a marker cannot name
+          an artifact outside its own attempt
+    behavior:
+      - story_id: stills-authoring/story/generate-one-still
+        given: a still and its records
+        when: they are committed
+        then: the marker names exactly one image, one workflow and one generation
+      - story_id: stills-authoring/story/generate-one-still
+        given: a marker naming two images
+        when: it is constructed
+        then: it is refused, because one attempt commits one image
+      - story_id: stills-authoring/story/leave-the-video-contract-untouched
+        given: the video result contract
+        when: a still is committed
+        then: its roles and their cardinality are unchanged
+      - story_id: stills-authoring/story/generate-one-still
+        given: a marker naming an artifact outside its attempt prefix
+        when: it is constructed
+        then: it is refused
+    error_handling:
+      - condition: stills_result_roles_incomplete
+        error: ValueError
+        recovery: Refuse a marker that does not carry exactly one artifact per role
+        retryable: false
+      - condition: artifact_outside_attempt_prefix
+        error: ValueError
+        recovery: Refuse; an attempt's marker may only vouch for its own attempt
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 6
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the existing commit protocol and attempt prefix layout
+      provides:
+        - a commit marker for one still
+        - a published description of the stills result
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-generation.7.started
+        - stills-authoring.stills-generation.7.succeeded
+        - stills-authoring.stills-generation.7.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The video contract is not widened. Admitting an image there would weaken a guarantee the delivery
+        path and its published assertion both rest on.
+      - The attempt stays singular, so the plural-result question is left open rather than decided
+        here.
+    test_scenarios:
+      - id: S7-T01
+        level: unit
+        given: one image, workflow and generation
+        when: a marker is built
+        then: it validates
+      - id: S7-T02
+        level: unit
+        given: two images
+        when: a marker is built
+        then: it is refused
+      - id: S7-T03
+        level: unit
+        given: an artifact outside the attempt prefix
+        when: a marker is built
+        then: it is refused
+      - id: S7-T04
+        level: unit
+        given: the video result contract
+        when: it is inspected
+        then: its roles are unchanged
+      - id: S7-TF
+        level: failure_injection
+        given: a marker missing a role
+        when: it is built
+        then: it is refused naming the role
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Commits objects under the outputs prefix, which already carries a declared retention
+        class reconciled by the presence of a result marker. A committed still is a deliverable on
+        the deliverable period, exactly as a committed video is; no class is introduced that the existing
+        reconciler cannot reach.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-generation-8-spec
+    title: Image output validation Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-generation
+    slice: 8
+    source_story_ids:
+      - stills-authoring/story/generate-one-still
+      - stills-authoring/story/leave-the-video-contract-untouched
+    purpose: Prove the prompt produced one image. The video validator requires a video stream and a
+      positive duration and is right to; it would refuse every still, so the stills path needs its
+      own and neither may be relaxed to serve the other.
+    layer_assignment:
+      - component: StillsResultValidator
+        layer: service
+        responsibility: Validate exactly one contained image attributed to this prompt
+      - component: image inspection
+        layer: integration
+        responsibility: Dimensions and encoding from the shared inspector
+    interfaces:
+      - name: StillsResultValidator.validate
+        kind: service_method
+        signature: def validate(self, output_root, prompt_outputs, *, job_id, attempt_id, workflow_digest,
+          model_set_id, request_hash) -> LocalStillResult
+        async: false
+        ownership: Attributes outputs by the prompt's own history, never by scanning a directory, as
+          the video validator already does.
+      - name: image inspection
+        kind: port_method
+        signature: 'def inspect_image(self, path: Path) -> ImageInfo'
+        async: false
+        ownership: Proves an image with positive dimensions and an allowlisted encoding.
+    data_models:
+      - name: ImageInfo
+        shape: frozen dataclass
+        fields: 'width: int; height: int; encoding: str'
+        validation: an encoding outside the allowlist is refused rather than passed through
+      - name: LocalStillResult
+        shape: frozen dataclass
+        fields: job_id; attempt_id; media_path; size_bytes; sha256; image; workflow_digest; model_set_id;
+          request_hash
+        validation: complete before return, so nothing partial reaches the uploader
+    behavior:
+      - story_id: stills-authoring/story/generate-one-still
+        given: a prompt that produced no image
+        when: the result is validated
+        then: the attempt fails and nothing is uploaded
+      - story_id: stills-authoring/story/generate-one-still
+        given: a prompt that produced several images
+        when: the result is validated
+        then: the attempt fails, because one attempt commits one image
+      - story_id: stills-authoring/story/generate-one-still
+        given: an output path escaping its root
+        when: the result is validated
+        then: it is refused
+      - story_id: stills-authoring/story/leave-the-video-contract-untouched
+        given: a video output with no video stream
+        when: the video validator runs
+        then: it is still refused
+    error_handling:
+      - condition: result_set_invalid
+        error: AppError
+        recovery: Refuse a prompt that produced other than one image
+        retryable: false
+      - condition: result_path_escape
+        error: AppError
+        recovery: Refuse an output outside its server-owned root
+        retryable: false
+      - condition: result_media_invalid
+        error: AppError
+        recovery: Refuse a file that is not a valid image of positive dimensions
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 7
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the prompt's own output attribution
+        - the media inspector
+      provides:
+        - a verified single-image local result
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-generation.8.started
+        - stills-authoring.stills-generation.8.succeeded
+        - stills-authoring.stills-generation.8.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - Outputs are attributed by prompt history, never by scanning a directory.
+      - Admitting images here does not admit them to the video validator, which is asserted rather
+        than assumed.
+    test_scenarios:
+      - id: S8-T01
+        level: unit
+        given: zero attributed outputs
+        when: validation runs
+        then: it is refused
+      - id: S8-T02
+        level: unit
+        given: two attributed outputs
+        when: validation runs
+        then: it is refused
+      - id: S8-T03
+        level: unit
+        given: an output escaping the root
+        when: validation runs
+        then: it is refused
+      - id: S8-T04
+        level: unit
+        given: a video with no video stream
+        when: the video validator runs
+        then: it is refused as before
+      - id: S8-TF
+        level: failure_injection
+        given: a zero-dimension or unknown-encoding file
+        when: validation runs
+        then: it is refused
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Commits objects under the outputs prefix, which already carries a declared retention
+        class reconciled by the presence of a result marker. A committed still is a deliverable on
+        the deliverable period, exactly as a committed video is; no class is introduced that the existing
+        reconciler cannot reach.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-generation-9-spec
+    title: Wire Stills Generation Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-generation
+    slice: 9
+    source_story_ids:
+      - stills-authoring/story/generate-one-still
+    purpose: Carry a stills request through the machinery that already exists. The binder, the execution
+      client, the verified uploader and the commit protocol are provider-neutral and unchanged; what
+      differs is the contract at each end, so this slice is composition rather than new mechanism.
+    layer_assignment:
+      - component: StillsApplication
+        layer: integration
+        responsibility: Own one stills request through verified durable publication
+      - component: stills handler
+        layer: api
+        responsibility: Return references, never image bytes
+      - component: console
+        layer: integration
+        responsibility: Offer stills generation beside video
+    interfaces:
+      - name: StillsApplication.submit
+        kind: service_method
+        signature: 'async def submit(self, request: StillsRequest) -> tuple[str, str | None]'
+        async: true
+        ownership: Same shape as the video application's, so the handler response contract is identical.
+      - name: stills handler
+        kind: api_service
+        signature: validate then submit, returning ok, job identity and a result reference
+        async: false
+        ownership: Returns references only, matching the video handler; media never crosses this boundary.
+    data_models:
+      - name: stills handler response
+        shape: frozen dataclass
+        fields: ok; job_id; result_reference; error_code; retryable; error_context; defects
+        validation: identical in shape to the video handler's, so one console renders both
+    behavior:
+      - story_id: stills-authoring/story/generate-one-still
+        given: a validated stills request
+        when: it is submitted
+        then: it binds, executes, verifies and commits
+      - story_id: stills-authoring/story/generate-one-still
+        given: a completed stills run
+        when: its response is read
+        then: it carries references and no image bytes
+      - story_id: stills-authoring/story/generate-one-still
+        given: the console
+        when: it offers stills
+        then: the bounds shown come from the stills canvas registry
+    error_handling:
+      - condition: generation_failed
+        error: AppError
+        recovery: Report a typed terminal or retryable outcome; commit nothing
+        retryable: true
+      - condition: commit_evidence_invalid
+        error: AppError
+        recovery: Refuse to publish a marker whose artifacts do not verify
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 8
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the existing binder, execution client, uploader and committer
+        - the stills request and result contracts
+      provides:
+        - a committed still reachable through the delivery path
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-generation.9.started
+        - stills-authoring.stills-generation.9.succeeded
+        - stills-authoring.stills-generation.9.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The handler returns references and never media bytes, as the video handler does.
+      - The prompt reaches the workflow and the generation record, and no event.
+    test_scenarios:
+      - id: S9-T01
+        level: integration
+        given: a validated request
+        when: it is submitted
+        then: one image commits with its workflow and generation records
+      - id: S9-T02
+        level: integration
+        given: a failing generation
+        when: it is submitted
+        then: nothing is committed and the outcome is typed
+      - id: S9-T03
+        level: integration
+        given: the console stills form
+        when: it is built
+        then: its bounds come from the registry
+      - id: S9-TF
+        level: failure_injection
+        given: an artifact that does not verify
+        when: commit runs
+        then: no marker is published
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Commits objects under the outputs prefix, which already carries a declared retention
+        class reconciled by the presence of a result marker. A committed still is a deliverable on
+        the deliverable period, exactly as a committed video is; no class is introduced that the existing
+        reconciler cannot reach.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: stills-generation-10-spec
+    title: Test Stills Generation Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: stills-generation
+    slice: 10
+    source_story_ids:
+      - stills-authoring/story/generate-one-still
+      - stills-authoring/story/leave-the-video-contract-untouched
+    purpose: 'Prove the stills path commits one image, and prove it did not cost the video path anything.
+      The second half is the one worth writing carefully: a contract loosened to admit stills would
+      be invisible until a video committed without one.'
+    layer_assignment:
+      - component: stills tests
+        layer: integration
+        responsibility: Contract, validation and commit
+      - component: video regression tests
+        layer: integration
+        responsibility: The video contract and validator are unchanged
+    interfaces:
+      - name: regression assertions
+        kind: test_suite
+        signature: the video result roles and the video validator's requirements, asserted directly
+        async: false
+        ownership: Written against the video contract rather than the stills one, so a loosening there
+          fails here.
+    data_models:
+      - name: in-memory result store
+        shape: test double
+        fields: object key to bytes and metadata
+        validation: shared with the existing commit tests, so both contracts are exercised against
+          one store
+    behavior:
+      - story_id: stills-authoring/story/generate-one-still
+        given: a request carrying a temporal field
+        when: it is parsed
+        then: it is refused
+      - story_id: stills-authoring/story/generate-one-still
+        given: zero or several attributed outputs
+        when: validation runs
+        then: nothing is committed in either case
+      - story_id: stills-authoring/story/leave-the-video-contract-untouched
+        given: the video result contract and validator
+        when: the stills path exists
+        then: both are unchanged
+      - story_id: stills-authoring/story/generate-one-still
+        given: a committed still
+        when: its marker is read
+        then: dimensions, size and digest are recoverable from it
+    error_handling:
+      - condition: video_contract_loosened
+        error: test failure
+        recovery: Fail here; a video committing without a video artifact would otherwise be the first
+          sign
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 9
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the stills and video paths
+      provides:
+        - evidence a still commits and that video guarantees are intact
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.stills-generation.10.started
+        - stills-authoring.stills-generation.10.succeeded
+        - stills-authoring.stills-generation.10.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - Regression assertions for the video contract run in the same suite as the new stills ones.
+    test_scenarios:
+      - id: S10-T01
+        level: unit
+        given: a temporal field
+        when: parsing runs
+        then: it is refused
+      - id: S10-T02
+        level: unit
+        given: zero and several outputs
+        when: validation runs
+        then: each is refused and nothing commits
+      - id: S10-T03
+        level: unit
+        given: the video result roles
+        when: they are read
+        then: they are unchanged
+      - id: S10-T04
+        level: integration
+        given: one committed still
+        when: its marker is read
+        then: dimensions, size and digest are recoverable
+      - id: S10-TF
+        level: failure_injection
+        given: each declared condition
+        when: the path runs
+        then: the recovery contract holds
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Commits objects under the outputs prefix, which already carries a declared retention
+        class reconciled by the presence of a result marker. A committed still is a deliverable on
+        the deliverable period, exactly as a committed video is; no class is introduced that the existing
+        reconciler cannot reach.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: reference-sheet-assembly-11-spec
+    title: Generated-likeness assessment Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: reference-sheet-assembly
+    slice: 11
+    source_story_ids:
+      - stills-authoring/story/assess-generated-likeness-processing
+    purpose: Record an assessment for a likeness produced from a description. Both existing records
+      start from material a caller supplied; this one starts from nothing but text and still produces
+      a likeness, which is a case neither considered and which a scoped verdict cannot be stretched
+      to cover.
+    layer_assignment:
+      - component: assurance record
+        layer: data
+        responsibility: A dated, scoped review reaching a verdict on generated likeness
+    interfaces:
+      - name: likeness assessment record
+        kind: document
+        signature: scope, the material produced, sensitivity, purpose, territories, measures, verdict,
+          residual risk and its acceptor
+        async: false
+        ownership: Append-only and distinct from the reference-image and audio records, because it
+          considers different material.
+    data_models:
+      - name: likeness assessment record
+        shape: markdown document
+        fields: Date; Scope; what is produced and from what; territories; measures; verdict; accepted
+          residual risk
+        validation: states which measures are enforced and which asserted, so the record does not read
+          stronger than the system
+    behavior:
+      - story_id: stills-authoring/story/assess-generated-likeness-processing
+        given: the reference-image and audio records alone
+        when: a likeness path would be enabled
+        then: the dependent slices stay blocked, because neither considered material produced from
+          a description
+      - story_id: stills-authoring/story/assess-generated-likeness-processing
+        given: a recorded assessment
+        when: the model or its territories later change
+        then: renewal is a new dated record rather than an edit to the verdict
+      - story_id: stills-authoring/story/assess-generated-likeness-processing
+        given: a qualified verdict
+        when: it is recorded
+        then: the residual risk and its acceptor are named
+    error_handling:
+      - condition: likeness_assessment_absent
+        error: execution gate
+        recovery: Keep slices 12 to 15 blocked; this is the gate, not a document task
+        retryable: false
+      - condition: assessment_scope_overread
+        error: review failure
+        recovery: Refuse to read either existing record as covering a likeness produced from a description
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the recorded reference-image and audio assessments
+        - the deployed territories
+      provides:
+        - a recorded verdict on generated likeness
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.reference-sheet-assembly.11.assessment_recorded
+      required_fields:
+        - event
+        - outcome
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - No generated likeness is produced before this record exists and is accepted.
+      - The record describes an output that is a likeness even though no likeness was supplied.
+    test_scenarios:
+      - id: S11-T01
+        level: review
+        given: the drafted record
+        when: it is reviewed
+        then: it names what is produced, from what, and a verdict
+      - id: S11-T02
+        level: review
+        given: the existing records alone
+        when: a likeness path is proposed
+        then: neither is accepted as covering it
+      - id: S11-T03
+        level: review
+        given: a later model or territory change
+        when: renewal is considered
+        then: a new dated record is produced
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - The verdict is a human's; the evidence may be gathered but the acceptance is signed.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The record is an append-only assurance document; renewal is a new
+        dated file rather than an edit to an existing verdict.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: reference-sheet-assembly-12-spec
+    title: Sheet as an assembly of committed stills Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: reference-sheet-assembly
+    slice: 12
+    source_story_ids:
+      - stills-authoring/story/assemble-a-reference-sheet
+    purpose: 'Compose a sheet from stills that are already committed rather than generating one as
+      an attempt. This is the whole of option A: composed as one generation a sheet would need the
+      result contract to be plural from the start; composed as an assembly it needs nothing new from
+      delivery, and the plural-result question stays open for a later feature to answer on its own
+      merits.'
+    layer_assignment:
+      - component: ReferenceSheet
+        layer: domain
+        responsibility: A named, principal-scoped set of committed still identities
+      - component: membership policy
+        layer: domain
+        responsibility: Admit only stills the same principal committed
+    interfaces:
+      - name: ReferenceSheet
+        kind: domain_model
+        signature: frozen value carrying a name and an ordered tuple of committed still job identities
+        async: false
+        ownership: Bounded at four, matching the binding sources a reference request has, so a sheet
+          cannot be assembled that cannot be used.
+      - name: SheetMembership.admit
+        kind: domain_service_method
+        signature: 'async def admit(self, principal_id: str, job_id: str) -> bool'
+        async: true
+        ownership: Refusal and absence share one outcome, matching the non-enumeration property the
+          result-access path already holds.
+    data_models:
+      - name: ReferenceSheet
+        shape: frozen dataclass
+        fields: 'name: str; members: tuple[str, ...]'
+        validation: one to four members; duplicates refused, because two identical references waste
+          a binding source
+    behavior:
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a sheet naming another principal's still
+        when: it is assembled
+        then: it is refused indistinguishably from one naming a still that does not exist
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a sheet of five stills
+        when: it is assembled
+        then: it is refused, because the binding allowlist carries four sources
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a still that was never committed
+        when: it is named
+        then: it is refused, because nothing conditions on an object with no commit evidence
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a sheet
+        when: it is composed
+        then: no new attempt is created and no plural result is required
+    error_handling:
+      - condition: sheet_member_unauthorised_or_absent
+        error: outcome
+        recovery: Return the same answer for both, so a sheet cannot be used to probe what another
+          principal committed
+        retryable: false
+      - condition: sheet_too_large
+        error: ValueError
+        recovery: Refuse more members than there are binding sources
+        retryable: false
+      - condition: sheet_member_uncommitted
+        error: AppError
+        recovery: Refuse a member with no commit marker
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 11
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - committed stills and their markers
+      provides:
+        - a validated, principal-scoped reference sheet
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.reference-sheet-assembly.12.started
+        - stills-authoring.reference-sheet-assembly.12.succeeded
+        - stills-authoring.reference-sheet-assembly.12.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - Membership is checked against commit evidence, not against a caller's claim.
+      - Unauthorised and absent are one outcome, so a sheet cannot enumerate another principal's work.
+    test_scenarios:
+      - id: S12-T01
+        level: unit
+        given: another principal's still
+        when: a sheet is assembled
+        then: it is refused
+      - id: S12-T02
+        level: unit
+        given: an unauthorised member and an absent member
+        when: each is admitted
+        then: the outcomes are equal
+      - id: S12-T03
+        level: unit
+        given: five members
+        when: a sheet is assembled
+        then: it is refused
+      - id: S12-T04
+        level: unit
+        given: an uncommitted still
+        when: it is named
+        then: it is refused
+      - id: S12-TF
+        level: failure_injection
+        given: a duplicate member
+        when: a sheet is assembled
+        then: it is refused
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. A sheet is a value composed from already-committed job identities
+        and is discarded with the request that composed it.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: reference-sheet-assembly-13-spec
+    title: Promotion into the input namespace Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: reference-sheet-assembly
+    slice: 13
+    source_story_ids:
+      - stills-authoring/story/assemble-a-reference-sheet
+    purpose: 'Make a committed still usable as a reference by copying it into the requesting principal''s
+      input namespace, digest preserved. Promotion rather than direct write is the point: a still committed
+      and then promoted carries commit evidence before anything conditions on it, where a still written
+      straight into inputs would be a conditioning object with no marker, no verified digest and no
+      attempt behind it.'
+    layer_assignment:
+      - component: StillPromoter
+        layer: service
+        responsibility: Copy a committed still into the principal's input namespace
+      - component: promotion record
+        layer: domain
+        responsibility: Which input object came from which committed attempt
+    interfaces:
+      - name: StillPromoter.promote
+        kind: service_method
+        signature: 'async def promote(self, principal_id: str, job_id: str) -> PromotedInput'
+        async: true
+        ownership: Reads the committed marker first, so a still with no marker is refused before anything
+          is copied.
+      - name: PromotedInput
+        kind: domain_model
+        signature: the input key, the source attempt and the preserved digest
+        async: false
+        ownership: Carries the source attempt so a later reader can tell where a conditioning object
+          came from.
+    data_models:
+      - name: PromotedInput
+        shape: frozen dataclass
+        fields: 'object_key: str; source_job_id: str; source_attempt_id: str; sha256: str'
+        validation: the digest equals the committed one, so the promoted object is provably the committed
+          object
+    behavior:
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a committed still
+        when: it is promoted
+        then: it lands in the requesting principal's input namespace
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a promoted still
+        when: its digest is compared with the committed one
+        then: they are equal
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a still with no commit marker
+        when: promotion is attempted
+        then: it is refused before anything is copied
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a promoted object
+        when: it is read later
+        then: the attempt it came from is recoverable
+    error_handling:
+      - condition: promotion_source_uncommitted
+        error: AppError
+        recovery: Refuse; commit evidence is what makes a still safe to condition on
+        retryable: false
+      - condition: promotion_digest_mismatch
+        error: AppError
+        recovery: Refuse and leave nothing behind, so a corrupt copy never sits under a plausible name
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 12
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the committed still and its marker
+        - the principal-scoped input namespace
+      provides:
+        - an input object a reference request can name
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.reference-sheet-assembly.13.started
+        - stills-authoring.reference-sheet-assembly.13.succeeded
+        - stills-authoring.reference-sheet-assembly.13.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The promoted object lands only in the requesting principal's own namespace.
+      - A mismatched digest leaves nothing behind, matching how a committed artifact is fetched.
+      - Promotion writes an input; it never writes or alters an output.
+    test_scenarios:
+      - id: S13-T01
+        level: unit
+        given: a committed still
+        when: it is promoted
+        then: it lands in the caller's namespace
+      - id: S13-T02
+        level: unit
+        given: the promoted object
+        when: its digest is compared
+        then: it equals the committed digest
+      - id: S13-T03
+        level: unit
+        given: an uncommitted still
+        when: promotion runs
+        then: it is refused before copying
+      - id: S13-TF
+        level: failure_injection
+        given: a digest mismatch during copy
+        when: promotion runs
+        then: nothing is left behind
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: 'Copies a committed still into the inputs prefix, which carries its own declared retention
+        class and lifecycle rule. The promoted copy and the committed original expire on their own
+        clocks, which is correct: one is a deliverable and the other is an input, and conflating them
+        would give an input the deliverable period.'
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: reference-sheet-assembly-14-spec
+    title: Wire Reference Sheet Assembly Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: reference-sheet-assembly
+    slice: 14
+    source_story_ids:
+      - stills-authoring/story/assemble-a-reference-sheet
+    purpose: Join the two endpoints at the one place they meet. The caller generates stills on one,
+      assembles and promotes them, then names them on the other; nothing about the video path learns
+      what a sheet is, which is what keeps the join to a single prefix.
+    layer_assignment:
+      - component: console sheet surface
+        layer: integration
+        responsibility: Generate, assemble, promote, then name
+      - component: sheet routes
+        layer: integration
+        responsibility: Assembly and promotion, with their refusals
+    interfaces:
+      - name: sheet routes
+        kind: api_route
+        signature: POST /api/sheets to assemble; POST /api/sheets/{name}/promote to promote
+        async: true
+        ownership: Returns the promoted input keys, so the caller names them in a reference request
+          rather than guessing them.
+      - name: console sheet surface
+        kind: ui_surface
+        signature: committed stills, sheet membership bounded at four, promoted keys shown as the references
+          they became
+        async: false
+        ownership: Shows the join rather than leaving it to be inferred.
+    data_models:
+      - name: promoted sheet response
+        shape: serialized mapping
+        fields: 'name; members: [{job_id, object_key, sha256}]'
+        validation: returns what a reference request needs, so the caller composes one without constructing
+          a key
+    behavior:
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: an assembled sheet
+        when: it is promoted
+        then: the promoted input keys are returned
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a promoted sheet
+        when: a reference request is composed
+        then: each member binds through an existing allowlisted source
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a sheet whose promotion partly failed
+        when: it is reported
+        then: the members that promoted and those that did not are both named
+    error_handling:
+      - condition: promotion_partly_failed
+        error: outcome
+        recovery: Report which members promoted and which did not, rather than raising; what succeeded
+          must still be reported
+        retryable: true
+      - condition: sheet_unusable_in_request
+        error: Rejection
+        recovery: Refuse a sheet with more members than binding sources, before submission
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 13
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the assembled sheet
+        - the promotion path
+        - the reference request contract
+      provides:
+        - a sheet carried from stills generation into a reference-conditioned video request
+      documented_routes:
+        - POST /api/sheets
+        - POST /api/sheets/{name}/promote
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.reference-sheet-assembly.14.started
+        - stills-authoring.reference-sheet-assembly.14.succeeded
+        - stills-authoring.reference-sheet-assembly.14.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The surface remains loopback-only.
+      - No new binding source is introduced; a sheet is carried by the four that exist.
+    test_scenarios:
+      - id: S14-T01
+        level: integration
+        given: an assembled sheet
+        when: it is promoted
+        then: the input keys are returned
+      - id: S14-T02
+        level: integration
+        given: a promoted sheet
+        when: a reference request is submitted
+        then: each member binds
+      - id: S14-T03
+        level: integration
+        given: a five-member sheet
+        when: it is carried into a request
+        then: it is refused before submission
+      - id: S14-TF
+        level: failure_injection
+        given: a partial promotion
+        when: it is reported
+        then: both the promoted and the unpromoted members are named
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: 'Copies a committed still into the inputs prefix, which carries its own declared retention
+        class and lifecycle rule. The promoted copy and the committed original expire on their own
+        clocks, which is correct: one is a deliverable and the other is an input, and conflating them
+        would give an input the deliverable period.'
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
+  - name: reference-sheet-assembly-15-spec
+    title: Test Reference Sheet Assembly Specification
+    status: planned
+    format: full
+    capability: stills-authoring
+    feature: reference-sheet-assembly
+    slice: 15
+    source_story_ids:
+      - stills-authoring/story/assemble-a-reference-sheet
+      - stills-authoring/story/assess-generated-likeness-processing
+    purpose: 'Prove the two properties that make a sheet safe: that it can only name what its own principal
+      committed, and that what it promotes is provably what was committed. The non-enumeration assertion
+      is written as an equality rather than as two truthiness checks, because the property is that
+      the outcomes are indistinguishable.'
+    layer_assignment:
+      - component: membership tests
+        layer: integration
+        responsibility: Authorisation and non-enumeration
+      - component: promotion tests
+        layer: integration
+        responsibility: Digest preservation and commit evidence
+      - component: end-to-end
+        layer: integration
+        responsibility: A sheet carried into a reference request
+    interfaces:
+      - name: in-memory stores
+        kind: test doubles
+        signature: committed stills and a principal-scoped input namespace
+        async: false
+        ownership: One store shared by both endpoints' fixtures, so the join is exercised rather than
+          mocked away.
+    data_models:
+      - name: sheet fixtures
+        shape: test doubles
+        fields: committed stills for two principals, and one uncommitted
+        validation: built in a per-test temporary directory removed by the runner
+    behavior:
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: another principal's still and an absent still
+        when: each is admitted
+        then: the outcomes are equal
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a promoted still
+        when: its digest is compared
+        then: it equals the committed one
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: an uncommitted still
+        when: promotion runs
+        then: it is refused
+      - story_id: stills-authoring/story/assemble-a-reference-sheet
+        given: a four-member sheet and a fifth member
+        when: each is carried into a request
+        then: the four bind and the fifth is refused
+    error_handling:
+      - condition: non_enumeration_regressed
+        error: test failure
+        recovery: Fail; an unauthorised member answering differently from an absent one turns a sheet
+          into a probe
+        retryable: false
+      - condition: digest_not_preserved
+        error: test failure
+        recovery: Fail; a promoted object that is not the committed object breaks the evidence chain
+          the promotion exists to keep
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 14
+      external:
+        - Python standard library
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
+        the capability composition root; tests use deterministic fakes.
+    integration_points:
+      consumes:
+        - the assembled and promoted sheet
+      provides:
+        - evidence a sheet is principal-scoped and digest-preserving
+      documented_routes: []
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - stills-authoring.reference-sheet-assembly.15.started
+        - stills-authoring.reference-sheet-assembly.15.succeeded
+        - stills-authoring.reference-sheet-assembly.15.failed
+      required_fields:
+        - event
+        - outcome
+        - duration_ms
+        - error_code?
+      forbidden_fields:
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - full prompts
+        - user-supplied filenames
+    security_constraints:
+      - Validate at the boundary and pass typed values inward.
+      - No global clients or ambient credentials; every collaborator is injected.
+      - Fail closed on configuration, authorization and digest uncertainty.
+      - The unauthorised and absent outcomes are asserted equal, not merely both falsy.
+    test_scenarios:
+      - id: S15-T01
+        level: unit
+        given: another principal's still and an absent still
+        when: both are admitted
+        then: the outcomes are equal
+      - id: S15-T02
+        level: unit
+        given: a promoted still
+        when: its digest is compared
+        then: it equals the committed digest
+      - id: S15-T03
+        level: unit
+        given: an uncommitted still
+        when: promotion runs
+        then: it is refused
+      - id: S15-T04
+        level: integration
+        given: a four-member sheet
+        when: a reference request is submitted
+        then: each member binds
+      - id: S15-T05
+        level: integration
+        given: a fifth member
+        when: it is added
+        then: it is refused
+      - id: S15-TF
+        level: failure_injection
+        given: each declared condition
+        when: the path runs
+        then: the recovery contract holds
+    definition_of_done:
+      - Public interfaces and models are type-checked with explicit exported return types.
+      - Every behavior criterion has a discriminating automated test.
+      - Every error condition has a tested recovery and retryability classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: 'Copies a committed still into the inputs prefix, which carries its own declared retention
+        class and lifecycle rule. The promoted copy and the committed original expire on their own
+        clocks, which is correct: one is a deliverable and the other is an input, and conflating them
+        would give an input the deliverable period.'
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
+        with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
+        filename.
+      bash: n/a
+      testing: pytest with deterministic fakes for every side-effecting port.
