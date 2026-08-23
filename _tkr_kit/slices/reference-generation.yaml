@@ -1,0 +1,269 @@
+capability: reference-generation
+slices:
+  - number: 1
+    feature: reference-conditioned-release
+    delivers:
+      - A ComfyUI API workflow whose reference-conditioning node inputs exist in the graph, because
+        the binder mutates declared inputs and refuses a binding whose input name is absent
+      - A binding map drawn from the existing input_0..input_3 allowlist, introducing no new binding
+        source
+      - The node signature read from the pinned ComfyUI revision, recorded beside the graph so the
+        input names are re-checkable without trusting the prose
+    depends_on: []
+    story_ids:
+      - reference-generation/story/publish-a-reference-conditioned-workflow
+    files:
+      - release-assets/minimax-h3-ref2v/workflow-api.json
+      - release-assets/minimax-h3-ref2v/catalog.json
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - release-assets/**
+    title: Reference-conditioned workflow graph
+    layer: data
+    status: planned
+  - number: 2
+    feature: reference-conditioned-release
+    delivers:
+      - A trained range for the model set the reference workflow belongs to, keyed by model-set identity
+        so it cannot inherit another model's numbers
+      - The envelope digest restated with the table, so an edited default fails at import rather than
+        silently changing where a default request lands
+      - The model-set identity decision recorded, since the currently published identity names text-to-video
+        while shipping the keyframe checkpoint
+    depends_on: []
+    story_ids:
+      - reference-generation/story/register-the-reference-model-set-envelope
+    files:
+      - src/tkr_cloud_video/jobs/trained_envelope.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Reference model-set envelope
+    layer: data
+    status: planned
+  - number: 3
+    feature: reference-conditioned-release
+    delivers:
+      - A rendered manifest for the reference catalog, published through the existing release path
+        with the workflow last
+      - A reviewer license approval bound to the new manifest digest, because republishing the workflow
+        changes the digest the current approval binds and no run may proceed on an uncovered digest
+      - Territory and expiry carried forward from the existing approval rather than silently widened
+    depends_on:
+      - 1
+      - 2
+    story_ids:
+      - reference-generation/story/publish-a-reference-conditioned-workflow
+    files:
+      - release-assets/minimax-h3-ref2v/license-approval.json
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - release-assets/**
+      - scripts/**
+    title: Reference release approval and publication
+    layer: service
+    status: planned
+  - number: 4
+    feature: reference-conditioned-release
+    delivers:
+      - The reference model set selectable at intake, resolving its defaults from the registered envelope
+      - A reference-to-video request reaching the binder with each staged input bound through its allowlisted
+        source
+      - The mode offered by the operator console's form, with its own dimensions and prompt sections
+    depends_on:
+      - 3
+    story_ids:
+      - reference-generation/story/publish-a-reference-conditioned-workflow
+      - reference-generation/story/register-the-reference-model-set-envelope
+    files:
+      - src/tkr_cloud_video/console/intake.py
+      - src/tkr_cloud_video/console/static/app.js
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Wire Reference-Conditioned Release
+    layer: integration
+    status: planned
+  - number: 5
+    feature: reference-conditioned-release
+    delivers:
+      - A binding test proving each of four references reaches its declared node input, and that a
+        graph missing one fails naming it
+      - An intake test proving an unregistered model set is refused rather than defaulted
+      - A release-gate test proving an uncovered manifest digest fails publication rather than surfacing
+        at run time
+      - A live reference generation reaching a committed result, recorded as run evidence
+    depends_on:
+      - 4
+    story_ids:
+      - reference-generation/story/publish-a-reference-conditioned-workflow
+      - reference-generation/story/register-the-reference-model-set-envelope
+    files:
+      - tests/job_execution/test_reference_release.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - tests/**
+    title: Test Reference-Conditioned Release
+    layer: integration
+    status: planned
+  - number: 6
+    feature: authorized-reference-intake
+    delivers:
+      - A dated assessment record naming the scope reviewed, the sensitivity and purpose of reference
+        images, the territories they are read in, and the protection measures that apply
+      - A verdict, with any residual risk accepted and by whom, since a review recording no accepted
+        risk either found none or did not look
+      - An explicit statement of which measures are enforced and which are asserted, so the record
+        does not read stronger than the system
+    depends_on: []
+    story_ids:
+      - reference-generation/story/assess-cross-border-reference-processing
+    files:
+      - docs/assurance/reference-input-cross-border.md
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The record is an append-only assurance document; renewal is a new
+        dated file rather than an edit to an existing verdict.
+    paths:
+      - docs/assurance/**
+    title: Cross-border reference-image assessment
+    layer: data
+    status: planned
+    description: This slice gates the rest of the feature rather than documenting it. The provision
+      requires the assessment before the communication outside Quebec, and ADR-002 already placed workers
+      across six territories, so an upload path shipped ahead of this record would make an existing
+      latent finding live.
+  - number: 7
+    feature: authorized-reference-intake
+    delivers:
+      - An inputs namespace scoped by principal, so input authorization is derived from the key rather
+        than looked up in a table that could disagree with it
+      - Refusal of an unauthorized key before any download, giving the same answer as an absent object
+      - Key validation that keeps a principal segment from being spoofed by a crafted object key
+    depends_on: []
+    story_ids:
+      - reference-generation/story/refuse-a-reference-a-principal-does-not-own
+      - reference-generation/story/supply-one-to-four-reference-images
+    files:
+      - src/tkr_cloud_video/jobs/input_staging.py
+      - src/tkr_cloud_video/security/validation.py
+    data_lifecycle:
+      kind: bounded
+      detail: Creates objects under the inputs prefix, which already carries a declared retention class
+        and a bucket lifecycle rule. Enforcement of that period is durable-delivery/feature/enforced-retention's
+        work, not this slice's; what this slice must not do is create input objects outside the prefix
+        those rules reach.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Principal-scoped input namespace
+    layer: domain
+    status: planned
+  - number: 8
+    feature: authorized-reference-intake
+    delivers:
+      - A credential role able to write the principal-scoped inputs namespace and nothing else, alongside
+        the existing read-only input role
+      - Its absence from every worker process-role allowlist, so no worker subprocess can be handed
+        a credential that writes inputs
+      - The provisioning path for that key, following the existing single-prefix capability topology
+    depends_on:
+      - 7
+    story_ids:
+      - reference-generation/story/refuse-a-reference-a-principal-does-not-own
+    files:
+      - src/tkr_cloud_video/security/credentials.py
+      - src/tkr_cloud_video/security/process_secrets.py
+    data_lifecycle:
+      kind: bounded
+      detail: Creates objects under the inputs prefix, which already carries a declared retention class
+        and a bucket lifecycle rule. Enforcement of that period is durable-delivery/feature/enforced-retention's
+        work, not this slice's; what this slice must not do is create input objects outside the prefix
+        those rules reach.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Input-writing credential role
+    layer: service
+    status: planned
+    description: 'Today nothing in the product can write to the inputs namespace: the input role holds
+      list and read only, and the request contract takes a key that must already exist. If the decision
+      is to keep staging out of band, this slice closes as deferred with that decision recorded, and
+      slice 9 accepts an existing key instead of offering an upload.'
+  - number: 9
+    feature: authorized-reference-intake
+    delivers:
+      - The console surface for supplying references, bounded at four, with its refusals reported by
+        field and rule like every other refusal
+      - Composition of the input-writing capability into the console, which until now composes no write
+        path at all, with that widening stated where the surface's constraints are recorded
+      - The staged references bound into the published reference workflow end to end
+    depends_on:
+      - 5
+      - 8
+    story_ids:
+      - reference-generation/story/supply-one-to-four-reference-images
+    files:
+      - src/tkr_cloud_video/console/uploads.py
+      - src/tkr_cloud_video/console/routes.py
+      - src/tkr_cloud_video/console/static/app.js
+      - docs/models/operator-console.md
+    data_lifecycle:
+      kind: bounded
+      detail: Creates objects under the inputs prefix, which already carries a declared retention class
+        and a bucket lifecycle rule. Enforcement of that period is durable-delivery/feature/enforced-retention's
+        work, not this slice's; what this slice must not do is create input objects outside the prefix
+        those rules reach.
+    paths:
+      - src/tkr_cloud_video/**
+      - docs/models/**
+    title: Wire Authorized Reference Intake
+    layer: integration
+    status: planned
+  - number: 10
+    feature: authorized-reference-intake
+    delivers:
+      - Staging tests for five references, a digest mismatch, and a media type outside the permitted
+        set, each refused before a workflow sees it
+      - An authorization test proving a key in another principal's namespace is refused before download
+        and indistinguishably from absence
+      - A least-privilege test pinning that the input-writing credential appears in no worker process-role
+        allowlist and reaches no prefix but its own
+      - A test that the console's write capability is bounded to the inputs namespace
+    depends_on:
+      - 9
+    story_ids:
+      - reference-generation/story/supply-one-to-four-reference-images
+      - reference-generation/story/refuse-a-reference-a-principal-does-not-own
+    files:
+      - tests/console/test_reference_intake.py
+      - tests/security_foundation/test_least_privilege_credentials.py
+    data_lifecycle:
+      kind: bounded
+      detail: Creates objects under the inputs prefix, which already carries a declared retention class
+        and a bucket lifecycle rule. Enforcement of that period is durable-delivery/feature/enforced-retention's
+        work, not this slice's; what this slice must not do is create input objects outside the prefix
+        those rules reach.
+    paths:
+      - tests/**
+    title: Test Authorized Reference Intake
+    layer: integration
+    status: planned

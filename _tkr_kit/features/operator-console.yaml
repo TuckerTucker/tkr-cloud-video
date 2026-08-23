@@ -1,0 +1,75 @@
+capability: operator-console
+features:
+  - name: local-generation-console
+    status: done
+    display_name: Local Generation Console
+    user_story: As an operator with a running Serverless endpoint, I want to compose and submit a generation
+      from a page on my own machine, so that a malformed request costs me a round trip to my own process
+      rather than a worker cold start, and I can see what my prompt composed to before I spend on it.
+    acceptance_criteria:
+      - A defective request is refused locally with the code, message and field-scoped defects the
+        worker would have returned, and never reaches the endpoint.
+      - The local decision and the handler's decision agree across the request matrix, and a divergence
+        fails a test.
+      - Canvas bounds, the canvas multiple, the temporal grid and the closed vocabularies shown by
+        the surface come from the pinned tables, not from a restatement.
+      - A submitted run is followed asynchronously to a terminal state, and a run that completed carrying
+        a handler refusal is never shown as a success.
+      - The Serverless credential reaches the provider and appears in no response, no log line, and
+        no error context.
+    scope_in:
+      - Validated non-secret settings, a loopback-only bind constraint, and credentials read from the
+        environment and never rendered.
+      - Local preflight performing the handler's two validation steps in its order, returning either
+        the accepted request with its wire text or the rejection the handler would have returned.
+      - Form constraints and the closed vocabularies served from the pinned trained-envelope and grammar
+        tables.
+      - A bounded client for the asynchronous run routes, separating the provider's status from the
+        handler's own accept-or-refuse response and treating a paused endpoint as a state to wait out.
+      - A routing layer independent of any socket, and a loopback server that checks the Host header,
+        keeps no access log, and serves one fixed security policy.
+    scope_out:
+      - Playback of a committed video, owned by authorized-console-delivery.
+      - Any non-loopback bind, authentication, or per-user isolation.
+      - Adding a web framework. The runtime dependency set is pinned at three packages by the engineering-foundation
+        package contract, and this surface holds two credentials, so its dependency surface is part
+        of its posture.
+    depends_on: []
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - name: authorized-console-delivery
+    status: done
+    display_name: Authorized Console Delivery
+    user_story: As the operator who submitted a generation, I want a committed video to play in the
+      same page I submitted from, so that I do not have to reach into the delivery bucket by hand,
+      and so the link that reaches my browser is bounded and reauthorized rather than a standing credential.
+    acceptance_criteria:
+      - A committed video plays through a link reauthorized at issue and bounded by the delivery policy's
+        maximum lifetime.
+      - A job the console did not derive resolves exactly as an absent one, for both lookup and delivery.
+      - The result marker is located at a derived key rather than by listing, so the surface needs
+        no enumeration capability.
+      - A signed URL appears in no log, no error context, and nothing persisted.
+      - The surface composes no uploader, committer, reconciler or erasure path.
+    scope_in:
+      - Signature Version 4 query presigning for one bucket in one reviewed Canadian region, computed
+        from the standard library and pinned against a vector verified against an independent implementation.
+      - A bounded read of one committed result marker over a short-lived presigned URL, returning absence
+        as absence rather than as failure.
+      - A session registry deriving job and attempt identity from the principal and the canonical request
+        hash, so authorization is structural.
+      - Composition of only the access policy, the signing service and the private result service,
+        so the write side is absent rather than unused.
+      - Overlay of the run's terminal status onto committed state, because a bucket cannot distinguish
+        a failed attempt from one still sampling.
+    scope_out:
+      - Proxying media bytes through the console process.
+      - A durable job registry surviving restart, which would be a new store of job identities with
+        no retention clock.
+      - Erasure or retention, owned by durable-delivery/feature/enforced-retention.
+    depends_on:
+      - local-generation-console
+    evidence:
+      kind: commit
+      ref: 954dd8c54e68900805b6ed78cf039bdca11e3632

@@ -1,0 +1,74 @@
+capability: reference-generation
+features:
+  - name: reference-conditioned-release
+    status: planned
+    display_name: Reference-Conditioned Release
+    user_story: As a platform operator, I want a published workflow whose graph actually carries reference-image
+      inputs and a model set whose envelope is registered, so that a reference-to-video request can
+      bind and execute instead of being refused at intake or failing at binding.
+    description: The blocker is specific and mechanical. The binder mutates only declared node inputs
+      and refuses a binding whose input name is absent from the pinned graph, so an image cannot be
+      bound into a node that has no image input. The currently published graph drives MiniMaxH3ImageToVideo
+      with no image attached, which is what text-to-video is on this model set. Republishing the graph
+      changes the manifest digest, and the reviewer license approval binds that digest, so this feature
+      necessarily includes a re-approval.
+    acceptance_criteria:
+      - A reference-to-video request binds one to four staged inputs into the published graph without
+        introducing a new binding source.
+      - A request naming a model set with no registered envelope is refused at intake rather than given
+        another model set's dimensions.
+      - The published manifest digest is covered by an unexpired reviewer approval, and an uncovered
+        digest fails the release gate.
+      - The envelope digest is restated with the table, so a changed default cannot land without the
+        revision that describes it.
+    scope_in:
+      - A ComfyUI API workflow whose reference-conditioning node inputs exist in the graph, with the
+        node signature read from the pinned ComfyUI revision.
+      - A binding map using only the existing input_0..input_3 allowlist entries.
+      - A trained-range entry for the reference model set, with the envelope digest restated and the
+        model-set identity decision recorded.
+      - A rendered manifest, a reviewer approval bound to its digest, and publication through the existing
+        release path with the workflow published last.
+    scope_out:
+      - Image-to-video, which conditions on keyframes and needs its own graph.
+      - Any change to the binder, the request contract or the binding vocabulary; all three already
+        accommodate this mode.
+      - Uploading the reference image, owned by authorized-reference-intake.
+    depends_on: []
+  - name: authorized-reference-intake
+    status: planned
+    display_name: Authorized Reference Intake
+    user_story: As a caller supplying reference images, I want my image to reach the input namespace
+      under an authorization I cannot forge and a retention clock that already exists, so that supplying
+      a likeness is a bounded act rather than an indefinite one.
+    description: 'Nothing in the product can currently write to the inputs namespace. The input-reader
+      role holds list and read only, and the request contract takes an object key that must already
+      exist, so staging an input is out of band today and the credential that does it is unmodelled.
+      This feature is where that becomes explicit, and it is deliberately gated behind the assessment
+      slice rather than after it: an upload path is precisely what turns the cross-border finding from
+      latent into live.'
+    acceptance_criteria:
+      - A dated assessment records sensitivity, purpose, territories and protection measures for reference
+        images before any worker reads one.
+      - A reference object a principal does not own is refused before download, indistinguishably from
+        the object being absent.
+      - No credential gains write access outside the principal-scoped inputs prefix, and no worker
+        process role receives the input-writing credential.
+      - A staged reference fails closed on size, declared digest, or media type before it reaches a
+        workflow.
+    scope_in:
+      - A dated privacy impact assessment for reference images processed outside Quebec, with its verdict
+        and any residual risk accepted and by whom.
+      - A principal-scoped inputs namespace so input authorization is derived rather than looked up.
+      - An input-writing credential role narrow enough to write that namespace and nothing else, absent
+        from every worker process-role allowlist.
+      - The surface for supplying references, and its refusals, on the operator console.
+    scope_out:
+      - Retention enforcement for the objects this feature creates, owned by durable-delivery/feature/enforced-retention.
+      - Content moderation, likeness detection, or consent capture for the subject of a reference image.
+      - Serving the console to anyone but a local operator.
+    depends_on:
+      - reference-conditioned-release
+    citations:
+      - CQLR c. P-39.1, s 17
+      - S.C. 2000, c. 5, sch 1, cl 4.1.3
