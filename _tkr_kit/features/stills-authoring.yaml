@@ -1,0 +1,108 @@
+capability: stills-authoring
+features:
+  - name: stills-release
+    status: planned
+    display_name: Stills Release
+    user_story: As a platform operator, I want a stills model set published and served from its own
+      endpoint, so that generating an image costs an image model's hydration rather than a video model's,
+      and so the video endpoint's contracts are untouched by it.
+    description: A worker resolves one model set at startup and refuses a manifest naming another,
+      so a stills model cannot ride along on the video worker. The video model set alone is 42.5 GB
+      with about seven minutes of fixed hydration by the latency audit; a request that produces a single
+      image should pay none of it. This feature is therefore a second endpoint, and its first slice
+      is where the three unverified facts about the model become recorded ones.
+    acceptance_criteria:
+      - The stills workflow ends in an image save and declares no frame or frame-rate input, because
+        neither describes a still.
+      - The canvas registry is keyed by model-set identity and covered by its own digest, so an edited
+        bound fails at import rather than silently changing where a default still lands.
+      - The manifest digest is covered by an unexpired reviewer approval, and an uncovered digest fails
+        publication rather than a run.
+      - The stills endpoint resolves its own manifest; the video endpoint's configuration and contracts
+        are unchanged.
+    scope_in:
+      - Node availability at the pinned ComfyUI revision, the licence terms and the territories a reviewer
+        can approve, and the weight and capacity cost, all recorded rather than assumed.
+      - A ComfyUI API workflow ending in an image save, with a binding map naming only sources a still
+        has.
+      - A pinned canvas registry for stills with its own revision and digest.
+      - A rendered manifest, a reviewer approval bound to its digest, and a second Serverless endpoint
+        resolving it.
+    scope_out:
+      - Bumping the pinned ComfyUI revision, which belongs to worker-runtime and affects the video
+        endpoint too.
+      - Extending the trained-envelope registry. A frame grid describes nothing about a still, so this
+        mirrors that pattern rather than widening it.
+      - The request and result contracts, owned by stills-generation.
+    depends_on: []
+  - name: stills-generation
+    status: planned
+    display_name: Stills Generation
+    user_story: As a caller, I want to generate one still image and have it committed with the same
+      verification a video gets, so that an image I intend to condition a generation on carries commit
+      evidence rather than being a loose file.
+    description: 'The video result contract requires exactly one artifact per role and its roles are
+      video, workflow and generation; the video output validator requires a video stream and a positive
+      duration. Both are correct and both would refuse every still. Because durable-delivery is done
+      and terminal, and the result contract is a published assertion, this feature carries siblings
+      rather than edits. The attempt stays singular: one image per attempt, which is what keeps the
+      plural-result question from being decided by accident here.'
+    acceptance_criteria:
+      - A stills request reaches a committed result carrying exactly one image, its workflow and its
+        generation metadata.
+      - A prompt producing no image or several is refused, and nothing partial is committed.
+      - The video result contract, its validator and its published description are unchanged.
+      - A committed still carries its dimensions, byte count and digest, so a later reference to it
+        is checkable.
+    scope_in:
+      - A stills request contract with its own schema version, carrying prompt, seed and canvas and
+        no temporal fields.
+      - A stills result contract committing exactly one image artifact alongside its workflow and generation
+        records.
+      - Output validation proving one contained image with positive dimensions.
+      - Execution through the existing deterministic ComfyUI path, binder and commit protocol, reused
+        rather than reimplemented.
+    scope_out:
+      - Several images per attempt.
+      - The H3 prompt grammar, which describes shots, cuts, dialogue and soundscape.
+      - Making a committed still usable as a reference, owned by reference-sheet-assembly.
+    depends_on:
+      - stills-release
+  - name: reference-sheet-assembly
+    status: planned
+    display_name: Reference Sheet Assembly
+    user_story: As a caller, I want to gather several stills I have generated into a named sheet and
+      use them as the references for a video generation, so that a subject stays recognisable across
+      a clip without my having to find and upload the files by hand.
+    description: A sheet here is an assembly, not an attempt. It names stills that are already committed
+      independently, so nothing about it needs the result contract to become plural and consistency
+      across the sheet is a property of the prompts and seeds the caller chose rather than of a generation
+      mode. A still becomes usable as a reference only by being promoted into the requesting principal's
+      input namespace, which means nothing conditions on an object that carries no commit evidence.
+    acceptance_criteria:
+      - A dated assessment covers generating a person from a description before any such still is produced;
+        neither existing assessment considers that case.
+      - A sheet names only stills the same principal committed, and one naming another principal's
+        still is refused indistinguishably from one naming an absent still.
+      - A promoted still keeps its committed digest, so the object a video conditions on is provably
+        the object that was committed.
+      - A sheet of up to four stills carries into a reference request through the existing binding
+        sources, introducing none.
+    scope_in:
+      - A dated assessment for generated likeness, distinct from the reference-image and audio records
+        because it considers material neither of them did.
+      - A sheet as a named, principal-scoped set of committed still job identities.
+      - Digest-preserving promotion of a committed still into that principal's input namespace.
+      - The console surface for generating, assembling, promoting and then naming a sheet in a reference
+        request.
+    scope_out:
+      - Producing a sheet as one generation.
+      - Editing a still to make it match the rest of a sheet, which needs an image input path and its
+        own assessment.
+      - Scoring or enforcing consistency across a sheet.
+      - Retention enforcement for promoted objects, owned by durable-delivery/feature/enforced-retention.
+    depends_on:
+      - stills-generation
+    citations:
+      - CQLR c. P-39.1, s 17
+      - S.C. 2000, c. 5, sch 1, cl 4.1.3

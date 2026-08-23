@@ -1,0 +1,411 @@
+capability: stills-authoring
+slices:
+  - number: 1
+    feature: stills-release
+    delivers:
+      - A record of whether the nodes the stills graph needs exist at the pinned ComfyUI revision,
+        and of what their absence would cost
+      - The licence terms read against the territories ADR-002 placed workers in, so a reviewer is
+        asked to approve something that can be approved
+      - Weight sizes and the disk and accelerator capacity an endpoint sized for stills would need,
+        measured rather than estimated from the video model set
+    depends_on: []
+    story_ids:
+      - stills-authoring/story/establish-the-stills-model-facts
+    files:
+      - docs/models/stills-model-facts.md
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - docs/models/**
+    title: Stills model facts of record
+    layer: data
+    status: planned
+    description: 'This slice exists because the rest of the capability is written against a model whose
+      node availability, licence and capacity this plan asserts nothing about. Each of the three is
+      a blocker of a different kind: absent nodes are a worker-runtime revision bump reaching the video
+      endpoint, a licence gap is unapprovable rather than merely inconvenient, and capacity decides
+      whether a separate endpoint is cheaper than the thing it exists to avoid.'
+  - number: 2
+    feature: stills-release
+    delivers:
+      - A ComfyUI API workflow ending in an image save, with a binding map naming only sources a still
+        has and declaring no frame or frame-rate input
+      - A canvas registry keyed by model-set identity with its own revision and digest, mirroring the
+        trained-envelope pattern rather than extending it
+      - The canvas bounds and their basis recorded, so a reader can check them by hand
+    depends_on:
+      - 1
+    story_ids:
+      - stills-authoring/story/publish-a-stills-model-set
+    files:
+      - release-assets/stills/workflow-api.json
+      - release-assets/stills/catalog.json
+      - src/tkr_cloud_video/stills/canvas.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - release-assets/**
+      - src/tkr_cloud_video/stills/**
+    title: Stills workflow graph and canvas registry
+    layer: data
+    status: planned
+    description: The registry is a sibling rather than an extension because the trained envelope carries
+      a frame floor, a frame ceiling and a temporal grid. Registering a stills model there would mean
+      inventing values for three fields that describe nothing about a still, and every one of them
+      would then be enforced.
+  - number: 3
+    feature: stills-release
+    delivers:
+      - A rendered manifest for the stills catalog, published through the existing release path with
+        the workflow last
+      - A reviewer licence approval bound to that manifest digest, carrying the territories the recorded
+        licence findings support
+      - Refusal at the release gate of any digest an approval does not cover
+    depends_on:
+      - 2
+    story_ids:
+      - stills-authoring/story/publish-a-stills-model-set
+    files:
+      - release-assets/stills/license-approval.json
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - release-assets/**
+      - scripts/**
+    title: Stills release approval and publication
+    layer: service
+    status: planned
+  - number: 4
+    feature: stills-release
+    delivers:
+      - A second Serverless endpoint resolving the stills manifest digest at startup
+      - 'Configuration proving the two endpoints are separate: each resolves one model set and refuses
+        a manifest naming another'
+      - The video endpoint's configuration, contracts and image left unchanged
+    depends_on:
+      - 3
+    story_ids:
+      - stills-authoring/story/publish-a-stills-model-set
+    files:
+      - scripts/deploy_runpod_endpoint.sh
+      - src/tkr_cloud_video/stills/composition.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - src/tkr_cloud_video/stills/**
+      - scripts/**
+    title: Wire Stills Release
+    layer: integration
+    status: planned
+  - number: 5
+    feature: stills-release
+    delivers:
+      - A binding test refusing a map that names a temporal source
+      - A gate test proving an uncovered manifest digest fails publication
+      - An import test proving an edited canvas table with a stale digest fails
+      - A live stills generation reaching a committed result, recorded as run evidence
+    depends_on:
+      - 4
+    story_ids:
+      - stills-authoring/story/publish-a-stills-model-set
+    files:
+      - tests/stills/test_stills_release.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - tests/**
+    title: Test Stills Release
+    layer: integration
+    status: planned
+  - number: 6
+    feature: stills-generation
+    delivers:
+      - A versioned stills request carrying prompt, seed and canvas, and declaring no temporal field,
+        so a frame count is refused as unknown rather than ignored
+      - Canvas defaults and bounds resolved from the stills registry by model-set identity
+      - A canonical request hash and the same principal-scoped job identity derivation the video path
+        uses, so one identity scheme covers both
+    depends_on:
+      - 5
+    story_ids:
+      - stills-authoring/story/generate-one-still
+    files:
+      - src/tkr_cloud_video/stills/contracts.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - src/tkr_cloud_video/stills/**
+    title: Stills request contract
+    layer: domain
+    status: planned
+  - number: 7
+    feature: stills-generation
+    delivers:
+      - A result manifest committing exactly one image artifact alongside its workflow and generation
+        records
+      - Role and prefix validation of the same shape as the video contract, so a marker still cannot
+        name artifacts outside its attempt prefix
+      - A published description of the stills result, sibling to the video one
+    depends_on:
+      - 6
+    story_ids:
+      - stills-authoring/story/generate-one-still
+      - stills-authoring/story/leave-the-video-contract-untouched
+    files:
+      - src/tkr_cloud_video/stills/results.py
+      - docs/published/stills-result-contract.md
+    data_lifecycle:
+      kind: bounded
+      detail: Commits objects under the outputs prefix, which already carries a declared retention
+        class reconciled by the presence of a result marker. A committed still is a deliverable on
+        the deliverable period, exactly as a committed video is; this feature introduces no class the
+        existing reconciler cannot reach.
+    paths:
+      - src/tkr_cloud_video/stills/**
+      - docs/published/**
+    title: Stills result contract
+    layer: domain
+    status: planned
+    description: A sibling contract rather than a widened one. The video result requires exactly one
+      artifact per role and its roles include a video; durable-delivery is done and terminal and the
+      video result is a published assertion, so admitting an image there would mean loosening a contract
+      other things depend on being tight.
+  - number: 8
+    feature: stills-generation
+    delivers:
+      - Validation proving exactly one contained image attributed to this prompt, with positive dimensions
+        and an allowlisted encoding
+      - Refusal of a prompt that produced none and of a prompt that produced several, each before anything
+        is uploaded
+      - The video validator left requiring a video stream and a positive duration
+    depends_on:
+      - 7
+    story_ids:
+      - stills-authoring/story/generate-one-still
+      - stills-authoring/story/leave-the-video-contract-untouched
+    files:
+      - src/tkr_cloud_video/stills/validation.py
+    data_lifecycle:
+      kind: bounded
+      detail: Commits objects under the outputs prefix, which already carries a declared retention
+        class reconciled by the presence of a result marker. A committed still is a deliverable on
+        the deliverable period, exactly as a committed video is; this feature introduces no class the
+        existing reconciler cannot reach.
+    paths:
+      - src/tkr_cloud_video/stills/**
+    title: Image output validation
+    layer: service
+    status: planned
+  - number: 9
+    feature: stills-generation
+    delivers:
+      - The stills request carried through the existing binder, execution client and commit protocol,
+        reused rather than reimplemented
+      - The stills endpoint handler returning references and never image bytes, matching the response
+        shape the video handler already holds
+      - The console offering stills generation beside video, with its own bounds
+    depends_on:
+      - 8
+    story_ids:
+      - stills-authoring/story/generate-one-still
+    files:
+      - src/tkr_cloud_video/stills/application.py
+      - src/tkr_cloud_video/console/intake.py
+      - src/tkr_cloud_video/console/static/app.js
+    data_lifecycle:
+      kind: bounded
+      detail: Commits objects under the outputs prefix, which already carries a declared retention
+        class reconciled by the presence of a result marker. A committed still is a deliverable on
+        the deliverable period, exactly as a committed video is; this feature introduces no class the
+        existing reconciler cannot reach.
+    paths:
+      - src/tkr_cloud_video/**
+    title: Wire Stills Generation
+    layer: integration
+    status: planned
+  - number: 10
+    feature: stills-generation
+    delivers:
+      - Tests refusing a request that carries a temporal field
+      - Tests refusing a result set of zero images and of several, with nothing committed in either
+        case
+      - A regression test proving the video result contract's roles and the video validator's requirements
+        are unchanged
+      - An end-to-end test committing one still and reading its dimensions, size and digest back from
+        the marker
+    depends_on:
+      - 9
+    story_ids:
+      - stills-authoring/story/generate-one-still
+      - stills-authoring/story/leave-the-video-contract-untouched
+    files:
+      - tests/stills/test_stills_generation.py
+      - tests/durable_delivery/test_verified_result_commit.py
+    data_lifecycle:
+      kind: bounded
+      detail: Commits objects under the outputs prefix, which already carries a declared retention
+        class reconciled by the presence of a result marker. A committed still is a deliverable on
+        the deliverable period, exactly as a committed video is; this feature introduces no class the
+        existing reconciler cannot reach.
+    paths:
+      - tests/**
+    title: Test Stills Generation
+    layer: integration
+    status: planned
+  - number: 11
+    feature: reference-sheet-assembly
+    delivers:
+      - A dated assessment covering a likeness produced from a description, with no uploaded image
+        to point at
+      - An explicit statement that the reference-image and audio records do not reach this material,
+        so this is a third record rather than a renewal of either
+      - A verdict with any residual risk accepted and by whom
+    depends_on: []
+    story_ids:
+      - stills-authoring/story/assess-generated-likeness-processing
+    files:
+      - docs/assurance/generated-likeness.md
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The record is an append-only assurance document; renewal is a new
+        dated file rather than an edit to an existing verdict.
+    paths:
+      - docs/assurance/**
+    title: Generated-likeness assessment
+    layer: data
+    status: planned
+    description: Gates the feature. The two existing assessments both start from material a caller
+      supplied; this one starts from nothing but a description and still produces a likeness, which
+      is a case neither considered and which a scoped verdict cannot be stretched to cover.
+  - number: 12
+    feature: reference-sheet-assembly
+    delivers:
+      - A sheet as a named, principal-scoped set of already-committed still job identities, bounded
+        by the four binding sources a reference request has
+      - Membership checked as stills the same principal committed, with an unauthorised member refused
+        indistinguishably from an absent one
+      - 'No new attempt shape and no plural result: consistency across a sheet is a property of the
+        prompts and seeds the caller chose'
+    depends_on:
+      - 11
+    story_ids:
+      - stills-authoring/story/assemble-a-reference-sheet
+    files:
+      - src/tkr_cloud_video/stills/sheets.py
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
+        shipped in the pinned image; the published manifest is immutable and digest-addressed under
+        the existing artifact layout.
+    paths:
+      - src/tkr_cloud_video/stills/**
+    title: Sheet as an assembly of committed stills
+    layer: domain
+    status: planned
+    description: This slice is where option A lives. A sheet composed as one generation would need
+      the result contract to be plural from the start; composed as an assembly it needs nothing new
+      from delivery at all, and the plural-result question stays open for a later feature to answer
+      on its own merits.
+  - number: 13
+    feature: reference-sheet-assembly
+    delivers:
+      - Digest-preserving copy of a committed still into the requesting principal's input namespace,
+        so the promoted object is provably the committed one
+      - Refusal to promote a still that carries no commit marker, so nothing conditions on an object
+        without commit evidence
+      - Promotion recorded against the sheet, so a later reader can tell which input object came from
+        which committed attempt
+    depends_on:
+      - 12
+    story_ids:
+      - stills-authoring/story/assemble-a-reference-sheet
+    files:
+      - src/tkr_cloud_video/stills/promotion.py
+    data_lifecycle:
+      kind: bounded
+      detail: 'Copies a committed still into the inputs prefix, which carries its own declared retention
+        class and lifecycle rule. The promoted copy and the committed original expire on their own
+        clocks, which is correct: one is a deliverable and the other is an input, and conflating them
+        would give an input the deliverable period.'
+    paths:
+      - src/tkr_cloud_video/stills/**
+    title: Promotion into the input namespace
+    layer: service
+    status: planned
+    description: Promotion rather than direct write. A still committed to outputs and then copied into
+      inputs carries commit evidence before it is ever conditioned on; a still written straight into
+      inputs would be a conditioning object with no marker, no verified digest and no attempt behind
+      it.
+  - number: 14
+    feature: reference-sheet-assembly
+    delivers:
+      - The console surface for generating stills, assembling them into a sheet, promoting it, and
+        naming it in a reference request
+      - The sheet's members carried into that request through the existing allowlisted binding sources,
+        introducing none
+      - The promoted keys shown as the input references they became, so the caller sees the join rather
+        than inferring it
+    depends_on:
+      - 13
+    story_ids:
+      - stills-authoring/story/assemble-a-reference-sheet
+    files:
+      - src/tkr_cloud_video/console/sheets.py
+      - src/tkr_cloud_video/console/routes.py
+      - src/tkr_cloud_video/console/static/app.js
+    data_lifecycle:
+      kind: bounded
+      detail: 'Copies a committed still into the inputs prefix, which carries its own declared retention
+        class and lifecycle rule. The promoted copy and the committed original expire on their own
+        clocks, which is correct: one is a deliverable and the other is an input, and conflating them
+        would give an input the deliverable period.'
+    paths:
+      - src/tkr_cloud_video/**
+    title: Wire Reference Sheet Assembly
+    layer: integration
+    status: planned
+  - number: 15
+    feature: reference-sheet-assembly
+    delivers:
+      - Tests refusing a sheet naming another principal's still and one naming an absent still, asserting
+        the two outcomes equal
+      - A test refusing promotion of a still with no commit marker
+      - A digest test proving a promoted object equals the committed one
+      - An end-to-end test carrying a four-still sheet into a reference request and refusing a fifth
+    depends_on:
+      - 14
+    story_ids:
+      - stills-authoring/story/assemble-a-reference-sheet
+      - stills-authoring/story/assess-generated-likeness-processing
+    files:
+      - tests/stills/test_reference_sheet.py
+    data_lifecycle:
+      kind: bounded
+      detail: 'Copies a committed still into the inputs prefix, which carries its own declared retention
+        class and lifecycle rule. The promoted copy and the committed original expire on their own
+        clocks, which is correct: one is a deliverable and the other is an input, and conflating them
+        would give an input the deliverable period.'
+    paths:
+      - tests/**
+    title: Test Reference Sheet Assembly
+    layer: integration
+    status: planned

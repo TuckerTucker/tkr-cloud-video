@@ -1,0 +1,221 @@
+capability: stills-authoring
+stories:
+  - name: establish-the-stills-model-facts
+    status: planned
+    display_name: Establish the stills model facts
+    feature: stills-release
+    actor: Platform operator
+    intent: record what is true about the stills model before anything is built against it, rather
+      than discovering at build time that its nodes are absent or its licence does not reach the deployed
+      territories
+    preconditions:
+      - The pinned ComfyUI revision is known.
+      - The territories ADR-002 placed workers in are known.
+    trigger_action: The operator investigates the candidate stills model
+    steps:
+      - actor: Platform operator
+        action: checks the pinned ComfyUI revision for the nodes the graph would need
+        system_response: their presence or absence is recorded, and absence is named as a worker-runtime
+          revision bump affecting the video endpoint too
+      - actor: Platform operator
+        action: reads the licence and compares it to the deployed territories
+        system_response: what it permits is recorded against the territories a reviewer would have
+          to approve
+      - actor: Platform operator
+        action: measures the weights and the capacity they need
+        system_response: disk and accelerator cost are recorded against an endpoint sized for stills
+    acceptance_criteria:
+      - given: nodes absent at the pinned revision
+        when: the finding is recorded
+        then: the capability stays blocked, because a revision bump is worker-runtime's work and reaches
+          the video endpoint
+      - given: a licence that does not reach a deployed territory
+        when: the finding is recorded
+        then: the capability stays blocked rather than proceeding toward an approval a reviewer could
+          not sign
+      - given: recorded findings
+        when: a later revision or model version changes
+        then: the findings are restated rather than inherited
+    slice_ids:
+      - stills-authoring/slice/1
+  - name: publish-a-stills-model-set
+    status: planned
+    display_name: Publish a stills model set
+    feature: stills-release
+    actor: Platform operator
+    intent: publish a stills model set with a workflow that ends in an image and an approval bound
+      to its digest, so an image endpoint can resolve it
+    preconditions:
+      - The stills model facts are recorded.
+      - A reviewer is available to sign an approval.
+    trigger_action: The operator publishes the stills release
+    steps:
+      - actor: Platform operator
+        action: authors a graph ending in an image save
+        system_response: the binding map names only sources a still has, and declares no frame or frame-rate
+          input
+      - actor: Platform operator
+        action: registers the canvas bounds and restates their digest
+        system_response: the table verifies at import, so an edited bound cannot land silently
+      - actor: Release path
+        action: renders the manifest and publishes the workflow last
+        system_response: the release resolves only after every artifact it needs verifies
+    acceptance_criteria:
+      - given: a binding map naming a temporal source
+        when: the catalog is validated
+        then: it is refused, because a still has no frames and no frame rate
+      - given: a manifest digest not covered by the approval
+        when: publication runs
+        then: it is refused rather than surfacing when a worker executes
+      - given: an edited canvas table with a stale digest
+        when: the module is imported
+        then: the import fails
+    slice_ids:
+      - stills-authoring/slice/2
+      - stills-authoring/slice/3
+      - stills-authoring/slice/4
+      - stills-authoring/slice/5
+  - name: generate-one-still
+    status: planned
+    display_name: Generate one still
+    feature: stills-generation
+    actor: Caller
+    intent: submit a prompt and a canvas and receive one committed image, verified the way a committed
+      video is
+    preconditions:
+      - The stills endpoint resolves a published stills model set.
+    trigger_action: The caller submits a stills request
+    steps:
+      - actor: Caller
+        action: supplies a prompt, a seed and a canvas
+        system_response: the request is validated against the stills contract, which carries no temporal
+          fields
+      - actor: Stills worker
+        action: executes the pinned workflow
+        system_response: exactly one image is attributed to this prompt
+      - actor: Commit path
+        action: verifies and commits
+        system_response: the image, its workflow and its generation record are committed under an immutable
+          attempt prefix
+    acceptance_criteria:
+      - given: a request carrying a frame count
+        when: it is parsed
+        then: it is refused, because the stills contract declares no such field
+      - given: a prompt producing no image
+        when: the result is validated
+        then: the attempt fails and nothing is committed
+      - given: a prompt producing more than one image
+        when: the result is validated
+        then: the attempt fails, because one attempt commits one image
+      - given: a committed still
+        when: its record is read
+        then: it carries dimensions, byte count and digest
+    slice_ids:
+      - stills-authoring/slice/6
+      - stills-authoring/slice/7
+      - stills-authoring/slice/8
+      - stills-authoring/slice/9
+      - stills-authoring/slice/10
+  - name: leave-the-video-contract-untouched
+    status: planned
+    display_name: Leave the video contract untouched
+    feature: stills-generation
+    actor: Platform operator
+    intent: add an image path without loosening anything the video path relies on, so that committing
+      a still cannot make committing a video weaker
+    preconditions:
+      - The video result contract and its validator are done and terminal.
+    trigger_action: A stills result is contributed alongside the video one
+    steps:
+      - actor: Stills path
+        action: uses its own result contract
+        system_response: the video contract's required roles are unchanged
+      - actor: Stills path
+        action: uses its own output validator
+        system_response: the video validator still requires a video stream and a positive duration
+      - actor: Platform operator
+        action: reads the published result description
+        system_response: the video assertion still describes the video path exactly
+    acceptance_criteria:
+      - given: the video result contract
+        when: a still is committed
+        then: its required roles and their cardinality are unchanged
+      - given: a video output with no video stream
+        when: it is validated
+        then: it is still refused, because admitting images must not admit them here
+    slice_ids:
+      - stills-authoring/slice/7
+      - stills-authoring/slice/8
+      - stills-authoring/slice/10
+  - name: assess-generated-likeness-processing
+    status: planned
+    display_name: Assess generated likeness processing
+    feature: reference-sheet-assembly
+    actor: Accountable operator
+    intent: record an assessment for generating a person from a description, which neither the reference-image
+      nor the audio record considered
+    preconditions:
+      - The reference-image and audio assessments are recorded.
+      - No generated likeness has been produced.
+    trigger_action: The operator conducts and records the likeness assessment
+    steps:
+      - actor: Accountable operator
+        action: states what is produced and from what
+        system_response: the record describes a likeness produced from a description, with no uploaded
+          image to point at
+      - actor: Accountable operator
+        action: weighs sensitivity, purpose, territories and measures
+        system_response: the record states which measures are enforced and which asserted
+      - actor: Accountable operator
+        action: reaches a verdict
+        system_response: a qualified pass names the residual risk accepted and by whom
+    acceptance_criteria:
+      - given: the reference-image and audio records alone
+        when: a likeness generation path would be enabled
+        then: the dependent slices stay blocked, because neither review considered material produced
+          from a description
+      - given: a recorded assessment
+        when: the model or its territories later change
+        then: renewal is a new dated record
+    slice_ids:
+      - stills-authoring/slice/11
+  - name: assemble-a-reference-sheet
+    status: planned
+    display_name: Assemble a reference sheet
+    feature: reference-sheet-assembly
+    actor: Caller
+    intent: name several stills I have committed as one sheet and promote them into my input namespace,
+      so they are usable as references
+    preconditions:
+      - The likeness assessment is recorded and accepted.
+      - The caller has committed at least one still.
+    trigger_action: The caller assembles a sheet from committed stills
+    steps:
+      - actor: Caller
+        action: names committed stills as a sheet
+        system_response: each is checked as one the same principal committed
+      - actor: Promotion path
+        action: copies each named still into the caller's input namespace
+        system_response: the committed digest is preserved, so the promoted object is provably the
+          committed one
+      - actor: Caller
+        action: names the sheet in a reference request
+        system_response: each promoted still binds through an existing allowlisted source
+    acceptance_criteria:
+      - given: a sheet naming another principal's still
+        when: it is assembled
+        then: it is refused indistinguishably from one naming a still that does not exist
+      - given: a promoted still
+        when: its digest is compared with the committed one
+        then: they are equal
+      - given: a sheet of more than four stills
+        when: it is carried into a reference request
+        then: it is refused, because the binding allowlist carries four sources
+      - given: a still that was never committed
+        when: it is named in a sheet
+        then: it is refused, because nothing conditions on an object with no commit evidence
+    slice_ids:
+      - stills-authoring/slice/12
+      - stills-authoring/slice/13
+      - stills-authoring/slice/14
+      - stills-authoring/slice/15
