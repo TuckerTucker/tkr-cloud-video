@@ -171,6 +171,84 @@ async def test_an_absent_object_reads_as_absent_rather_than_as_a_failure(
     assert await reader.get(VIDEO_KEY) is None
 
 
+def _refusal(status: int, provider_code: str) -> urllib.error.HTTPError:
+    """Return one provider refusal carrying its own error document.
+
+    The bodies are the ones `s3.ca-east-006.backblazeb2.com` actually returns,
+    captured against the delivery credential itself. The distinction they carry
+    is the whole point of the test: a narrow credential and a wrong one are both
+    403, and only the provider's own code separates them.
+    """
+    body = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+        f"<Error>\n    <Code>{provider_code}</Code>\n"
+        "    <Message>Cannot access bucket</Message>\n</Error>"
+    ).encode()
+    return urllib.error.HTTPError(
+        ENDPOINT,
+        status,
+        provider_code,
+        {},  # type: ignore[arg-type]
+        BytesIO(body),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_key_the_read_credential_may_not_enumerate_reads_as_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A generation still sampling is a state, not an error.
+
+    The delivery-read credential holds no bucket listing right, so the provider
+    refuses to say whether an uncommitted key exists and answers 403
+    AccessDenied rather than 404. Read as a failure, that is every poll from
+    submission until the marker lands, and the console shows the operator
+    nothing for the whole of a generation that is succeeding.
+    """
+    monkeypatch.setattr(
+        urllib.request, "urlopen", _raise(_refusal(403, "AccessDenied"))
+    )
+    reader = PresignedObjectReader(build_presigner(), ttl_seconds=60, timeout_seconds=5)
+
+    assert await reader.get(VIDEO_KEY) is None
+
+
+@pytest.mark.parametrize(
+    "provider_code", ["SignatureDoesNotMatch", "InvalidAccessKeyId"]
+)
+@pytest.mark.asyncio
+async def test_a_credential_that_is_wrong_rather_than_narrow_stays_a_failure(
+    monkeypatch: pytest.MonkeyPatch, provider_code: str
+) -> None:
+    """Forgiving absence must not forgive a misconfigured console.
+
+    Both of these are 403 as well. If they were read as absence, a console
+    holding the wrong delivery secret would report every generation as
+    permanently in progress instead of naming what is wrong.
+    """
+    monkeypatch.setattr(urllib.request, "urlopen", _raise(_refusal(403, provider_code)))
+    reader = PresignedObjectReader(build_presigner(), ttl_seconds=60, timeout_seconds=5)
+
+    with pytest.raises(AppError, match="Reading a committed result marker failed"):
+        await reader.get(VIDEO_KEY)
+
+
+@pytest.mark.asyncio
+async def test_a_refusal_carrying_no_error_document_stays_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Absence is forgiven only where the provider said so."""
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        _raise(urllib.error.HTTPError(ENDPOINT, 403, "Forbidden", {}, None)),  # type: ignore[arg-type]
+    )
+    reader = PresignedObjectReader(build_presigner(), ttl_seconds=60, timeout_seconds=5)
+
+    with pytest.raises(AppError):
+        await reader.get(VIDEO_KEY)
+
+
 @pytest.mark.asyncio
 async def test_a_provider_failure_is_reported_without_naming_the_signed_url(
     monkeypatch: pytest.MonkeyPatch,

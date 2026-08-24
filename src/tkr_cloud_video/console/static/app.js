@@ -19,12 +19,28 @@ const state = {
 
 const $ = (id) => document.getElementById(id);
 
+// A dead console is the one failure the page cannot ask the console about, so
+// it is turned into the same error document every caller already renders rather
+// than left as a rejected promise nothing is listening for.
+const UNREACHABLE = {
+  ok: false,
+  error_code: "console_unreachable",
+  message:
+    "This console is not answering. It may have stopped — a generation already " +
+    "submitted is unaffected and keeps running.",
+  defects: [],
+};
+
 async function api(path, options) {
-  const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  return response.json();
+  try {
+    const response = await fetch(path, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
+    return await response.json();
+  } catch {
+    return UNREACHABLE;
+  }
 }
 
 function text(node, value) {
@@ -269,6 +285,13 @@ function renderRun(node, payload) {
     bad = true;
     messages.push(payload.provider_error);
   }
+  if (payload.result_error) {
+    bad = true;
+    messages.push(
+      `This console could not read the delivery bucket (${payload.result_error}), so it ` +
+        "cannot say whether anything was committed. The run above is unaffected."
+    );
+  }
   if (payload.identity_matches === false) {
     bad = true;
     messages.push(
@@ -301,11 +324,28 @@ async function attachDelivery(node, jobId) {
   show(delivery, true);
 }
 
+function renderPollFailure(node, message) {
+  const note = node.querySelector("[data-note]");
+  note.className = "run-note bad";
+  text(note, message);
+  show(note, true);
+}
+
 async function pollRun(runId) {
   const entry = state.runs.get(runId);
   if (!entry) return;
   const payload = await api(`/api/runs/${runId}`);
-  if (!payload.ok) return;
+  if (!payload.ok) {
+    // Returning quietly here is what leaves a card reading "submitted" with an
+    // empty queue, execution and committed line for as long as the tab is open,
+    // while the generation itself succeeds. The operator is told instead.
+    renderPollFailure(
+      entry.node,
+      `This console could not observe the run (${payload.error_code}). ` +
+        `${payload.message} It is still trying.`
+    );
+    return;
+  }
   renderRun(entry.node, payload);
   if (payload.result_state === "completed") {
     await attachDelivery(entry.node, entry.record.job_id);

@@ -148,10 +148,12 @@ slices:
     files:
       - src/tkr_cloud_video/stills/contracts.py
     data_lifecycle:
-      kind: exempt
-      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
-        shipped in the pinned image; the published manifest is immutable and digest-addressed under
-        the existing artifact layout.
+      kind: bounded
+      detail: Carries a caller-supplied prompt, which the compliance triage record classifies as personal
+        information because nothing stops a caller describing an identifiable person in it. A stills
+        prompt is committed to job evidence exactly as a video prompt is, so it inherits the prompt
+        retention class rather than being exempt; enforcing that period is durable-delivery/feature/enforced-retention's
+        work, and what this slice must not do is commit a prompt outside the evidence those rules reach.
     paths:
       - src/tkr_cloud_video/stills/**
     title: Stills request contract
@@ -299,7 +301,8 @@ slices:
   - number: 12
     feature: reference-sheet-assembly
     delivers:
-      - A sheet as a named, principal-scoped set of already-committed still job identities, bounded
+      - A sheet as a request-time, principal-scoped set of already-committed still job identities,
+        assembled for one request rather than saved between them, bounded
         by the four binding sources a reference request has
       - Membership checked as stills the same principal committed, with an unauthorised member refused
         indistinguishably from an absent one
@@ -313,9 +316,11 @@ slices:
       - src/tkr_cloud_video/stills/sheets.py
     data_lifecycle:
       kind: exempt
-      detail: Introduces no store. The graph, binding map and canvas table are versioned in git and
-        shipped in the pinned image; the published manifest is immutable and digest-addressed under
-        the existing artifact layout.
+      detail: 'Introduces no store. A sheet is a request-time value, not a saved artifact: a frozen
+        set of committed still identities assembled, used to name binding sources, and discarded with
+        the request. Nothing persists it, so it carries no retention clock of its own; the stills it
+        names and the objects promotion copies are what carry periods, and they are covered by slices
+        7 and 13.'
     paths:
       - src/tkr_cloud_video/stills/**
     title: Sheet as an assembly of committed stills

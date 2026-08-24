@@ -9,56 +9,62 @@ slice_specs:
     slice: 1
     source_story_ids:
       - reference-generation/story/publish-a-reference-conditioned-workflow
-    purpose: Give a staged reference somewhere to bind. The binder mutates only declared node inputs
-      and refuses a binding whose input name is absent from the pinned graph, so an image cannot be
-      bound into a node that has no image input. The currently published graph drives the image-conditioning
-      node with nothing attached, which is what text-to-video is on this model set; this slice publishes
-      a graph where the reference inputs exist.
+    purpose: Give a staged reference somewhere to bind. The binder mutates only
+      declared node inputs and refuses a binding whose input name is absent from
+      the pinned graph, so an image cannot be bound into a node that has no
+      image input. The currently published graph drives the image-conditioning
+      node with nothing attached, which is what text-to-video is on this model
+      set; this slice publishes a graph where the reference inputs exist.
     layer_assignment:
       - component: reference workflow graph
         layer: data
         responsibility: A ComfyUI API workflow whose reference inputs are declared
       - component: binding map
         layer: data
-        responsibility: Request sources mapped to exact node inputs, drawn from the existing allowlist
+        responsibility: Request sources mapped to exact node inputs, drawn from the
+          existing allowlist
     interfaces:
       - name: workflow-api.json
         kind: artifact
-        signature: ComfyUI API-format graph including reference loader nodes feeding the conditioning
-          node
+        signature: ComfyUI API-format graph including reference loader nodes feeding the
+          conditioning node
         async: false
-        ownership: Immutable once published and addressed by digest; a change is a new revision, never
-          an edit.
+        ownership: Immutable once published and addressed by digest; a change is a new
+          revision, never an edit.
       - name: catalog.json workflow.bindings
         kind: artifact
         signature: list of {source, node_id, input_name} entries
         async: false
-        ownership: Each source must be a member of the release binding allowlist, which already carries
-          exactly four input slots, matching the contract's maximum of four references.
+        ownership: Each source must be a member of the release binding allowlist, which
+          already carries exactly four input slots, matching the contract's
+          maximum of four references.
     data_models:
       - name: WorkflowBinding
         shape: existing release model
         fields: source; node_id; input_name
-        validation: source is validated against the allowlist; node identifiers reject path and control
-          syntax
+        validation: source is validated against the allowlist; node identifiers reject
+          path and control syntax
     behavior:
       - story_id: reference-generation/story/publish-a-reference-conditioned-workflow
         given: a graph whose reference input is absent
         when: a reference request is bound
-        then: binding fails naming the missing input, rather than generating without the reference
+        then: binding fails naming the missing input, rather than generating without the
+          reference
       - story_id: reference-generation/story/publish-a-reference-conditioned-workflow
         given: a binding map naming a source outside the allowlist
         when: the manifest is rendered
-        then: publication fails, because the binding vocabulary is release-approved rather than free
+        then: publication fails, because the binding vocabulary is release-approved
+          rather than free
       - story_id: reference-generation/story/publish-a-reference-conditioned-workflow
         given: the pinned ComfyUI revision
         when: the node signature is read
-        then: the declared input names are recorded beside the graph so a reader can re-check them
+        then: the declared input names are recorded beside the graph so a reader can
+          re-check them
     error_handling:
       - condition: binding_input_missing
         error: WorkflowBindingError
-        recovery: Fail before prompt submission; a graph that cannot receive a reference must not run
-          as though it had
+        recovery: Fail before prompt submission; a graph that cannot receive a reference
+          must not run as though it had
         retryable: false
       - condition: binding_source_not_allowlisted
         error: ValidationError
@@ -68,8 +74,9 @@ slice_specs:
       required_slice_ids: []
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the pinned ComfyUI revision's node signature
@@ -79,8 +86,9 @@ slice_specs:
         - a release-approved binding map
       documented_routes: []
       reference_documentation:
-        - The pinned ComfyUI revision is recorded in the worker image build arguments; read the node
-          signature there rather than restating it here.
+        - The pinned ComfyUI revision is recorded in the worker image build
+          arguments; read the node signature there rather than restating it
+          here.
     configuration:
       - name: LOG_LEVEL
         type: enum
@@ -107,8 +115,10 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - The graph is immutable and digest-addressed; a revision is published, never edited in place.
-      - No new binding source is introduced, so the release binding vocabulary is unchanged.
+      - The graph is immutable and digest-addressed; a revision is published,
+        never edited in place.
+      - No new binding source is introduced, so the release binding vocabulary
+        is unchanged.
     test_scenarios:
       - id: S1-T01
         level: unit
@@ -131,20 +141,23 @@ slice_specs:
         when: binding runs
         then: it is refused before submission
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: exempt
-      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
-        shipped in the pinned image; the published manifest is immutable and digest-addressed under
-        the existing artifact layout.
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: reference-conditioned-release-2-spec
@@ -156,9 +169,10 @@ slice_specs:
     slice: 2
     source_story_ids:
       - reference-generation/story/register-the-reference-model-set-envelope
-    purpose: Let a reference request resolve its own dimensions. Envelopes are keyed by model-set identity
-      precisely so a second model set cannot inherit the first one's numbers, and an unregistered model
-      set is refused rather than guessed at, so a reference model set is unusable until it is registered
+    purpose: Let a reference request resolve its own dimensions. Envelopes are keyed
+      by model-set identity precisely so a second model set cannot inherit the
+      first one's numbers, and an unregistered model set is refused rather than
+      guessed at, so a reference model set is unusable until it is registered
       here.
     layer_assignment:
       - component: TrainedRange entry
@@ -172,35 +186,38 @@ slice_specs:
         kind: registry
         signature: mapping of model-set identity to TrainedRange
         async: false
-        ownership: 'Keyed on the full identifier deliberately: a rebuild mints a new identifier and
-          someone has to affirm the envelope still holds rather than inherit it by prefix.'
+        ownership: 'Keyed on the full identifier deliberately: a rebuild mints a new
+          identifier and someone has to affirm the envelope still holds rather
+          than inherit it by prefix.'
       - name: ENVELOPE_DIGEST
         kind: integrity_constant
         signature: the digest the tables must reproduce at import
         async: false
-        ownership: Restating it is the act that records a deliberate change to where default requests
-          land.
+        ownership: Restating it is the act that records a deliberate change to where
+          default requests land.
     data_models:
       - name: TrainedRange
         shape: existing frozen dataclass
-        fields: model_set_id; short_edge; long_edge; min_frames; max_frames; grid_stride; grid_offset;
-          canvas_multiple; source
-        validation: construction rejects an envelope that cannot describe a reachable request
+        fields: model_set_id; short_edge; long_edge; min_frames; max_frames;
+          grid_stride; grid_offset; canvas_multiple; source
+        validation: construction rejects an envelope that cannot describe a reachable
+          request
     behavior:
       - story_id: reference-generation/story/register-the-reference-model-set-envelope
         given: a reference request naming an unregistered model set
         when: intake runs
-        then: it is refused naming the model set rather than given another model set's numbers
+        then: it is refused naming the model set rather than given another model set's
+          numbers
       - story_id: reference-generation/story/register-the-reference-model-set-envelope
         given: an edited range with the digest unchanged
         when: the tables load
-        then: the import fails, because the recorded revision would no longer describe where defaults
-          land
+        then: the import fails, because the recorded revision would no longer describe
+          where defaults land
       - story_id: reference-generation/story/register-the-reference-model-set-envelope
         given: a reference request below the trained floor
         when: intake runs
-        then: it is permitted and reported as a departure, matching the existing rule that the ceiling
-          bounds and the floor reports
+        then: it is permitted and reported as a departure, matching the existing rule
+          that the ceiling bounds and the floor reports
     error_handling:
       - condition: no_registered_envelope
         error: ValueError
@@ -214,8 +231,9 @@ slice_specs:
       required_slice_ids: []
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the pinned envelope registry
@@ -250,8 +268,9 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - The model-set identity decision is recorded, since the currently published identity names text-to-video
-        while shipping the keyframe checkpoint.
+      - The model-set identity decision is recorded, since the currently
+        published identity names text-to-video while shipping the keyframe
+        checkpoint.
     test_scenarios:
       - id: S2-T01
         level: unit
@@ -274,20 +293,23 @@ slice_specs:
         when: intake runs
         then: each is refused naming its own rule
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: exempt
-      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
-        shipped in the pinned image; the published manifest is immutable and digest-addressed under
-        the existing artifact layout.
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: reference-conditioned-release-3-spec
@@ -299,10 +321,12 @@ slice_specs:
     slice: 3
     source_story_ids:
       - reference-generation/story/publish-a-reference-conditioned-workflow
-    purpose: Publish the reference release under an approval that actually covers it. The reviewer
-      approval binds a manifest digest, and republishing a workflow changes that digest, so a reference
-      release without a re-signature is a release the gate must refuse. This slice exists because that
-      consequence is easy to discover late and expensive to discover at run time.
+    purpose: Publish the reference release under an approval that actually covers
+      it. The reviewer approval binds a manifest digest, and republishing a
+      workflow changes that digest, so a reference release without a
+      re-signature is a release the gate must refuse. This slice exists because
+      that consequence is easy to discover late and expensive to discover at run
+      time.
     layer_assignment:
       - component: release manifest
         layer: data
@@ -316,32 +340,36 @@ slice_specs:
     interfaces:
       - name: prepare/publish release
         kind: service
-        signature: the existing release commands, given the reference catalog and approval identifier
+        signature: the existing release commands, given the reference catalog and
+          approval identifier
         async: false
-        ownership: Publishes the workflow last, so the release resolves only after every artifact it
-          needs verifies.
+        ownership: Publishes the workflow last, so the release resolves only after every
+          artifact it needs verifies.
       - name: release gate
         kind: service
-        signature: compares approval model set and manifest digest against the rendered manifest
+        signature: compares approval model set and manifest digest against the rendered
+          manifest
         async: false
-        ownership: Reused unchanged; the gate is what makes an uncovered digest a publication failure
-          rather than a run-time surprise.
+        ownership: Reused unchanged; the gate is what makes an uncovered digest a
+          publication failure rather than a run-time surprise.
     data_models:
       - name: license approval
         shape: existing model
-        fields: approval_id; reviewer_id; model_set_id; manifest_digest; deployment_use; territories;
-          approved_at; expires_at; constraints
-        validation: the digest must equal the rendered manifest's; territory and expiry are carried
-          forward rather than widened
+        fields: approval_id; reviewer_id; model_set_id; manifest_digest; deployment_use;
+          territories; approved_at; expires_at; constraints
+        validation: the digest must equal the rendered manifest's; territory and expiry
+          are carried forward rather than widened
     behavior:
       - story_id: reference-generation/story/publish-a-reference-conditioned-workflow
         given: a republished workflow
         when: the manifest digest is computed
-        then: it differs from the current one, so the existing approval no longer covers it
+        then: it differs from the current one, so the existing approval no longer covers
+          it
       - story_id: reference-generation/story/publish-a-reference-conditioned-workflow
         given: an approval bound to a different digest
         when: publication runs
-        then: the gate refuses, rather than the mismatch surfacing when a worker executes
+        then: the gate refuses, rather than the mismatch surfacing when a worker
+          executes
       - story_id: reference-generation/story/publish-a-reference-conditioned-workflow
         given: an expired approval
         when: publication runs
@@ -361,8 +389,9 @@ slice_specs:
         - 2
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the reference catalog
@@ -397,8 +426,8 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - Territory and deployment use are carried forward from the existing approval, never widened
-        as a side effect of a workflow change.
+      - Territory and deployment use are carried forward from the existing
+        approval, never widened as a side effect of a workflow change.
       - The approval is human-signed; nothing in this slice may mint one.
     test_scenarios:
       - id: S3-T01
@@ -422,20 +451,23 @@ slice_specs:
         when: it is retried
         then: no consumer-visible release exists for an unverified artifact set
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: exempt
-      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
-        shipped in the pinned image; the published manifest is immutable and digest-addressed under
-        the existing artifact layout.
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: reference-conditioned-release-4-spec
@@ -448,9 +480,10 @@ slice_specs:
     source_story_ids:
       - reference-generation/story/publish-a-reference-conditioned-workflow
       - reference-generation/story/register-the-reference-model-set-envelope
-    purpose: Make the mode reachable. The request type, the stager and the prompt sections already
-      exist, so wiring is mostly a matter of the model set becoming selectable and the surface offering
-      the mode with its own dimensions and prompt shape.
+    purpose: Make the mode reachable. The request type, the stager and the prompt
+      sections already exist, so wiring is mostly a matter of the model set
+      becoming selectable and the surface offering the mode with its own
+      dimensions and prompt shape.
     layer_assignment:
       - component: intake
         layer: integration
@@ -463,8 +496,8 @@ slice_specs:
         kind: integration_function
         signature: extended to describe the reference model set
         async: false
-        ownership: Serves the registry rather than restating it, as it already does for the text-only
-          model set.
+        ownership: Serves the registry rather than restating it, as it already does for
+          the text-only model set.
       - name: console reference form
         kind: ui_surface
         signature: mode selector, reference fields bounded at four, Ref2VA prompt sections
@@ -474,8 +507,8 @@ slice_specs:
       - name: ReferenceToVideoRequest
         shape: existing contract model
         fields: 'mode; references: tuple[InputReference, ...]; the shared base fields'
-        validation: one to four references; each reference is a validated object key with an optional
-          digest
+        validation: one to four references; each reference is a validated object key
+          with an optional digest
     behavior:
       - story_id: reference-generation/story/publish-a-reference-conditioned-workflow
         given: a reference request with four references
@@ -495,8 +528,9 @@ slice_specs:
         - 3
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the published reference release
@@ -548,20 +582,23 @@ slice_specs:
         when: it is selected
         then: it is refused naming what is missing
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: exempt
-      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
-        shipped in the pinned image; the published manifest is immutable and digest-addressed under
-        the existing artifact layout.
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: reference-conditioned-release-5-spec
@@ -574,9 +611,10 @@ slice_specs:
     source_story_ids:
       - reference-generation/story/publish-a-reference-conditioned-workflow
       - reference-generation/story/register-the-reference-model-set-envelope
-    purpose: 'Prove the two things that would otherwise fail late: that four references reach four
-      declared node inputs, and that an uncovered manifest digest fails publication rather than a run.
-      A live generation is included because nothing has ever executed this graph.'
+    purpose: 'Prove the two things that would otherwise fail late: that four
+      references reach four declared node inputs, and that an uncovered manifest
+      digest fails publication rather than a run. A live generation is included
+      because nothing has ever executed this graph.'
     layer_assignment:
       - component: binding tests
         layer: integration
@@ -592,12 +630,14 @@ slice_specs:
         kind: test_artifact
         signature: a committed result for one reference generation
         async: false
-        ownership: Recorded as run evidence on the slice, because the graph has no execution history.
+        ownership: Recorded as run evidence on the slice, because the graph has no
+          execution history.
     data_models:
       - name: reference fixture
         shape: test double
         fields: one to four object keys with declared digests
-        validation: fixtures are built in a per-test temporary directory removed by the runner
+        validation: fixtures are built in a per-test temporary directory removed by the
+          runner
     behavior:
       - story_id: reference-generation/story/publish-a-reference-conditioned-workflow
         given: a graph missing one declared input
@@ -614,15 +654,17 @@ slice_specs:
     error_handling:
       - condition: live_generation_failure
         error: test failure
-        recovery: Treat as a blocker for the slice; the graph is unproven until one run commits
+        recovery: Treat as a blocker for the slice; the graph is unproven until one run
+          commits
         retryable: false
     dependencies:
       required_slice_ids:
         - 4
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the published release
@@ -683,20 +725,23 @@ slice_specs:
         when: the path runs
         then: the recovery contract holds
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: exempt
-      detail: Introduces no store. The graph, binding map and envelope table are versioned in git and
-        shipped in the pinned image; the published manifest is immutable and digest-addressed under
-        the existing artifact layout.
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: authorized-reference-intake-6-spec
@@ -708,10 +753,11 @@ slice_specs:
     slice: 6
     source_story_ids:
       - reference-generation/story/assess-cross-border-reference-processing
-    purpose: Record the assessment the provision requires before the processing it governs, not after.
-      An uploaded reference image can depict an identifiable individual and the output is a moving
-      likeness derived from it; worker placement already spans six territories, so enabling an intake
-      path without this record would convert a noted finding into a live one.
+    purpose: Record the assessment the provision requires before the processing it
+      governs, not after. An uploaded reference image can depict an identifiable
+      individual and the output is a moving likeness derived from it; worker
+      placement already spans six territories, so enabling an intake path
+      without this record would convert a noted finding into a live one.
     layer_assignment:
       - component: assurance record
         layer: data
@@ -719,24 +765,25 @@ slice_specs:
     interfaces:
       - name: assessment record
         kind: document
-        signature: scope reviewed, sensitivity, purpose, territories, protection measures, verdict,
-          residual risks accepted and by whom
+        signature: scope reviewed, sensitivity, purpose, territories, protection
+          measures, verdict, residual risks accepted and by whom
         async: false
-        ownership: Append-only. Renewal when territories or measures change is a new dated record,
-          never an edit to a verdict.
+        ownership: Append-only. Renewal when territories or measures change is a new
+          dated record, never an edit to a verdict.
     data_models:
       - name: assessment record
         shape: markdown document
-        fields: Date; Scope; the personal information involved; the territories; the measures; the
-          verdict; accepted residual risk
-        validation: a verdict that is anything but a clean pass must name what was accepted and by
-          whom; a review recording no accepted risk either found none or did not look
+        fields: Date; Scope; the personal information involved; the territories; the
+          measures; the verdict; accepted residual risk
+        validation: a verdict that is anything but a clean pass must name what was
+          accepted and by whom; a review recording no accepted risk either found
+          none or did not look
     behavior:
       - story_id: reference-generation/story/assess-cross-border-reference-processing
         given: no recorded assessment
         when: an intake path would be enabled
-        then: the dependent slices stay blocked, because the assessment precedes the processing rather
-          than describing it afterwards
+        then: the dependent slices stay blocked, because the assessment precedes the
+          processing rather than describing it afterwards
       - story_id: reference-generation/story/assess-cross-border-reference-processing
         given: a recorded assessment
         when: territories or measures later change
@@ -744,11 +791,13 @@ slice_specs:
       - story_id: reference-generation/story/assess-cross-border-reference-processing
         given: measures that are asserted rather than enforced
         when: the record is written
-        then: it says which are which, so the record does not read stronger than the system
+        then: it says which are which, so the record does not read stronger than the
+          system
     error_handling:
       - condition: assessment_absent
         error: execution gate
-        recovery: Keep the dependent slices blocked; this is the gate, not a document task
+        recovery: Keep the dependent slices blocked; this is the gate, not a document
+          task
         retryable: false
       - condition: assessment_stale
         error: execution gate
@@ -758,8 +807,9 @@ slice_specs:
       required_slice_ids: []
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the deployed worker placement and its approved territories
@@ -768,8 +818,9 @@ slice_specs:
         - a recorded verdict on reference-image processing outside Quebec
       documented_routes: []
       reference_documentation:
-        - The placement decision and its territories are recorded in the architecture decision record;
-          the personal-information surface is recorded in the compliance triage record.
+        - The placement decision and its territories are recorded in the
+          architecture decision record; the personal-information surface is
+          recorded in the compliance triage record.
     configuration:
       - name: LOG_LEVEL
         type: enum
@@ -792,9 +843,11 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - The record names measures as enforced or asserted, matching how the triage record already distinguishes
-        the one field whose safeguard is enforced from those that are declared.
-      - No reference image is staged for a worker read before this record exists and is accepted.
+      - The record names measures as enforced or asserted, matching how the
+        triage record already distinguishes the one field whose safeguard is
+        enforced from those that are declared.
+      - No reference image is staged for a worker read before this record exists
+        and is accepted.
     test_scenarios:
       - id: S6-T01
         level: review
@@ -812,20 +865,24 @@ slice_specs:
         when: renewal is considered
         then: a new dated record is produced
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - The verdict is a human's; the evidence may be gathered but the acceptance is signed.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - The verdict is a human's; the evidence may be gathered but the
+        acceptance is signed.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: exempt
-      detail: Introduces no store. The record is an append-only assurance document; renewal is a new
-        dated file rather than an edit to an existing verdict.
+      detail: Introduces no store. The record is an append-only assurance document;
+        renewal is a new dated file rather than an edit to an existing verdict.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: authorized-reference-intake-7-spec
@@ -838,10 +895,11 @@ slice_specs:
     source_story_ids:
       - reference-generation/story/refuse-a-reference-a-principal-does-not-own
       - reference-generation/story/supply-one-to-four-reference-images
-    purpose: Make input authorization derived rather than looked up. If an input's key carries the
-      principal that owns it, authorization is a property of the key and no table can disagree with
-      it, which is the same reasoning that already makes job identity a digest over the principal rather
-      than a stored association.
+    purpose: Make input authorization derived rather than looked up. If an input's
+      key carries the principal that owns it, authorization is a property of the
+      key and no table can disagree with it, which is the same reasoning that
+      already makes job identity a digest over the principal rather than a
+      stored association.
     layer_assignment:
       - component: input namespace
         layer: domain
@@ -854,19 +912,22 @@ slice_specs:
         kind: domain_function
         signature: 'def input_namespace(principal_id: str) -> str'
         async: false
-        ownership: Returns the one namespace a principal may read and write; a key outside it is another
-          principal's.
+        ownership: Returns the one namespace a principal may read and write; a key
+          outside it is another principal's.
       - name: InputSource.authorized
         kind: port_method
         signature: 'async def authorized(self, principal_id: str, key: ObjectKey) -> bool'
         async: true
-        ownership: Reused unchanged as a port; this slice changes what makes it true, not its shape.
+        ownership: Reused unchanged as a port; this slice changes what makes it true,
+          not its shape.
     data_models:
       - name: scoped input key
         shape: validated value object
-        fields: the inputs prefix, the principal segment, then a server-owned object name
-        validation: the principal segment cannot be spoofed by a crafted key; separators, traversal
-          and control characters are refused by the existing key validation
+        fields: the inputs prefix, the principal segment, then a server-owned object
+          name
+        validation: the principal segment cannot be spoofed by a crafted key;
+          separators, traversal and control characters are refused by the
+          existing key validation
     behavior:
       - story_id: reference-generation/story/refuse-a-reference-a-principal-does-not-own
         given: a key in another principal's namespace
@@ -893,8 +954,9 @@ slice_specs:
       required_slice_ids: []
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the existing input staging port and key validation
@@ -928,8 +990,8 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - Authorization is derived from the key, so an input cannot be reached by guessing another principal's
-        object name.
+      - Authorization is derived from the key, so an input cannot be reached by
+        guessing another principal's object name.
       - Refusal and absence are one outcome, so the namespace cannot be probed.
     test_scenarios:
       - id: S7-T01
@@ -953,20 +1015,24 @@ slice_specs:
         when: it is validated
         then: it is refused
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: bounded
-      detail: Creates objects under the inputs prefix, which already carries a declared retention class
-        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
-        what must not happen here is creating input objects outside the prefix those rules reach.
+      detail: Creates objects under the inputs prefix, which already carries a
+        declared retention class and a bucket lifecycle rule. Enforcing that
+        period belongs to the enforced-retention feature; what must not happen
+        here is creating input objects outside the prefix those rules reach.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: authorized-reference-intake-8-spec
@@ -978,10 +1044,11 @@ slice_specs:
     slice: 8
     source_story_ids:
       - reference-generation/story/refuse-a-reference-a-principal-does-not-own
-    purpose: 'Model the credential that puts an image into the input namespace, because today none
-      exists: the input role holds list and read only, and the request contract takes a key that must
-      already exist. Writing inputs is therefore out of band and unmodelled, and this slice either
-      models it narrowly or records the decision to keep it out of band.'
+    purpose: 'Model the credential that puts an image into the input namespace,
+      because today none exists: the input role holds list and read only, and
+      the request contract takes a key that must already exist. Writing inputs
+      is therefore out of band and unmodelled, and this slice either models it
+      narrowly or records the decision to keep it out of band.'
     layer_assignment:
       - component: CredentialRole.INPUT_WRITER
         layer: service
@@ -994,25 +1061,26 @@ slice_specs:
         kind: registry
         signature: role to storage capability set
         async: false
-        ownership: The new role holds list and write, never delete and never share, so it cannot remove
-          or publish what it wrote.
+        ownership: The new role holds list and write, never delete and never share, so
+          it cannot remove or publish what it wrote.
       - name: SECRET_VARIABLES
         kind: registry
         signature: process role to permitted secret variables
         async: false
-        ownership: The input-writing variables appear in no worker process role, so no worker subprocess
-          can be handed a credential that writes inputs.
+        ownership: The input-writing variables appear in no worker process role, so no
+          worker subprocess can be handed a credential that writes inputs.
     data_models:
       - name: input-writer credential
         shape: provisioned application key
         fields: one bucket, one prefix, list and write capabilities
-        validation: single-prefix, matching the existing topology in which every credential maps to
-          exactly one namespace
+        validation: single-prefix, matching the existing topology in which every
+          credential maps to exactly one namespace
     behavior:
       - story_id: reference-generation/story/refuse-a-reference-a-principal-does-not-own
         given: the input-writing credential
         when: its capabilities are inspected
-        then: it can write the inputs namespace and nothing else, and holds neither delete nor share
+        then: it can write the inputs namespace and nothing else, and holds neither
+          delete nor share
       - story_id: reference-generation/story/refuse-a-reference-a-principal-does-not-own
         given: every worker process role
         when: its secret allowlist is inspected
@@ -1031,8 +1099,9 @@ slice_specs:
         - 7
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the existing credential topology and process secret isolation
@@ -1066,8 +1135,8 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - The role holds neither delete nor share, so it can neither remove what it wrote nor issue a
-        link to it.
+      - The role holds neither delete nor share, so it can neither remove what
+        it wrote nor issue a link to it.
       - It is a control-plane or console credential, never a worker one.
     test_scenarios:
       - id: S8-T01
@@ -1091,22 +1160,27 @@ slice_specs:
         when: the contract test runs
         then: it fails
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - If the decision is to keep staging out of band, this slice closes as deferred with that decision
-        recorded and slice 9 accepts an existing key instead.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - If the decision is to keep staging out of band, this slice closes as
+        deferred with that decision recorded and slice 9 accepts an existing key
+        instead.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: bounded
-      detail: Creates objects under the inputs prefix, which already carries a declared retention class
-        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
-        what must not happen here is creating input objects outside the prefix those rules reach.
+      detail: Creates objects under the inputs prefix, which already carries a
+        declared retention class and a bucket lifecycle rule. Enforcing that
+        period belongs to the enforced-retention feature; what must not happen
+        here is creating input objects outside the prefix those rules reach.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: authorized-reference-intake-9-spec
@@ -1118,9 +1192,10 @@ slice_specs:
     slice: 9
     source_story_ids:
       - reference-generation/story/supply-one-to-four-reference-images
-    purpose: Give the operator a way to supply references, and be explicit that doing so widens what
-      the console is. Until now it composes no write path at all, and that absence is a tested property
-      recorded as one of its constraints; this slice changes it, so it changes the record too rather
+    purpose: Give the operator a way to supply references, and be explicit that
+      doing so widens what the console is. Until now it composes no write path
+      at all, and that absence is a tested property recorded as one of its
+      constraints; this slice changes it, so it changes the record too rather
       than quietly invalidating it.
     layer_assignment:
       - component: console upload path
@@ -1137,18 +1212,20 @@ slice_specs:
         kind: api_route
         signature: POST /api/inputs -> {object_key, sha256}
         async: true
-        ownership: Returns the key the caller then names in a request, so the request contract is unchanged.
+        ownership: Returns the key the caller then names in a request, so the request
+          contract is unchanged.
       - name: reference form
         kind: ui_surface
         signature: up to four references with their refusals by field and rule
         async: false
-        ownership: Bounded at four in the surface as well as the contract, so the limit is visible
-          before submission.
+        ownership: Bounded at four in the surface as well as the contract, so the limit
+          is visible before submission.
     data_models:
       - name: staged reference response
         shape: serialized mapping
         fields: 'object_key: str; sha256: str'
-        validation: returns the server-owned key and the computed digest, so the caller names neither
+        validation: returns the server-owned key and the computed digest, so the caller
+          names neither
     behavior:
       - story_id: reference-generation/story/supply-one-to-four-reference-images
         given: a supplied reference
@@ -1165,7 +1242,8 @@ slice_specs:
     error_handling:
       - condition: input_write_failed
         error: AppError
-        recovery: Report as an error document; the page renders every failure the same way
+        recovery: Report as an error document; the page renders every failure the same
+          way
         retryable: true
       - condition: too_many_references
         error: Rejection
@@ -1177,8 +1255,9 @@ slice_specs:
         - 8
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the input-writing credential
@@ -1214,11 +1293,13 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - The console gains a write capability it previously did not have; the model record states that
-        plainly rather than leaving a stale claim that it composes no write path.
-      - Uploaded objects are named by the server, so a caller-supplied filename never becomes a key.
-      - The surface remains loopback-only; an upload field makes publishing more tempting and no less
-        out of scope.
+      - The console gains a write capability it previously did not have; the
+        model record states that plainly rather than leaving a stale claim that
+        it composes no write path.
+      - Uploaded objects are named by the server, so a caller-supplied filename
+        never becomes a key.
+      - The surface remains loopback-only; an upload field makes publishing more
+        tempting and no less out of scope.
     test_scenarios:
       - id: S9-T01
         level: integration
@@ -1241,20 +1322,24 @@ slice_specs:
         when: an upload runs
         then: it renders as an error document
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: bounded
-      detail: Creates objects under the inputs prefix, which already carries a declared retention class
-        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
-        what must not happen here is creating input objects outside the prefix those rules reach.
+      detail: Creates objects under the inputs prefix, which already carries a
+        declared retention class and a bucket lifecycle rule. Enforcing that
+        period belongs to the enforced-retention feature; what must not happen
+        here is creating input objects outside the prefix those rules reach.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: authorized-reference-intake-10-spec
@@ -1267,9 +1352,10 @@ slice_specs:
     source_story_ids:
       - reference-generation/story/supply-one-to-four-reference-images
       - reference-generation/story/refuse-a-reference-a-principal-does-not-own
-    purpose: 'Prove the refusals, since every one of them is what keeps a likeness from reaching a
-      GPU it should not. The least-privilege assertion matters most: a credential that writes inputs
-      and reaches a worker would let a worker rewrite its own conditioning.'
+    purpose: 'Prove the refusals, since every one of them is what keeps a likeness
+      from reaching a GPU it should not. The least-privilege assertion matters
+      most: a credential that writes inputs and reaches a worker would let a
+      worker rewrite its own conditioning.'
     layer_assignment:
       - component: staging tests
         layer: integration
@@ -1285,8 +1371,8 @@ slice_specs:
         kind: test double
         signature: authorized keys and their bytes
         async: false
-        ownership: Records what was authorized and downloaded, so a test can assert that refusal happened
-          before transfer.
+        ownership: Records what was authorized and downloaded, so a test can assert that
+          refusal happened before transfer.
     data_models:
       - name: reference fixtures
         shape: test doubles
@@ -1323,8 +1409,9 @@ slice_specs:
         - 9
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the intake path and the credential registries
@@ -1358,7 +1445,8 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - Tests assert the unauthorized and absent outcomes are equal, not merely both falsy.
+      - Tests assert the unauthorized and absent outcomes are equal, not merely
+        both falsy.
     test_scenarios:
       - id: S10-T01
         level: unit
@@ -1391,20 +1479,24 @@ slice_specs:
         when: intake runs
         then: the recovery contract holds
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: bounded
-      detail: Creates objects under the inputs prefix, which already carries a declared retention class
-        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
-        what must not happen here is creating input objects outside the prefix those rules reach.
+      detail: Creates objects under the inputs prefix, which already carries a
+        declared retention class and a bucket lifecycle rule. Enforcing that
+        period belongs to the enforced-retention feature; what must not happen
+        here is creating input objects outside the prefix those rules reach.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: audio-reference-intake-11-spec
@@ -1416,10 +1508,12 @@ slice_specs:
     slice: 11
     source_story_ids:
       - reference-generation/story/assess-voice-reference-processing
-    purpose: Record an assessment that actually covers audio. The reference-image record considered
-      a likeness; an assurance verdict is scoped, and a review that did not consider material cannot
-      be read as having cleared it. A supplied recording is a voice sample of an identifiable person
-      and the output reproduces it, which is a different weighing from the one already made.
+    purpose: Record an assessment that actually covers audio. The reference-image
+      record considered a likeness; an assurance verdict is scoped, and a review
+      that did not consider material cannot be read as having cleared it. A
+      supplied recording is a voice sample of an identifiable person and the
+      output reproduces it, which is a different weighing from the one already
+      made.
     layer_assignment:
       - component: assurance record
         layer: data
@@ -1427,23 +1521,24 @@ slice_specs:
     interfaces:
       - name: audio assessment record
         kind: document
-        signature: scope, the material considered, sensitivity, purpose, territories, measures, verdict,
-          residual risk and its acceptor
+        signature: scope, the material considered, sensitivity, purpose, territories,
+          measures, verdict, residual risk and its acceptor
         async: false
-        ownership: Append-only and separate from the image record, because the two considered different
-          material.
+        ownership: Append-only and separate from the image record, because the two
+          considered different material.
     data_models:
       - name: audio assessment record
         shape: markdown document
-        fields: Date; Scope; the material considered; territories; measures; verdict; accepted residual
-          risk
-        validation: states which measures are enforced and which asserted, so the record does not read
-          stronger than the system
+        fields: Date; Scope; the material considered; territories; measures; verdict;
+          accepted residual risk
+        validation: states which measures are enforced and which asserted, so the record
+          does not read stronger than the system
     behavior:
       - story_id: reference-generation/story/assess-voice-reference-processing
         given: only the reference-image assessment
         when: an audio intake path would be enabled
-        then: the dependent slices stay blocked, because that review did not consider this material
+        then: the dependent slices stay blocked, because that review did not consider
+          this material
       - story_id: reference-generation/story/assess-voice-reference-processing
         given: a recorded audio assessment
         when: territories or measures later change
@@ -1459,15 +1554,16 @@ slice_specs:
         retryable: false
       - condition: assessment_scope_overread
         error: review failure
-        recovery: Refuse to treat the image record as covering audio; a scoped verdict does not extend
-          to material it did not consider
+        recovery: Refuse to treat the image record as covering audio; a scoped verdict
+          does not extend to material it did not consider
         retryable: false
     dependencies:
       required_slice_ids: []
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the recorded reference-image assessment
@@ -1498,15 +1594,17 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - No audio reference is staged for a worker read before this record exists and is accepted.
-      - The record names the output as a reproduction of a supplied voice, not merely as generated
-        audio.
+      - No audio reference is staged for a worker read before this record exists
+        and is accepted.
+      - The record names the output as a reproduction of a supplied voice, not
+        merely as generated audio.
     test_scenarios:
       - id: S11-T01
         level: review
         given: the drafted record
         when: it is reviewed
-        then: it names the material considered, the territories, the measures and a verdict
+        then: it names the material considered, the territories, the measures and a
+          verdict
       - id: S11-T02
         level: review
         given: the image record alone
@@ -1518,20 +1616,24 @@ slice_specs:
         when: renewal is considered
         then: a new dated record is produced
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - The verdict is a human's; the evidence may be gathered but the acceptance is signed.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - The verdict is a human's; the evidence may be gathered but the
+        acceptance is signed.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: exempt
-      detail: Introduces no store. The record is an append-only assurance document; renewal is a new
-        dated file rather than an edit to an existing verdict.
+      detail: Introduces no store. The record is an append-only assurance document;
+        renewal is a new dated file rather than an edit to an existing verdict.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: audio-reference-intake-12-spec
@@ -1543,11 +1645,12 @@ slice_specs:
     slice: 12
     source_story_ids:
       - reference-generation/story/supply-an-audio-reference
-    purpose: Change the shape the intake contract speaks in, which is where the audio gap actually
-      lives. The inspection port returns a media type and two dimensions, the staged-input value carries
-      them, and the stager requires both to be positive. An audio stream has none of the three, so
-      adding an allowlist entry alone would produce a value the contract cannot express and a check
-      it cannot pass.
+    purpose: Change the shape the intake contract speaks in, which is where the
+      audio gap actually lives. The inspection port returns a media type and two
+      dimensions, the staged-input value carries them, and the stager requires
+      both to be positive. An audio stream has none of the three, so adding an
+      allowlist entry alone would produce a value the contract cannot express
+      and a check it cannot pass.
     layer_assignment:
       - component: InputMediaInspector
         layer: domain
@@ -1563,24 +1666,27 @@ slice_specs:
         kind: port_method
         signature: 'def inspect(self, path: Path) -> InputMedia'
         async: false
-        ownership: Returns a described medium rather than a media type and two integers, so audio is
-          expressible without inventing a width and a height for it.
+        ownership: Returns a described medium rather than a media type and two integers,
+          so audio is expressible without inventing a width and a height for it.
       - name: InputStager.stage
         kind: domain_service_method
-        signature: async def stage(self, principal_id, reference, input_root, index) -> StagedInput
+        signature: async def stage(self, principal_id, reference, input_root, index) ->
+          StagedInput
         async: true
-        ownership: Applies the bounds that belong to the kind it staged; an image is still refused
-          without positive dimensions.
+        ownership: Applies the bounds that belong to the kind it staged; an image is
+          still refused without positive dimensions.
     data_models:
       - name: InputMedia
         shape: frozen dataclass
-        fields: 'media_type: str; dimensions: tuple[int, int] | None; duration_seconds: float | None'
-        validation: dimensions are absent for audio rather than zero, so nothing downstream can read
-          a placeholder as a real measurement
+        fields: 'media_type: str; dimensions: tuple[int, int] | None; duration_seconds:
+          float | None'
+        validation: dimensions are absent for audio rather than zero, so nothing
+          downstream can read a placeholder as a real measurement
       - name: StagedInput
         shape: existing frozen dataclass, widened
         fields: path; media_type; dimensions; size_bytes; sha256; duration_seconds
-        validation: callers that need dimensions must handle their absence rather than receiving zeroes
+        validation: callers that need dimensions must handle their absence rather than
+          receiving zeroes
     behavior:
       - story_id: reference-generation/story/supply-an-audio-reference
         given: an audio reference
@@ -1589,8 +1695,8 @@ slice_specs:
       - story_id: reference-generation/story/supply-an-audio-reference
         given: an image reference whose dimensions are absent
         when: it is staged
-        then: it is still refused, because relaxing the requirement for audio must not relax it for
-          images
+        then: it is still refused, because relaxing the requirement for audio must not
+          relax it for images
       - story_id: reference-generation/story/supply-an-audio-reference
         given: an audio media type
         when: the allowlist is consulted
@@ -1598,20 +1704,22 @@ slice_specs:
     error_handling:
       - condition: input_media_invalid
         error: InputStagingError
-        recovery: Refuse a medium that satisfies no kind's bounds, before a workflow sees it
+        recovery: Refuse a medium that satisfies no kind's bounds, before a workflow
+          sees it
         retryable: false
       - condition: dimension_placeholder_introduced
         error: test failure
-        recovery: Fail rather than let absent dimensions be represented as zero, which a later check
-          would read as a measurement
+        recovery: Fail rather than let absent dimensions be represented as zero, which a
+          later check would read as a measurement
         retryable: false
     dependencies:
       required_slice_ids:
         - 11
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the existing input staging port and staged-input value
@@ -1646,9 +1754,11 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - Widening the contract for audio must not weaken it for images or videos; the bounds move from
-        unconditional to per-kind, not from present to absent.
-      - Absence is represented as absence, never as a zero a later check could accept.
+      - Widening the contract for audio must not weaken it for images or videos;
+        the bounds move from unconditional to per-kind, not from present to
+        absent.
+      - Absence is represented as absence, never as a zero a later check could
+        accept.
     test_scenarios:
       - id: S12-T01
         level: unit
@@ -1671,20 +1781,24 @@ slice_specs:
         when: staging runs
         then: it is refused before promotion
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: bounded
-      detail: Creates objects under the inputs prefix, which already carries a declared retention class
-        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
-        what must not happen here is creating input objects outside the prefix those rules reach.
+      detail: Creates objects under the inputs prefix, which already carries a
+        declared retention class and a bucket lifecycle rule. Enforcing that
+        period belongs to the enforced-retention feature; what must not happen
+        here is creating input objects outside the prefix those rules reach.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: audio-reference-intake-13-spec
@@ -1696,9 +1810,10 @@ slice_specs:
     slice: 13
     source_story_ids:
       - reference-generation/story/supply-an-audio-reference
-    purpose: Inspect an audio file as audio. The current inspector locates a video stream and derives
-      the media type from its codec, so an audio-only file is refused before any allowlist is consulted;
-      the refusal is correct today and wrong once audio is a permitted kind.
+    purpose: Inspect an audio file as audio. The current inspector locates a video
+      stream and derives the media type from its codec, so an audio-only file is
+      refused before any allowlist is consulted; the refusal is correct today
+      and wrong once audio is a permitted kind.
     layer_assignment:
       - component: FfprobeMediaInspector
         layer: integration
@@ -1711,8 +1826,9 @@ slice_specs:
         kind: integration_method
         signature: 'def inspect_input(self, path: Path) -> InputMedia'
         async: false
-        ownership: Selects the stream that matches the kind being staged rather than assuming a video
-          stream exists, and derives the media type from that stream's codec and the container.
+        ownership: Selects the stream that matches the kind being staged rather than
+          assuming a video stream exists, and derives the media type from that
+          stream's codec and the container.
       - name: audio bounds policy
         kind: domain_function
         signature: 'def check_audio_bounds(media: InputMedia) -> None'
@@ -1722,13 +1838,14 @@ slice_specs:
       - name: audio medium
         shape: InputMedia instance
         fields: media_type; dimensions=None; duration_seconds; channels; sample_rate_hz
-        validation: a file whose container and streams disagree with the kind it is offered as is refused
+        validation: a file whose container and streams disagree with the kind it is
+          offered as is refused
     behavior:
       - story_id: reference-generation/story/supply-an-audio-reference
         given: an audio-only file
         when: it is inspected
-        then: an audio stream is located and its type derived from its own codec, rather than the file
-          being refused for lacking a video stream
+        then: an audio stream is located and its type derived from its own codec, rather
+          than the file being refused for lacking a video stream
       - story_id: reference-generation/story/supply-an-audio-reference
         given: a video payload offered as audio
         when: it is inspected
@@ -1751,8 +1868,9 @@ slice_specs:
         - 12
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the staged file and the fixed inspection arguments
@@ -1786,9 +1904,10 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - The inspector runs with fixed arguments on a server-owned path and bounds its own output, as
-        it already does.
-      - A declared media type is never trusted; the streams present decide the kind.
+      - The inspector runs with fixed arguments on a server-owned path and
+        bounds its own output, as it already does.
+      - A declared media type is never trusted; the streams present decide the
+        kind.
     test_scenarios:
       - id: S13-T01
         level: unit
@@ -1816,20 +1935,24 @@ slice_specs:
         when: it is inspected
         then: it is refused rather than partially described
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: bounded
-      detail: Creates objects under the inputs prefix, which already carries a declared retention class
-        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
-        what must not happen here is creating input objects outside the prefix those rules reach.
+      detail: Creates objects under the inputs prefix, which already carries a
+        declared retention class and a bucket lifecycle rule. Enforcing that
+        period belongs to the enforced-retention feature; what must not happen
+        here is creating input objects outside the prefix those rules reach.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: audio-reference-intake-14-spec
@@ -1841,10 +1964,11 @@ slice_specs:
     slice: 14
     source_story_ids:
       - reference-generation/story/supply-an-audio-reference
-    purpose: Make the audio half of the grammar reachable from the surface. The labels, the retention
-      markers and the two audio task types already exist and are already served to the page as closed
-      vocabularies; what is missing is a way to supply the object they refer to and a form that composes
-      the relationship rather than leaving it to prose.
+    purpose: Make the audio half of the grammar reachable from the surface. The
+      labels, the retention markers and the two audio task types already exist
+      and are already served to the page as closed vocabularies; what is missing
+      is a way to supply the object they refer to and a form that composes the
+      relationship rather than leaving it to prose.
     layer_assignment:
       - component: console audio upload
         layer: integration
@@ -1857,20 +1981,21 @@ slice_specs:
         kind: api_route
         signature: POST /api/inputs, accepting an audio medium
         async: true
-        ownership: Returns the server-owned key and computed digest, as it does for a visual reference.
+        ownership: Returns the server-owned key and computed digest, as it does for a
+          visual reference.
       - name: audio reference form
         kind: ui_surface
-        signature: an audio reference with its own bounds, its retention marker set, and the audio
-          task types
+        signature: an audio reference with its own bounds, its retention marker set, and
+          the audio task types
         async: false
-        ownership: The marker set offered is the audio one, because the visual markers do not apply
-          to a sound.
+        ownership: The marker set offered is the audio one, because the visual markers
+          do not apply to a sound.
     data_models:
       - name: staged audio response
         shape: serialized mapping
         fields: 'object_key: str; sha256: str; duration_seconds: float'
-        validation: returns what was measured, so a caller composing a retention relationship is not
-          guessing at length
+        validation: returns what was measured, so a caller composing a retention
+          relationship is not guessing at length
     behavior:
       - story_id: reference-generation/story/supply-an-audio-reference
         given: an audio object
@@ -1887,20 +2012,22 @@ slice_specs:
     error_handling:
       - condition: input_write_failed
         error: AppError
-        recovery: Render as an error document; the page renders every failure the same way
+        recovery: Render as an error document; the page renders every failure the same
+          way
         retryable: true
       - condition: marker_kind_mismatch
         error: Rejection
-        recovery: Refuse a visual retention marker on an audio label and the reverse, naming the field
-          and the rule
+        recovery: Refuse a visual retention marker on an audio label and the reverse,
+          naming the field and the rule
         retryable: false
     dependencies:
       required_slice_ids:
         - 13
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the audio intake contract
@@ -1936,9 +2063,10 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - Uploaded objects are named by the server, so a caller-supplied filename never becomes a key.
-      - The surface remains loopback-only; a voice upload field makes publishing more tempting and
-        no less out of scope.
+      - Uploaded objects are named by the server, so a caller-supplied filename
+        never becomes a key.
+      - The surface remains loopback-only; a voice upload field makes publishing
+        more tempting and no less out of scope.
     test_scenarios:
       - id: S14-T01
         level: integration
@@ -1961,20 +2089,24 @@ slice_specs:
         when: an upload runs
         then: it renders as an error document
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: bounded
-      detail: Creates objects under the inputs prefix, which already carries a declared retention class
-        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
-        what must not happen here is creating input objects outside the prefix those rules reach.
+      detail: Creates objects under the inputs prefix, which already carries a
+        declared retention class and a bucket lifecycle rule. Enforcing that
+        period belongs to the enforced-retention feature; what must not happen
+        here is creating input objects outside the prefix those rules reach.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
   - name: audio-reference-intake-15-spec
@@ -1987,9 +2119,10 @@ slice_specs:
     source_story_ids:
       - reference-generation/story/supply-an-audio-reference
       - reference-generation/story/assess-voice-reference-processing
-    purpose: Prove the widening did not weaken anything. The risk in this feature is not that audio
-      fails to stage; it is that relaxing a dimension requirement for audio quietly relaxes it for
-      images, or that an absent measurement is represented as a zero some later check reads as real.
+    purpose: Prove the widening did not weaken anything. The risk in this feature is
+      not that audio fails to stage; it is that relaxing a dimension requirement
+      for audio quietly relaxes it for images, or that an absent measurement is
+      represented as a zero some later check reads as real.
     layer_assignment:
       - component: regression tests
         layer: integration
@@ -2002,12 +2135,13 @@ slice_specs:
         kind: test_fixture
         signature: one visual and one audio reference in a single request
         async: false
-        ownership: Exercises the binder with two kinds at once, which is the case the allowlist's four
-          slots exist for.
+        ownership: Exercises the binder with two kinds at once, which is the case the
+          allowlist's four slots exist for.
     data_models:
       - name: audio fixtures
         shape: test doubles
-        fields: audio-only, video-offered-as-audio, out-of-bounds audio, dimensionless image
+        fields: audio-only, video-offered-as-audio, out-of-bounds audio, dimensionless
+          image
         validation: built in a per-test temporary directory removed by the runner
     behavior:
       - story_id: reference-generation/story/supply-an-audio-reference
@@ -2029,21 +2163,22 @@ slice_specs:
     error_handling:
       - condition: dimension_requirement_regressed
         error: test failure
-        recovery: Fail; the whole risk of this feature is that a relaxation meant for audio reaches
-          images
+        recovery: Fail; the whole risk of this feature is that a relaxation meant for
+          audio reaches images
         retryable: false
       - condition: placeholder_measurement_accepted
         error: test failure
-        recovery: Fail; an absent measurement represented as zero would pass a positive check somewhere
-          downstream
+        recovery: Fail; an absent measurement represented as zero would pass a positive
+          check somewhere downstream
         retryable: false
     dependencies:
       required_slice_ids:
         - 14
       external:
         - Python standard library
-      inversion_of_control: Every side-effecting collaborator is a Protocol dependency supplied by
-        the capability composition root; tests use deterministic fakes.
+      inversion_of_control: Every side-effecting collaborator is a Protocol dependency
+        supplied by the capability composition root; tests use deterministic
+        fakes.
     integration_points:
       consumes:
         - the widened intake path
@@ -2077,7 +2212,8 @@ slice_specs:
       - Validate at the boundary and pass typed values inward.
       - No global clients or ambient credentials; every collaborator is injected.
       - Fail closed on configuration, authorization and digest uncertainty.
-      - Regression assertions for images and videos run alongside the new audio ones, in the same suite.
+      - Regression assertions for images and videos run alongside the new audio
+        ones, in the same suite.
     test_scenarios:
       - id: S15-T01
         level: unit
@@ -2110,19 +2246,85 @@ slice_specs:
         when: intake runs
         then: the recovery contract holds
     definition_of_done:
-      - Public interfaces and models are type-checked with explicit exported return types.
+      - Public interfaces and models are type-checked with explicit exported
+        return types.
       - Every behavior criterion has a discriminating automated test.
-      - Every error condition has a tested recovery and retryability classification.
-      - No placeholder, TODO, mutable dependency reference, or console-only error remains.
+      - Every error condition has a tested recovery and retryability
+        classification.
+      - No placeholder, TODO, mutable dependency reference, or console-only
+        error remains.
     data_lifecycle:
       kind: bounded
-      detail: Creates objects under the inputs prefix, which already carries a declared retention class
-        and a bucket lifecycle rule. Enforcing that period belongs to the enforced-retention feature;
-        what must not happen here is creating input objects outside the prefix those rules reach.
+      detail: Creates objects under the inputs prefix, which already carries a
+        declared retention class and a bucket lifecycle rule. Enforcing that
+        period belongs to the enforced-retention feature; what must not happen
+        here is creating input objects outside the prefix those rules reach.
     implementation_constraints:
-      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit exception wrapping
-        with domain context.
-      logging: structlog only; allowlisted fields, never a credential, signed URL, prompt body or caller
-        filename.
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O, explicit
+        exception wrapping with domain context.
+      logging: structlog only; allowlisted fields, never a credential, signed URL,
+        prompt body or caller filename.
       bash: n/a
       testing: pytest with deterministic fakes for every side-effecting port.
+  - name: audio-reference-intake-16-spec
+    title: Audio conditioning facts of record Specification
+    status: planned
+    format: full
+    capability: reference-generation
+    feature: audio-reference-intake
+    slice: 16
+    source_story_ids:
+      - reference-generation/story/supply-an-audio-reference
+    purpose: Decide, before the audio contract work is spent, whether there is
+      anywhere for an audio reference to bind. The binder mutates only declared
+      node inputs and refuses a binding whose input name is absent from the
+      pinned graph, so slices 12 to 15 can deliver a staged, verified audio
+      reference and still have nothing to bind it into.
+      Reference-conditioned-release publishes a graph carrying reference-image
+      inputs; whether the same node accepts audio is unrecorded, and this slice
+      records it.
+    layer_assignment:
+      - component: node signature record
+        layer: data
+        responsibility: The reference-conditioning node's declared inputs at the pinned
+          ComfyUI revision, written down beside the graph
+      - component: graph decision of record
+        layer: data
+        responsibility: Whether audio rides the published reference graph or needs a
+          revision of its own
+    interfaces:
+      - name: node-signature.md
+        kind: artifact
+        signature: The reference node's input names and accepted types, read from the
+          pinned revision
+        async: false
+        ownership: Recorded rather than inferred; a reader re-checks the input names
+          without trusting the prose around them.
+    behavior:
+      - story_id: reference-generation/story/supply-an-audio-reference
+        given: the pinned ComfyUI revision
+        when: the reference node signature is read
+        then: whether it declares an audio-accepting input is recorded, not assumed
+      - story_id: reference-generation/story/supply-an-audio-reference
+        given: a node that accepts audio
+        when: the binding map is checked
+        then: the input names resolve through the existing input_0..input_3 allowlist
+          and no new binding source is introduced
+      - story_id: reference-generation/story/supply-an-audio-reference
+        given: a node that does not accept audio
+        when: the decision is recorded
+        then: it names whether a graph revision and a second reviewer approval are
+          required, because republishing changes the manifest digest the current
+          approval binds
+    error_handling:
+      - condition: audio_input_absent_from_graph
+        error: WorkflowBindingError
+        recovery: Fail before prompt submission; a graph that cannot receive an audio
+          reference must not run one
+        retryable: false
+    definition_of_done:
+      - The reference node's declared inputs at the pinned revision are recorded
+        beside the graph.
+      - The graph question is answered either way, and if a revision is needed
+        the approval it invalidates is named.
+      - Slice 12 does not start before this record exists.
