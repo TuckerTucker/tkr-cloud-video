@@ -277,6 +277,99 @@ def test_environment_accepts_a_complete_configuration() -> None:
     assert configuration.base_prefix.endswith("/")
 
 
+def test_the_rclone_path_defaults_to_the_pinned_image_binary() -> None:
+    """Resolving from PATH inside a worker would be a supply-chain seam.
+
+    No worker sets this, so the default must stay the image's absolute path.
+    The sweep is the one caller that runs off-image and needs its own.
+    """
+    from tkr_cloud_video.adapters.rclone import RCLONE_EXECUTABLE
+
+    base = {
+        "B2_REAPER_KEY_ID": "reaper-id",
+        "B2_REAPER_APPLICATION_KEY": "reaper-key",
+        "B2_BUCKET_NAME": "tkr-bucket",
+    }
+    assert (
+        RetentionEnvironment.from_environment(base, "sweep").rclone_executable
+        == RCLONE_EXECUTABLE
+    )
+    overridden = RetentionEnvironment.from_environment(
+        {**base, "B2_RCLONE_EXECUTABLE": "/opt/homebrew/bin/rclone"}, "sweep"
+    )
+    assert overridden.rclone_executable == "/opt/homebrew/bin/rclone"
+
+
+def test_a_refusal_names_what_diverged(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A drift code is useless without the rule it names.
+
+    ``detect_drift`` carries the offending prefix in ``context`` so an operator
+    learns which class stopped being enforced. The first live run printed only
+    the code and message, so the refusal was correct and anonymous; this pins
+    the context into the operator-visible output.
+    """
+    assert run_retention("check", tmp_path, {}) == 2
+    printed = capsys.readouterr().out
+    assert "retention_environment_incomplete" in printed
+    assert "B2_LIFECYCLE_KEY_ID" in printed
+
+
+def test_a_sweep_does_not_require_the_lifecycle_credential() -> None:
+    """The split is real only if one mode never demands the other's key.
+
+    The provider refuses ``writeBuckets`` on a bucket-restricted key, so the
+    credential that rewrites lifecycle rules cannot be the one confined to the
+    bucket it sweeps. If a sweep still required both, an operator would hold
+    both keys to run either mode and the separation would be a naming
+    convention rather than a boundary.
+    """
+    configuration = RetentionEnvironment.from_environment(
+        {
+            "B2_REAPER_KEY_ID": "reaper-id",
+            "B2_REAPER_APPLICATION_KEY": "reaper-key",
+            "B2_BUCKET_NAME": "tkr-bucket",
+        },
+        "sweep",
+    )
+    assert configuration.reaper_key_id == "reaper-id"
+    assert configuration.lifecycle_key_id == ""
+
+
+@pytest.mark.parametrize("mode", ["check", "apply"])
+def test_bucket_configuration_does_not_require_the_reaper_credential(
+    mode: str,
+) -> None:
+    """Rewriting a rule must not require the key that deletes objects."""
+    configuration = RetentionEnvironment.from_environment(
+        {
+            "B2_LIFECYCLE_KEY_ID": "lifecycle-id",
+            "B2_LIFECYCLE_APPLICATION_KEY": "lifecycle-key",
+            "B2_BUCKET_ID": "bucket-1",
+        },
+        mode,
+    )
+    assert configuration.lifecycle_key_id == "lifecycle-id"
+    assert configuration.reaper_key_id == ""
+
+
+def test_a_mode_names_only_the_values_it_needs() -> None:
+    """A check must not report the reaper credential as missing."""
+    with pytest.raises(RetentionError) as caught:
+        RetentionEnvironment.from_environment({"B2_BUCKET_ID": "bucket-1"}, "check")
+    missing = str(caught.value.context["field"])
+    assert "B2_LIFECYCLE_KEY_ID" in missing
+    assert "B2_REAPER_KEY_ID" not in missing
+
+
+def test_an_unknown_mode_is_refused_before_any_value_is_read() -> None:
+    """A mode with no declared requirements must not resolve to an empty set."""
+    with pytest.raises(RetentionError) as caught:
+        RetentionEnvironment.from_environment({}, "purge")
+    assert caught.value.code == "retention_mode_unknown"
+
+
 def test_default_base_prefix_is_the_namespace_the_sweep_lists() -> None:
     """A default naming another namespace enforces nothing and reports clean.
 

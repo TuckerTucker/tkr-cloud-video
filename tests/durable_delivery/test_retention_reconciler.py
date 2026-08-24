@@ -37,6 +37,7 @@ from tkr_cloud_video.security.process_secrets import SECRET_VARIABLES
 
 EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 REAPER_VARIABLES = frozenset({"B2_REAPER_KEY_ID", "B2_REAPER_APPLICATION_KEY"})
+LIFECYCLE_VARIABLES = frozenset({"B2_LIFECYCLE_KEY_ID", "B2_LIFECYCLE_APPLICATION_KEY"})
 
 
 class MemoryRetentionStore:
@@ -294,6 +295,18 @@ def test_reaper_credential_reaches_no_worker_process() -> None:
     """S12-T06: no worker subprocess may be handed a deleting credential."""
     for allowed in SECRET_VARIABLES.values():
         assert not REAPER_VARIABLES.intersection(allowed)
+
+
+def test_lifecycle_credential_reaches_no_worker_process() -> None:
+    """The rule-writing credential is control-plane only, like the reaper.
+
+    It holds no file capability, so it cannot read or delete an object, but it
+    can rewrite the retention rules that bound every object in the bucket. A
+    worker able to do that could extend its own retention, so it belongs on the
+    same side of the boundary as the key that deletes.
+    """
+    for allowed in SECRET_VARIABLES.values():
+        assert not LIFECYCLE_VARIABLES.intersection(allowed)
 
 
 def test_missing_delete_capability_fails_before_the_sweep() -> None:
