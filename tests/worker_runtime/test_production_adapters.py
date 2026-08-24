@@ -691,6 +691,23 @@ async def test_shell_free_process_executor_success_failure_and_output_bound() ->
 
 
 @pytest.mark.asyncio
+async def test_a_missing_executable_is_typed_rather_than_a_raw_oserror() -> None:
+    """Every other failure on this path is typed; a missing binary was not.
+
+    ``create_subprocess_exec`` raises before any of the executor's
+    classification runs, so a wrong or absent path escaped as an ``OSError``
+    traceback. The retention sweep found this on an operator machine, where the
+    absolute rclone path the worker image pins does not exist: the caller's
+    contract promises a coded exit and it got a stack trace instead.
+    """
+    executor = SubprocessCommandExecutor()
+    with pytest.raises(AppError) as caught:
+        await executor.run(("/nonexistent/bin/rclone",), {})
+    assert caught.value.code == "adapter_executable_missing"
+    assert caught.value.context["field"] == "/nonexistent/bin/rclone"
+
+
+@pytest.mark.asyncio
 async def test_comfy_process_runner_rejects_secrets_and_terminates_owned_child(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

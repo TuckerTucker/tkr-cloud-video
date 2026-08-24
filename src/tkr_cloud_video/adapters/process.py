@@ -52,13 +52,27 @@ class SubprocessCommandExecutor(CommandExecutor):
         """Execute, bound, and classify one child process invocation."""
         if not arguments or not arguments[0].startswith("/"):
             raise ValueError("adapter executable must be an absolute path")
-        process = await asyncio.create_subprocess_exec(
-            *arguments,
-            stdin=asyncio.subprocess.PIPE if stdin is not None else None,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=environment,
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *arguments,
+                stdin=asyncio.subprocess.PIPE if stdin is not None else None,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=environment,
+            )
+        except OSError as error:
+            # A missing or unexecutable binary is a configuration failure like
+            # any other, and every other failure on this path is typed. Letting
+            # it escape as an OSError produced a traceback where the operator
+            # contract promises a coded exit, which is how a control-plane run
+            # on a machine without the image's pinned rclone reported nothing
+            # actionable.
+            raise AppError(
+                "adapter_executable_missing",
+                "Provider adapter executable could not be run.",
+                context={"operation": "execute_adapter", "field": arguments[0]},
+                cause=error,
+            ) from error
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(stdin), timeout=timeout_seconds
