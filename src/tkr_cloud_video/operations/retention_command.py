@@ -30,6 +30,7 @@ from tkr_cloud_video.adapters.rclone import (
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.delivery.lifecycle import FileConfigSource, LifecyclePolicyLoader
 from tkr_cloud_video.delivery.lifecycle_rules import (
+    OUTPUT_PREFIX,
     LifecycleRuleSet,
     RetentionError,
     detect_drift,
@@ -66,6 +67,18 @@ class RetentionEnvironment:
                 bucket, and a missing credential must not fall back to an
                 ambient one.
 
+        Note:
+            The base prefix defaults to the namespace the reconciler actually
+            sweeps. It cannot default to the bucket root, which
+            ``RcloneLocation`` rejects, and it must not name a namespace the
+            workers do not write to: the sweep lists ``outputs/`` through this
+            prefix, so a base naming anything else lists nothing, deletes
+            nothing, and reports a clean run. A retention sweep that enforces
+            nothing while reporting success is the exact failure this feature
+            exists to prevent, so the default is pinned to the prefix the
+            runtime writes rather than to a value an operator must know to
+            override.
+
         """
         required = {
             "B2_REAPER_KEY_ID": "key_id",
@@ -89,7 +102,7 @@ class RetentionEnvironment:
             )
         return cls(
             remote_name=environ.get("B2_REMOTE_NAME", "tkr-retention").strip(),
-            base_prefix=environ.get("B2_BASE_PREFIX", "").strip() or "tkr/",
+            base_prefix=environ.get("B2_BASE_PREFIX", "").strip() or OUTPUT_PREFIX,
             **values,
         )
 

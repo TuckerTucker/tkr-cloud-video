@@ -30,7 +30,11 @@ from tkr_cloud_video.adapters.rclone import (
 )
 from tkr_cloud_video.cli import build_parser
 from tkr_cloud_video.core.errors import AppError
-from tkr_cloud_video.delivery.lifecycle_rules import BucketLifecycleRule, RetentionError
+from tkr_cloud_video.delivery.lifecycle_rules import (
+    OUTPUT_PREFIX,
+    BucketLifecycleRule,
+    RetentionError,
+)
 from tkr_cloud_video.operations.retention_command import (
     RetentionEnvironment,
     _dry_run_default,
@@ -271,6 +275,27 @@ def test_environment_accepts_a_complete_configuration() -> None:
     )
     assert configuration.bucket_name == "ca-east-006"
     assert configuration.base_prefix.endswith("/")
+
+
+def test_default_base_prefix_is_the_namespace_the_sweep_lists() -> None:
+    """A default naming another namespace enforces nothing and reports clean.
+
+    The reconciler lists ``OUTPUT_PREFIX`` through the configured base, so a
+    base the workers do not write to yields an empty listing, no deletions and
+    a clean report. That is indistinguishable from a bucket with nothing to
+    expire, which is why the default is pinned rather than left to an operator
+    to discover.
+    """
+    configuration = RetentionEnvironment.from_environment(
+        {
+            "B2_REAPER_KEY_ID": "key-id",
+            "B2_REAPER_APPLICATION_KEY": "application-key",
+            "B2_BUCKET_ID": "bucket-1",
+            "B2_BUCKET_NAME": "ca-east-006",
+        }
+    )
+    assert configuration.base_prefix == OUTPUT_PREFIX
+    assert OUTPUT_PREFIX.startswith(configuration.base_prefix)
 
 
 @pytest.mark.parametrize(
