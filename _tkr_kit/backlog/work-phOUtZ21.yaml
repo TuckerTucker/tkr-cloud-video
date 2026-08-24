@@ -1,0 +1,31 @@
+id: work-phOUtZ21
+title: The compliance triage record is stale in three of its five applicable items
+kind: chore
+severity: medium
+status: open
+capabilityId: durable-delivery
+anchors:
+  - .claude/rules/compliance-triage.md
+createdAt: 2026-08-24T00:40:21.702Z
+updatedAt: 2026-08-24T00:40:21.702Z
+provenance:
+  source: assurance-review
+  ref: docs/assurance/reference-input-cross-border.md
+  fingerprint: compliance-triage-stale-post-retention
+remedy: "Re-run the triage substrate rather than hand-editing the record:
+  parseComplianceRecord maps every outcome through outcomeToPolicy and requires
+  all four detail lines, so a hand edit that drops a line makes the record
+  unreadable. Re-run after the two open subject-request items land, so the item
+  4 entry describes a path that is reachable rather than one that exists."
+detail: The record states its own re-run condition — scope or framework version
+  change — and enforced-retention changed the scope. Item 2
+  (job.input_reference) says no automated deletion exists; config/lifecycle.json
+  v3 declares input at 7 days and LifecycleRuleSet projects an inputs/ rule.
+  Item 1 (job.prompt) says the same; prompt-evidence is now a declared class at
+  365 days. Item 4 (job.principal_id) says no access-request path exists;
+  delivery/subject_requests.py implements describe and erase, though see the two
+  open items against its reachability and its field coverage. Item 3
+  (third-party processing terms for the GPU provider) is NOT stale and remains
+  genuinely open. A triage record that overstates the gaps is a different
+  failure from one that understates them, but it still means the record cannot
+  be read as current.

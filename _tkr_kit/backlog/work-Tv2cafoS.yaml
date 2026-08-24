@@ -1,0 +1,31 @@
+id: work-Tv2cafoS
+title: An input's key and digest outlive the input by 358 days
+kind: debt
+severity: medium
+status: open
+capabilityId: durable-delivery
+anchors:
+  - src/tkr_cloud_video/jobs/application.py
+  - config/lifecycle.json
+createdAt: 2026-08-24T00:40:21.291Z
+updatedAt: 2026-08-24T00:40:21.291Z
+provenance:
+  source: assurance-review
+  ref: docs/assurance/reference-input-cross-border.md
+  fingerprint: input-key-digest-outlives-input
+remedy: Decide whether the input key and digest are reproducibility evidence, in
+  which case say so in config/lifecycle.json the way prompt-evidence is declared
+  and defend the 365 days, or whether they are input data, in which case redact
+  them from generation.json at the input period the way slice 13 was going to
+  redact prompt text. The prompt-evidence deferral in durable-delivery/slice/13
+  is the precedent for reasoning about this and its argument may or may not
+  carry across.
+detail: The reference's object_key and sha256 are embedded in generation.json
+  through request.model_dump() in jobs/application.py. generation.json shares
+  the attempt prefix with video.bin and is therefore retained as deliverable
+  evidence for 365 days, while config/lifecycle.json expires the input object
+  itself at 7 days. The image goes and a durable record of exactly which image
+  was used remains for another 358 days. The digest is not reversible to the
+  image, so this is weaker than retaining the image, but it is still a record
+  about a person that outlives the field the retention period was written for,
+  and no declared period governs it.

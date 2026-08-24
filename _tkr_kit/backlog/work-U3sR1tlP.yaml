@@ -1,0 +1,31 @@
+id: work-U3sR1tlP
+title: The subject access and erasure path is composed and reachable by nothing
+kind: debt
+severity: high
+status: open
+capabilityId: durable-delivery
+anchors:
+  - src/tkr_cloud_video/durable_delivery/composition.py
+  - src/tkr_cloud_video/delivery/subject_requests.py
+createdAt: 2026-08-24T00:40:20.418Z
+updatedAt: 2026-08-24T00:40:20.418Z
+provenance:
+  source: slice-verification
+  ref: _tkr_kit/slices/durable-delivery.yaml
+  fingerprint: subject-requests-no-runtime-entrypoint
+remedy: Give the subject-request path an operator entrypoint, most naturally a
+  cli.py subcommand beside `lifecycle` built through compose_durable_delivery,
+  so the composition root gains its first production caller and the access path
+  gains a way to be exercised. Decide at the same time whether the console
+  should expose it or whether it stays control-plane only; the credential it
+  needs is the reaper's, which must not reach the console.
+detail: "compose_durable_delivery is referenced only from its own module and
+  from tests/durable_delivery/; grep finds no production caller. The console
+  builds PrivateResultService directly (console/service.py) and the sweep builds
+  RetentionReconciler directly (operations/retention_command.py), so both live
+  paths bypass the composition root. SubjectRequestService is constructed
+  nowhere a request can reach it: there is no CLI subcommand and no route.
+  durable-delivery/slice/14 delivers the access and erasure API and is done, and
+  its tests pass against the service directly, so the mechanism is correct and
+  unreachable. This is the same shape as the retention gap that preceded it — a
+  capability that exists, is tested, and enforces nothing in production."

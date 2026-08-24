@@ -18,7 +18,10 @@ remedy: Two routes, and the choice is a product decision. Either give the mode
   the new manifest digest — structurally a clone of
   reference-generation/feature/reference-conditioned-release — or remove
   ImageToVideoRequest from the request union so intake stops accepting a mode
-  nothing can run. Until one is chosen, an accepted image-to-video request fails
+  nothing can run. Decided 2026-08-23: the first route. The mode gets its own
+  release as reference-generation/feature/image-conditioned-release, slices
+  17-21, so the gap is now owned rather than unowned. This item stays open until
+  that feature ships; until then an accepted image-to-video request still fails
   at binding rather than at intake.
 detail: >-
   ImageToVideoRequest is live in the discriminated request union

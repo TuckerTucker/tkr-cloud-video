@@ -3,69 +3,81 @@ features:
   - name: reference-conditioned-release
     status: planned
     display_name: Reference-Conditioned Release
-    user_story: As a platform operator, I want a published workflow whose graph actually carries reference-image
-      inputs and a model set whose envelope is registered, so that a reference-to-video request can
-      bind and execute instead of being refused at intake or failing at binding.
-    description: The blocker is specific and mechanical. The binder mutates only declared node inputs
-      and refuses a binding whose input name is absent from the pinned graph, so an image cannot be
-      bound into a node that has no image input. The currently published graph drives MiniMaxH3ImageToVideo
-      with no image attached, which is what text-to-video is on this model set. Republishing the graph
-      changes the manifest digest, and the reviewer license approval binds that digest, so this feature
-      necessarily includes a re-approval.
+    user_story: As a platform operator, I want a published workflow whose graph
+      actually carries reference-image inputs and a model set whose envelope is
+      registered, so that a reference-to-video request can bind and execute
+      instead of being refused at intake or failing at binding.
+    description: The blocker is specific and mechanical. The binder mutates only
+      declared node inputs and refuses a binding whose input name is absent from
+      the pinned graph, so an image cannot be bound into a node that has no
+      image input. The currently published graph drives MiniMaxH3ImageToVideo
+      with no image attached, which is what text-to-video is on this model set.
+      Republishing the graph changes the manifest digest, and the reviewer
+      license approval binds that digest, so this feature necessarily includes a
+      re-approval.
     acceptance_criteria:
-      - A reference-to-video request binds one to four staged inputs into the published graph without
-        introducing a new binding source.
-      - A request naming a model set with no registered envelope is refused at intake rather than given
-        another model set's dimensions.
-      - The published manifest digest is covered by an unexpired reviewer approval, and an uncovered
-        digest fails the release gate.
-      - The envelope digest is restated with the table, so a changed default cannot land without the
-        revision that describes it.
+      - A reference-to-video request binds one to four staged inputs into the
+        published graph without introducing a new binding source.
+      - A request naming a model set with no registered envelope is refused at
+        intake rather than given another model set's dimensions.
+      - The published manifest digest is covered by an unexpired reviewer
+        approval, and an uncovered digest fails the release gate.
+      - The envelope digest is restated with the table, so a changed default
+        cannot land without the revision that describes it.
     scope_in:
-      - A ComfyUI API workflow whose reference-conditioning node inputs exist in the graph, with the
-        node signature read from the pinned ComfyUI revision.
+      - A ComfyUI API workflow whose reference-conditioning node inputs exist in
+        the graph, with the node signature read from the pinned ComfyUI
+        revision.
       - A binding map using only the existing input_0..input_3 allowlist entries.
-      - A trained-range entry for the reference model set, with the envelope digest restated and the
-        model-set identity decision recorded.
-      - A rendered manifest, a reviewer approval bound to its digest, and publication through the existing
-        release path with the workflow published last.
+      - A trained-range entry for the reference model set, with the envelope
+        digest restated and the model-set identity decision recorded.
+      - A rendered manifest, a reviewer approval bound to its digest, and
+        publication through the existing release path with the workflow
+        published last.
     scope_out:
       - Image-to-video, which conditions on keyframes and needs its own graph.
-      - Any change to the binder, the request contract or the binding vocabulary; all three already
-        accommodate this mode.
+      - Any change to the binder, the request contract or the binding
+        vocabulary; all three already accommodate this mode.
       - Uploading the reference image, owned by authorized-reference-intake.
     depends_on: []
   - name: authorized-reference-intake
     status: planned
     display_name: Authorized Reference Intake
-    user_story: As a caller supplying reference images, I want my image to reach the input namespace
-      under an authorization I cannot forge and a retention clock that already exists, so that supplying
-      a likeness is a bounded act rather than an indefinite one.
-    description: 'Nothing in the product can currently write to the inputs namespace. The input-reader
-      role holds list and read only, and the request contract takes an object key that must already
-      exist, so staging an input is out of band today and the credential that does it is unmodelled.
-      This feature is where that becomes explicit, and it is deliberately gated behind the assessment
-      slice rather than after it: an upload path is precisely what turns the cross-border finding from
-      latent into live.'
+    user_story: As a caller supplying reference images, I want my image to reach the
+      input namespace under an authorization I cannot forge and a retention
+      clock that already exists, so that supplying a likeness is a bounded act
+      rather than an indefinite one.
+    description: 'Nothing in the product can currently write to the inputs
+      namespace. The input-reader role holds list and read only, and the request
+      contract takes an object key that must already exist, so staging an input
+      is out of band today and the credential that does it is unmodelled. This
+      feature is where that becomes explicit, and it is deliberately gated
+      behind the assessment slice rather than after it: an upload path is
+      precisely what turns the cross-border finding from latent into live.'
     acceptance_criteria:
-      - A dated assessment records sensitivity, purpose, territories and protection measures for reference
-        images before any worker reads one.
-      - A reference object a principal does not own is refused before download, indistinguishably from
-        the object being absent.
-      - No credential gains write access outside the principal-scoped inputs prefix, and no worker
-        process role receives the input-writing credential.
-      - A staged reference fails closed on size, declared digest, or media type before it reaches a
-        workflow.
+      - A dated assessment records sensitivity, purpose, territories and
+        protection measures for reference images before any worker reads one.
+      - A reference object a principal does not own is refused before download,
+        indistinguishably from the object being absent.
+      - No credential gains write access outside the principal-scoped inputs
+        prefix, and no worker process role receives the input-writing
+        credential.
+      - A staged reference fails closed on size, declared digest, or media type
+        before it reaches a workflow.
     scope_in:
-      - A dated privacy impact assessment for reference images processed outside Quebec, with its verdict
-        and any residual risk accepted and by whom.
-      - A principal-scoped inputs namespace so input authorization is derived rather than looked up.
-      - An input-writing credential role narrow enough to write that namespace and nothing else, absent
-        from every worker process-role allowlist.
-      - The surface for supplying references, and its refusals, on the operator console.
+      - A dated privacy impact assessment for reference images processed outside
+        Quebec, with its verdict and any residual risk accepted and by whom.
+      - A principal-scoped inputs namespace so input authorization is derived
+        rather than looked up.
+      - An input-writing credential role narrow enough to write that namespace
+        and nothing else, absent from every worker process-role allowlist.
+      - The surface for supplying references, and its refusals, on the operator
+        console.
     scope_out:
-      - Retention enforcement for the objects this feature creates, owned by durable-delivery/feature/enforced-retention.
-      - Content moderation, likeness detection, or consent capture for the subject of a reference image.
+      - Retention enforcement for the objects this feature creates, owned by
+        durable-delivery/feature/enforced-retention.
+      - Content moderation, likeness detection, or consent capture for the
+        subject of a reference image.
       - Serving the console to anyone but a local operator.
     depends_on:
       - reference-conditioned-release
@@ -75,46 +87,116 @@ features:
   - name: audio-reference-intake
     status: planned
     display_name: Audio Reference Intake
-    user_story: As a caller reusing a voice or a sound from material I already have, I want an audio
-      reference to be stageable and bindable, so that the audio reuse and audio reference task types
-      the grammar declares are reachable rather than only describable.
-    description: 'The prompt side of audio already exists and the intake side carries none of it: the
-      grammar defines <Audio N> labels, an audio-specific retention marker set, and the audio reuse
-      and audio reference task types, while the input path permits three media types and none of them
-      is audio. The blocker is not a missing allowlist entry. The input inspector locates a video stream
-      and derives the media type from its codec, so an audio-only file is refused before any allowlist
-      is consulted; the inspection port returns dimensions; the staged-input value carries dimensions;
-      and the stager requires both to be positive. An audio stream has none of them, so the contract
-      has to change shape before an audio file can be described at all. This is a separate feature
-      rather than more slices on image intake because it can ship after it and because the sensitivity
-      is different.'
+    user_story: As a caller reusing a voice or a sound from material I already have,
+      I want an audio reference to be stageable and bindable, so that the audio
+      reuse and audio reference task types the grammar declares are reachable
+      rather than only describable.
+    description: 'The prompt side of audio already exists and the intake side
+      carries none of it: the grammar defines <Audio N> labels, an
+      audio-specific retention marker set, and the audio reuse and audio
+      reference task types, while the input path permits three media types and
+      none of them is audio. The blocker is not a missing allowlist entry. The
+      input inspector locates a video stream and derives the media type from its
+      codec, so an audio-only file is refused before any allowlist is consulted;
+      the inspection port returns dimensions; the staged-input value carries
+      dimensions; and the stager requires both to be positive. An audio stream
+      has none of them, so the contract has to change shape before an audio file
+      can be described at all. This is a separate feature rather than more
+      slices on image intake because it can ship after it and because the
+      sensitivity is different.'
     acceptance_criteria:
-      - A dated assessment covering voice and sound references exists before any is staged; the image
-        assessment's scope does not reach a voice sample.
-      - An audio reference is staged, verified and bound, and an audio task type is selectable rather
-        than only expressible in prose.
-      - A file whose container and streams disagree with its declared kind is refused, so an audio
-        type cannot be claimed for a video payload or the reverse.
-      - The staged-input contract describes a stream with no dimensions without inventing any, and
-        an image reference is still refused if its dimensions are absent.
+      - A dated assessment covering voice and sound references exists before any
+        is staged; the image assessment's scope does not reach a voice sample.
+      - An audio reference is staged, verified and bound, and an audio task type
+        is selectable rather than only expressible in prose.
+      - A file whose container and streams disagree with its declared kind is
+        refused, so an audio type cannot be claimed for a video payload or the
+        reverse.
+      - The staged-input contract describes a stream with no dimensions without
+        inventing any, and an image reference is still refused if its dimensions
+        are absent.
     scope_in:
-      - A dated assessment for audio references, weighing the sensitivity of a voice sample of an identifiable
-        person and of an output that reproduces it.
-      - An input contract able to describe a stream that has no width or height, without weakening
-        the dimension requirement that image and video references still carry.
-      - Inspection that locates an audio stream rather than requiring a video one, with duration, channel
-        and sample-rate bounds.
-      - The <Audio N> label surface, the audio retention markers, and the two audio task types on the
-        operator console.
+      - A dated assessment for audio references, weighing the sensitivity of a
+        voice sample of an identifiable person and of an output that reproduces
+        it.
+      - An input contract able to describe a stream that has no width or height,
+        without weakening the dimension requirement that image and video
+        references still carry.
+      - Inspection that locates an audio stream rather than requiring a video
+        one, with duration, channel and sample-rate bounds.
+      - The <Audio N> label surface, the audio retention markers, and the two
+        audio task types on the operator console.
     scope_out:
-      - Speaker identification, consent capture, or any judgement about who is speaking in a supplied
-        recording.
-      - Generating audio without video. Every mode this model declares produces both.
-      - Retention enforcement for the objects this feature creates, owned by durable-delivery/feature/enforced-retention.
-      - Transcription of reference audio. The grammar's unintelligible-span token exists precisely
-        so an unclear span is marked rather than guessed at.
+      - Speaker identification, consent capture, or any judgement about who is
+        speaking in a supplied recording.
+      - Generating audio without video. Every mode this model declares produces
+        both.
+      - Retention enforcement for the objects this feature creates, owned by
+        durable-delivery/feature/enforced-retention.
+      - Transcription of reference audio. The grammar's unintelligible-span
+        token exists precisely so an unclear span is marked rather than guessed
+        at.
     depends_on:
       - authorized-reference-intake
     citations:
       - CQLR c. P-39.1, s 17
       - S.C. 2000, c. 5, sch 1, cl 4.1.3
+  - name: image-conditioned-release
+    status: planned
+    display_name: Image-Conditioned Release
+    user_story: As a platform operator, I want the single-keyframe mode to have a
+      published graph, a registered envelope and an approval bound to its
+      digest, so that an image-to-video request the intake already accepts can
+      execute rather than failing at binding.
+    description: "This feature exists because a mode is reachable at the boundary
+      and executable by nothing. ImageToVideoRequest is live in the
+      discriminated union with a single image reference (jobs/contracts.py), the
+      console admits image-to-video among its three modes (console/intake.py),
+      and the prompt layer already emits the I2VA keyframe alignment header
+      (prompting/alignment.py), so a request validates and is accepted today.
+      The published catalog binds only prompt, seed, width, height, frames, fps
+      and output_prefix, and the binder refuses a binding whose input name is
+      absent from the pinned graph, so the request fails at binding rather than
+      at intake. The remedy is structurally a clone of
+      reference-conditioned-release: a graph revision whose keyframe input
+      exists, an envelope registration, and a reviewer approval bound to the new
+      manifest digest. One fact makes it cheaper than it looks — the published
+      set already ships the keyframe checkpoint (minimax-h3-fl2va-int8) under a
+      model-set identity that names text-to-video, so this feature is a graph
+      and identity problem rather than a model-acquisition one."
+    acceptance_criteria:
+      - An image-to-video request binds its single keyframe into the published
+        graph without introducing a new binding source.
+      - An image-to-video request naming a model set with no registered envelope
+        is refused at intake rather than given another model set's dimensions.
+      - The republished manifest digest is covered by an unexpired reviewer
+        approval, and an uncovered digest fails the release gate.
+      - No request the intake accepts fails at binding for want of a declared
+        input; a mode with no executable graph is refused at the boundary
+        instead.
+    scope_in:
+      - A ComfyUI API workflow whose keyframe-conditioning node input exists in
+        the graph, with the node signature read from the pinned ComfyUI
+        revision.
+      - A binding map for the single keyframe, using only existing binding
+        allowlist entries.
+      - The keyframe model-set identity decision and its envelope registration,
+        or a recorded decision that it shares the reference set's identity, with
+        the envelope digest restated.
+      - A rendered manifest, a reviewer approval bound to its digest, and
+        publication through the existing release path with the workflow
+        published last.
+    scope_out:
+      - The first-last and last-frame keyframe modes. The prompt grammar
+        declares FL2VA and L2VA and emits alignment headers for both, but the
+        request contract carries one image field and cannot express a second
+        keyframe, so those two modes need a contract change this feature does
+        not make.
+      - Any change to the binder, the request contract or the binding
+        vocabulary; the single-keyframe path is already expressible in all
+        three.
+      - Uploading the keyframe image, owned by authorized-reference-intake.
+      - Retention enforcement for the objects this feature's requests create,
+        owned by durable-delivery/feature/enforced-retention.
+    depends_on:
+      - reference-conditioned-release

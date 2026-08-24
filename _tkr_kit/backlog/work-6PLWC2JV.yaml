@@ -1,0 +1,35 @@
+id: work-6PLWC2JV
+title: FL2VA and L2VA are describable in the prompt grammar and expressible by
+  no request
+kind: debt
+severity: medium
+status: open
+capabilityId: reference-generation
+anchors:
+  - src/tkr_cloud_video/prompting/grammar.py
+  - src/tkr_cloud_video/prompting/alignment.py
+  - src/tkr_cloud_video/jobs/contracts.py
+createdAt: 2026-08-24T00:37:16.082Z
+updatedAt: 2026-08-24T00:37:16.082Z
+provenance:
+  source: plan-review
+  ref: _tkr_kit/features/reference-generation.yaml
+  fingerprint: keyframe-modes-describable-unexpressible
+remedy: Decide whether the keyframe family is one mode with a keyframe-position
+  field or three modes with their own request shapes, then either extend the
+  request contract and give each mode a graph revision, or narrow the prompt
+  grammar to the modes the contract can express. Deciding is the work; the code
+  change follows from it. Sequence it after image-conditioned-release, whose
+  single-keyframe graph is the thing both other modes would extend.
+detail: "prompting/grammar.py declares KEYFRAME_MODES as I2VA, FL2VA and L2VA,
+  prompting/validation.py accepts all three, and prompting/alignment.py emits a
+  distinct alignment header for each: FL2VA aligns Picture 1 with the opening
+  mark and Picture 2 with the closing mark, L2VA aligns a single picture with
+  the closing mark. The request contract carries one image field on
+  ImageToVideoRequest and no field that names which end of the clip a keyframe
+  belongs to, so neither the two-keyframe mode nor the last-frame mode can be
+  expressed by any request the union admits. This is the mirror of
+  work-2PNiHrf9: there a mode was accepted and unexecutable, here a mode is
+  renderable and unrequestable.
+  reference-generation/feature/image-conditioned-release scopes both modes out
+  explicitly, so the gap is now named but still unowned."

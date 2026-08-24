@@ -24,9 +24,24 @@ slices:
         is immutable and digest-addressed under the existing artifact layout.
     paths:
       - release-assets/**
+      - tests/reference_generation/test_reference_workflow_graph.py
+      - tests/reference_generation/__init__.py
     title: Reference-conditioned workflow graph
     layer: data
-    status: planned
+    status: done
+    commits:
+      - hash: 2a66f27
+        relation: implements
+        message: "feat(release): publish a reference-conditioned workflow graph"
+        author: Tucker <34353433+TuckerTucker@users.noreply.github.com>
+        files:
+          - release-assets/minimax-h3-ref2v/catalog.json
+          - release-assets/minimax-h3-ref2v/node-signature.md
+          - release-assets/minimax-h3-ref2v/workflow-api.json
+          - tests/reference_generation/test_reference_workflow_graph.py
+    evidence:
+      kind: commit
+      ref: 2a66f2777034fed5e283b73b6f932b8cd4be10ee
   - number: 2
     feature: reference-conditioned-release
     delivers:
@@ -48,9 +63,23 @@ slices:
         is immutable and digest-addressed under the existing artifact layout.
     paths:
       - src/tkr_cloud_video/**
+      - tests/reference_generation/test_reference_envelope.py
+      - tests/reference_generation/__init__.py
     title: Reference model-set envelope
     layer: data
-    status: planned
+    status: done
+    commits:
+      - hash: 7cf1cf9
+        relation: implements
+        message: "feat(jobs): register the reference model set envelope"
+        author: Tucker <34353433+TuckerTucker@users.noreply.github.com>
+        files:
+          - src/tkr_cloud_video/jobs/trained_envelope.py
+          - tests/reference_generation/__init__.py
+          - tests/reference_generation/test_reference_envelope.py
+    evidence:
+      kind: commit
+      ref: 7cf1cf99264fee5a6fe8831a81c4859193c47837
   - number: 3
     feature: reference-conditioned-release
     delivers:
@@ -88,6 +117,17 @@ slices:
         bound through its allowlisted source
       - The mode offered by the operator console's form, with its own dimensions
         and prompt sections
+      - A binding refusal that names the input it could not find. Slice 1 found
+        binding_input_missing raised at jobs/workflow_binder.py with no context,
+        unlike every other error the module raises, so the refusal is correct
+        and anonymous while the story's acceptance criterion requires it to name
+        the missing input
+      - A request supplying fewer than four references binding against the
+        four-slot catalog. The binder refuses when a binding's request field is
+        absent from the staged values and the stager emits input_0 through
+        input_n-1, so a one-to-three reference request is refused today by the
+        catalog slice 1 publishes; the request contract permits one to four, so
+        the binder or the stager has to tolerate an unfilled slot
     depends_on:
       - 3
     story_ids:
@@ -157,15 +197,25 @@ slices:
       - docs/assurance/**
     title: Cross-border reference-image assessment
     layer: data
-    status: planned
+    status: done
     description: 'This slice gates the upload path rather than documenting it, and
       slice 9 declares the dependency that makes the gate binding rather than
       stated. The provision requires the assessment before the communication
       outside Quebec, and ADR-002 already placed workers across six territories,
-      so an upload path shipped ahead of this record would make an existing latent
-      finding live. Slices 7 and 8 are deliberately not gated on it: a key-shape
-      convention and a credential role read no reference image, and slice 9 is the
-      first point at which one can arrive.'
+      so an upload path shipped ahead of this record would make an existing
+      latent finding live. Slices 7 and 8 are deliberately not gated on it: a
+      key-shape convention and a credential role read no reference image, and
+      slice 9 is the first point at which one can arrive.'
+    commits:
+      - hash: ab8054f
+        relation: implements
+        message: "docs(assurance): assess cross-border processing of reference images"
+        author: Tucker <34353433+TuckerTucker@users.noreply.github.com>
+        files:
+          - docs/assurance/reference-input-cross-border.md
+    evidence:
+      kind: commit
+      ref: ab8054f61156d670cf9e48a8f68b5a80cfb97eec
   - number: 7
     feature: authorized-reference-intake
     delivers:
@@ -466,4 +516,148 @@ slices:
       spent.
     title: Audio conditioning facts of record
     layer: data
+    status: planned
+  - number: 17
+    feature: image-conditioned-release
+    depends_on:
+      - 5
+    story_ids:
+      - reference-generation/story/publish-a-keyframe-conditioned-workflow
+    delivers:
+      - A ComfyUI API workflow whose keyframe image input exists in the graph,
+        because the binder mutates declared inputs and refuses a binding whose
+        input name is absent
+      - A binding map for the single keyframe drawn from the existing binding
+        allowlist, introducing no new binding source
+      - The keyframe node signature read from the pinned ComfyUI revision and
+        recorded beside the graph, so the input name is re-checkable without
+        trusting the prose
+    files:
+      - release-assets/minimax-h3-i2v/workflow-api.json
+      - release-assets/minimax-h3-i2v/catalog.json
+    paths:
+      - release-assets/**
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
+    title: Keyframe-conditioned workflow graph
+    layer: data
+    status: planned
+  - number: 18
+    feature: image-conditioned-release
+    depends_on:
+      - 5
+    story_ids:
+      - reference-generation/story/register-the-keyframe-model-set-envelope
+    delivers:
+      - A trained range for the model set the keyframe workflow belongs to,
+        keyed by model-set identity so it cannot inherit another model set's
+        numbers
+      - The keyframe model-set identity decision recorded, or a recorded
+        decision that the keyframe modes share the reference set's identity,
+        since the published identity names text-to-video while shipping the
+        keyframe checkpoint
+      - The envelope digest restated with the table, so an edited default fails
+        at import rather than silently changing where a default request lands
+    files:
+      - src/tkr_cloud_video/jobs/trained_envelope.py
+    paths:
+      - src/tkr_cloud_video/**
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
+    title: Keyframe model-set envelope
+    layer: data
+    status: planned
+  - number: 19
+    feature: image-conditioned-release
+    depends_on:
+      - 17
+      - 18
+    story_ids:
+      - reference-generation/story/publish-a-keyframe-conditioned-workflow
+    delivers:
+      - A rendered manifest for the keyframe catalog, published through the
+        existing release path with the workflow last
+      - A reviewer license approval bound to the new manifest digest, because
+        republishing the workflow changes the digest the current approval binds
+        and no run may proceed on an uncovered digest
+      - Territory and expiry carried forward from the existing approval rather
+        than silently widened
+    files:
+      - release-assets/minimax-h3-i2v/license-approval.json
+    paths:
+      - release-assets/**
+      - scripts/**
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
+    title: Image release approval and publication
+    layer: service
+    status: planned
+  - number: 20
+    feature: image-conditioned-release
+    depends_on:
+      - 19
+    story_ids:
+      - reference-generation/story/publish-a-keyframe-conditioned-workflow
+      - reference-generation/story/register-the-keyframe-model-set-envelope
+      - reference-generation/story/generate-from-a-single-keyframe
+    delivers:
+      - The keyframe model set selectable at intake, resolving its defaults from
+        the registered envelope
+      - An image-to-video request reaching the binder with its staged keyframe
+        bound through its allowlisted source
+      - The mode offered by the operator console's form, with its own dimensions
+        and the I2VA prompt sections the grammar already declares
+    files:
+      - src/tkr_cloud_video/console/intake.py
+      - src/tkr_cloud_video/console/static/app.js
+    paths:
+      - src/tkr_cloud_video/**
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
+    title: Wire Image-Conditioned Release
+    layer: integration
+    status: planned
+  - number: 21
+    feature: image-conditioned-release
+    depends_on:
+      - 20
+    story_ids:
+      - reference-generation/story/publish-a-keyframe-conditioned-workflow
+      - reference-generation/story/register-the-keyframe-model-set-envelope
+      - reference-generation/story/generate-from-a-single-keyframe
+    delivers:
+      - A binding test proving the staged keyframe reaches its declared node
+        input, and that a graph missing it fails naming the input
+      - An intake test proving an unregistered keyframe model set is refused
+        rather than defaulted
+      - A release-gate test proving an uncovered manifest digest fails
+        publication rather than surfacing at run time
+      - "A test proving no mode the request union admits is unexecutable: every
+        accepted mode resolves to a published graph, so acceptance and
+        executability cannot diverge again"
+      - A live image-to-video generation reaching a committed result, recorded
+        as run evidence
+    files:
+      - tests/job_execution/test_image_release.py
+    paths:
+      - tests/**
+    data_lifecycle:
+      kind: exempt
+      detail: Introduces no store. The graph, binding map and envelope table are
+        versioned in git and shipped in the pinned image; the published manifest
+        is immutable and digest-addressed under the existing artifact layout.
+    title: Test Image-Conditioned Release
+    layer: integration
     status: planned

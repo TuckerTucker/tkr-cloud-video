@@ -1,0 +1,29 @@
+id: work-dfwhNoAw
+title: describe() never reports the input reference it is able to erase
+kind: bug
+severity: high
+status: open
+capabilityId: durable-delivery
+anchors:
+  - src/tkr_cloud_video/delivery/subject_requests.py
+createdAt: 2026-08-24T00:40:20.862Z
+updatedAt: 2026-08-24T00:40:20.862Z
+provenance:
+  source: assurance-review
+  ref: docs/assurance/reference-input-cross-border.md
+  fingerprint: describe-omits-input-field
+remedy: "Have describe resolve held fields from the same classifier erase uses,
+  listing the principal's input namespace as well as outputs/. The
+  non-enumeration property must survive the change: an unauthorized describe
+  must stay indistinguishable from an absent record, which is the property
+  tests/durable_delivery/test_subject_requests.py pins by comparing the two
+  outcomes directly."
+detail: "subject_requests.py:112 hard-codes `held = [VIDEO_FIELD,
+  PROMPT_FIELD]`. INPUT_FIELD is declared at line 28 and is returned by the
+  erase classifier at line 203, so erase does reach input references while
+  describe never names them. The cause is structural rather than an oversight:
+  describe lists the outputs/ prefix, and inputs do not live under it. The
+  consequence is that the product deletes an input it will not admit to holding,
+  and an access request answered from describe under-reports the most sensitive
+  field the product holds — the one the cross-border assessment is written
+  about."
