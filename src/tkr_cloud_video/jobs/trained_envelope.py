@@ -17,6 +17,45 @@ The envelope is deliberately not a field on
 canonical bytes are its identity, and a reviewer-signed license approval binds
 that exact digest. Adding a field there would invalidate every existing approval
 and require a human re-signature to describe a fact the manifest never carried.
+
+What a model-set identity names
+-------------------------------
+The published identifier ``minimax-h3-t2v-int8-20260809`` says text-to-video
+while the diffusion checkpoint it ships is ``minimax-h3-fl2va-int8``, the
+keyframe first/last-frame-to-video-and-audio checkpoint, and its graph reaches
+text-to-video by driving ``MiniMaxH3ImageToVideo`` with no image attached. The
+segment therefore already names *the mode the published graph drives*, not the
+weights. That was never written down, and this registry is the first place where
+guessing wrong would be load-bearing, so it is decided and recorded here.
+
+A model-set identity names the published set — weights, workflow graph and
+binding map together — and not the checkpoint. Two consequences follow, and both
+are why the reference set is a separate row rather than a reuse of the existing
+one:
+
+* Naming the checkpoint would collapse the text-to-video set and the
+  reference-conditioned set onto one identifier, since they ship byte-identical
+  weights. One identifier is one envelope, so the reference set would inherit
+  the text-to-video row by construction — exactly the silent inheritance this
+  registry exists to prevent, and unreviewable because no second row would ever
+  exist to review.
+* Renaming what is already published is not available either. A reviewer license
+  approval binds the manifest digest, and ``model_set_id`` is inside the
+  manifest's canonical bytes, so correcting the published identifier would
+  invalidate a signed approval to fix a name that is, under the rule above, not
+  wrong.
+
+So ``minimax-h3-ref2v-int8-20260809`` is its own model set with its own row. It
+shares the ``20260809`` segment with the text-to-video set on purpose and not by
+oversight: that segment names the weights snapshot, and both sets ship the same
+four artifacts from the same source revision. The ``ref2v`` segment is what
+separates them, which is the segment the rule above says carries the meaning.
+
+Its numbers are the same as the text-to-video set's, because the trained canvas
+and temporal grid are properties of the fl2va checkpoint both sets ship. They are
+*restated* under this identity rather than inherited through it: keying on the
+full identifier is what forced someone to affirm that, and a future set whose
+weights differ cannot pick these numbers up by prefix.
 """
 
 from __future__ import annotations
@@ -198,9 +237,28 @@ MINIMAX_H3_SOURCE: Final[str] = (
     " comfy_extras/nodes_minimax_h3.py"
 )
 
+TEXT_TO_VIDEO_MODEL_SET_ID: Final[str] = "minimax-h3-t2v-int8-20260809"
+
+# The reference-conditioned set's identity, decided in the module docstring and
+# named here so the release catalog, the license approval and the console all
+# spell the one identifier rather than three that happen to agree. It is a new
+# identity rather than a reuse because a model-set identity names the published
+# set — weights, graph and bindings — and the reference graph differs.
+REFERENCE_MODEL_SET_ID: Final[str] = "minimax-h3-ref2v-int8-20260809"
+
+# The same node module at the same pinned revision, because the reference set
+# ships the identical fl2va checkpoint under a different graph; the trained
+# canvas and temporal grid are the checkpoint's, so they are restated here
+# rather than reached for through the text-to-video row.
+REFERENCE_ENVELOPE_SOURCE: Final[str] = (
+    f"{MINIMAX_H3_SOURCE};"
+    " weights identical to minimax-h3-t2v-int8-20260809"
+    " (Comfy-Org/MiniMax-H3@014cd40f7e177756c6b2473c0d93b1c89a790dd2)"
+)
+
 TRAINED_RANGES: Final[dict[str, TrainedRange]] = {
-    "minimax-h3-t2v-int8-20260809": TrainedRange(
-        model_set_id="minimax-h3-t2v-int8-20260809",
+    TEXT_TO_VIDEO_MODEL_SET_ID: TrainedRange(
+        model_set_id=TEXT_TO_VIDEO_MODEL_SET_ID,
         short_edge=768,
         long_edge=1344,
         min_frames=124,
@@ -210,10 +268,25 @@ TRAINED_RANGES: Final[dict[str, TrainedRange]] = {
         canvas_multiple=32,
         source=MINIMAX_H3_SOURCE,
     ),
+    REFERENCE_MODEL_SET_ID: TrainedRange(
+        model_set_id=REFERENCE_MODEL_SET_ID,
+        short_edge=768,
+        long_edge=1344,
+        min_frames=124,
+        max_frames=362,
+        grid_stride=17,
+        grid_offset=5,
+        canvas_multiple=32,
+        source=REFERENCE_ENVELOPE_SOURCE,
+    ),
 }
 
+# Restated for the reference row. :data:`ENVELOPE_REVISION` is unchanged and
+# deliberately so: it labels the upstream declaration every row is read from,
+# and adding a row moved no existing default. The digest, not the revision
+# label, is what identifies the exact table a committed result ran under.
 ENVELOPE_DIGEST: Final[str] = (
-    "30f63bcc4ba9ef0c12ae82fdb554c0366396e71544a855800036bc57c52e47ca"
+    "22d6bf1e96a8cd4143a20fd5e9724e220b45d71f873df8f0757fea00e02d4c62"
 )
 
 
