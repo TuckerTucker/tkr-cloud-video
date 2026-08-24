@@ -4,10 +4,12 @@ Trigger: first provisioning of the declared retention policy on a bucket, a
 periodic drift check, a scheduled expiry sweep, or a `lifecycle_rule_*` failure
 reported by `check`.
 
-This bucket has never had lifecycle rules applied. Until the first successful
-`apply`, every period below is a declaration with no enforcing mechanism, and
-nothing has ever been deleted. Read the first-run section before running
-anything.
+Bucket rules were first provisioned on 2026-08-23: `input`, `hidden-version`
+and `multipart` are enforced by the provider, and a confirming `check` reports
+`rules in force match policy 3`. No sweep has run, so `failed-attempt`,
+`scratch`, `deliverable` and `prompt-evidence` remain declarations with no
+enforcing mechanism and nothing has ever been deleted. Read the first-sweep
+section before running step 6.
 
 ## Declared policy
 
@@ -30,48 +32,166 @@ as prefix rules would delete deliverables on the 14-day clock. Those classes are
 therefore never bucket rules; the reconciler separates them by heading
 `result.json`. Do not add an `outputs/` prefix rule by hand.
 
-## The RETENTION_REAPER key
+## The two control-plane keys
 
-Create one Backblaze application key named for the reaper role, restricted to
-the single retention bucket.
+This procedure needs two Backblaze application keys, not one. The provider
+refuses `writeBuckets` on a key restricted to a bucket — its capability
+reference says of that option, and of `deleteBuckets` alone among the
+capabilities, "This option is not allowed for app keys that are restricted to a
+bucket." So a key able to rewrite this bucket's lifecycle rules cannot also be
+confined to it, and a key confined to it cannot rewrite them.
 
-Object capabilities are the role's declared set in
+Splitting them is the stronger arrangement regardless. The lifecycle key holds
+no file capability, so it cannot read or delete a single object in any bucket.
+The reaper holds no bucket capability, so it cannot widen the rules that bound
+it. Neither can become the other.
+
+Neither key can be created in the web console, which offers only Read Only,
+Write Only, and Read and Write — "Read and Write" would grant `writeFiles` and
+`shareFiles`, which the reaper role deliberately excludes. Use the B2 CLI, which
+names capabilities individually.
+
+`scripts/create_retention_keys.sh` runs both creations and stores all four
+values in the vault. It reads the master key into the environment the B2 CLI
+consults — never onto a command line — points the account cache at a temporary
+file it removes on exit, and echoes no key. Pass `--rotate` to replace keys that
+are already stored; without it, it refuses rather than issuing a second pair.
+
+Run it from a terminal, where it prompts:
+
+```bash
+scripts/create_retention_keys.sh
+```
+
+It prompts on `/dev/tty` rather than stdin, so a wrapper that redirects stdin
+does not turn the prompt into a silent exit. Where there is no terminal at all —
+an editor's command runner, a `!` escape, CI — name a two-line file instead,
+which keeps the credential out of shell history. The script deletes the file
+however it exits:
+
+```bash
+printf '%s\n%s\n' '<keyID>' '<applicationKey>' > /tmp/b2-master
+chmod 600 /tmp/b2-master
+scripts/create_retention_keys.sh --credentials-file /tmp/b2-master
+```
+
+It restricts the reaper to whatever `TKR_B2_BUCKET_NAME` holds rather than to a
+literal, so the key cannot be scoped to a bucket the sweep does not address. The
+two creations it performs are:
+
+```bash
+b2 key create --bucket <bucket> \
+    retention-reaper listBuckets,listFiles,readFiles,deleteFiles
+b2 key create retention-rules listBuckets,writeBuckets
+```
+
+Each prints its key once and never again, which is why the script stores them
+rather than showing them.
+
+**`retention-reaper`** — bucket-restricted, used by `sweep`. Its object
+capabilities are the role's declared set in
 `src/tkr_cloud_video/security/credentials.py`: `listFiles`, `readFiles`, and
 `deleteFiles`. `deleteFiles` is held by no other role in the project —
 `model-reader`, `input-reader`, `output-writer`, and `delivery-reader` all lack
 it, which is why nothing a worker runs can delete. The role deliberately has no
 `writeFiles` and no `shareFiles`: the reaper cannot replace what it removes and
-never issues a link.
-
-`check` and `apply` call `b2_list_buckets` and `b2_update_bucket`, so the same
-key additionally needs `listBuckets` and `writeBuckets`. Do not set a file-name
-prefix restriction on the key: bucket configuration is not prefix-scopable, and
+never issues a link. `listBuckets` is added because the B2 tooling requires it
+to authorize at all; it is allowed on a bucket-restricted key, which must then
+name its bucket in the request, and `b2_lifecycle.py` does. Do not set a
+file-name prefix restriction: bucket configuration is not prefix-scopable, and
 subject erasure reaches `inputs/` as well as `outputs/`.
 
-This credential must never enter a worker. `SECRET_VARIABLES` in
+**`retention-rules`** — account-wide, used by `check` and `apply`. Account-wide
+is not a widening: with no `readFiles`, `writeFiles` or `deleteFiles` it cannot
+touch an object anywhere in the account. It can only read and rewrite bucket
+configuration, which is precisely `b2_list_buckets` and `b2_update_bucket`. Add
+`--duration 3600` if you would rather it expire after the run; drift repair
+later then needs a fresh one.
+
+Both pairs live in the project vault, which is where
+`provision_lifecycle_rules.sh` reads them. The creation script writes them; to
+set one by hand:
+
+```bash
+tkr op secrets.set_secret --vaultId project:tkr-cloud-video \
+    --name B2_REAPER_KEY_ID --value <reaper key id>
+```
+
+The vault opens from the credential chain (OS keychain, then
+`TKR_VAULT_PROJECT_TKR_CLOUD_VIDEO_PASSWORD`, then a `0600` password file), so
+no secret needs exporting to run any mode below.
+
+Neither credential may enter a worker. `SECRET_VARIABLES` in
 `src/tkr_cloud_video/security/process_secrets.py` is the allowlist of variables
-each process role may be handed, and `B2_REAPER_KEY_ID` /
-`B2_REAPER_APPLICATION_KEY` appear in none of them — that is pinned by
-`test_reaper_credential_reaches_no_worker_process`. Do not add them to a RunPod
-template, `Dockerfile`, worker image layer, or serverless environment. Supply
-them only in the operator shell that runs this procedure, and revoke the key if
-it is ever exported anywhere else.
+each process role may be handed, and none of the four appear in any of them —
+pinned by `test_reaper_credential_reaches_no_worker_process` and
+`test_lifecycle_credential_reaches_no_worker_process`. The lifecycle key is on
+that side of the boundary despite deleting nothing: a worker able to rewrite
+retention rules could extend its own retention. Do not add them to a RunPod
+template, `Dockerfile`, worker image layer, or serverless environment. The vault
+is read by the operator's own process at run time and never by a worker, which
+is what keeps that boundary true while the credentials live somewhere durable.
+Revoke a key if it is ever exported anywhere else.
 
 ## Environment
 
-Four values are required. Nothing is defaulted: a missing bucket must not
+Each mode requires three values and no more. They are read from the project
+vault when not already exported. Nothing is defaulted: a missing bucket must not
 resolve to another bucket and a missing credential must not fall back to an
 ambient one.
 
-- `B2_REAPER_KEY_ID`
-- `B2_REAPER_APPLICATION_KEY`
-- `B2_BUCKET_ID` — the bucket whose lifecycle rules are read and written
-- `B2_BUCKET_NAME` — the same bucket, as rclone addresses it
+`check` and `apply` — bucket configuration, on the lifecycle credential:
+
+| Variable | Vault name | |
+| --- | --- | --- |
+| `B2_LIFECYCLE_KEY_ID` | `B2_LIFECYCLE_KEY_ID` | |
+| `B2_LIFECYCLE_APPLICATION_KEY` | `B2_LIFECYCLE_APPLICATION_KEY` | |
+| `B2_BUCKET_ID` | `TKR_B2_BUCKET_ID` | the bucket whose lifecycle rules are read and written |
+
+`sweep` — object expiry, on the reaper credential:
+
+| Variable | Vault name | |
+| --- | --- | --- |
+| `B2_REAPER_KEY_ID` | `B2_REAPER_KEY_ID` | |
+| `B2_REAPER_APPLICATION_KEY` | `B2_REAPER_APPLICATION_KEY` | |
+| `B2_BUCKET_NAME` | `TKR_B2_BUCKET_NAME` | the same bucket, as rclone addresses it |
+
+A mode requires only its own pair. Running `sweep` does not ask for the
+lifecycle key and `check` does not ask for the reaper — an operator holding one
+key can run its mode without holding the other, which is what makes the split a
+boundary rather than a naming convention. `MODE_REQUIREMENTS` in
+`operations/retention_command.py` is the single declaration of this, read by
+both the script and the typed layer.
+
+The bucket name is `TKR_B2_BUCKET_NAME` in the vault because that is what
+`deploy_runpod_endpoint.sh` and `verify_evidence.sh` already call it. One bucket
+must not acquire a second vault name that can disagree with the first.
+
+An explicit export wins over the vault, which is what makes a one-off run
+against a different bucket possible without editing the vault. That override is
+also how the wrong bucket gets addressed, so the script reports the resolved
+source of every value and names the bucket before any mode runs:
+
+```
+retention: B2_LIFECYCLE_KEY_ID from vault (B2_LIFECYCLE_KEY_ID)
+retention: B2_BUCKET_ID from environment
+retention: addressing bucket <id or name> (check)
+```
+
+Read those lines. A credential's source is reported; its value never is.
+
+If a value resolves from neither source the script exits 2 naming every
+unresolved variable the mode needs, rather than the first one it happened to
+check.
 
 Two are optional:
 
 - `B2_REMOTE_NAME` — rclone configuration section name, default `tkr-retention`
 - `B2_BASE_PREFIX` — namespace the sweep addresses, default `outputs/`
+- `B2_RCLONE_EXECUTABLE` — absolute path to rclone for the sweep. The typed
+  default is the path the worker image pins, which does not exist on an
+  operator machine; the script resolves the operator's own from PATH and
+  reports which binary it will run. Set this only to pin a specific one.
 
 Leave `B2_BASE_PREFIX` alone unless the bucket does not use the root layout.
 Workers write `outputs/` and `inputs/` at the bucket root (`TKR_OUTPUT_PREFIX` /
@@ -98,9 +218,11 @@ Run every mode through the script, never by hand against the provider. The
 policy lives in typed Python, so the rules applied cannot diverge from the
 declared file.
 
-1. Export the four required variables in the operator shell only. Confirm they
-   are absent from every worker template first. `B2_BASE_PREFIX` needs no value
-   on a root-layout bucket.
+1. Confirm the six values are in the vault (`tkr op secrets.list_secrets
+   --vaultId project:tkr-cloud-video`) and that neither credential pair appears
+   in any worker template. Export nothing unless you are deliberately overriding
+   a value for this run. `B2_BASE_PREFIX` needs no value on a root-layout
+   bucket.
 2. `scripts/provision_lifecycle_rules.sh check` — report drift, change nothing.
    On a bucket that has never been provisioned this fails with
    `lifecycle_rule_missing`, naming `inputs/` and `<bucket>`. That is the
@@ -122,9 +244,7 @@ declared file.
    objects written between the two runs.
 
 ```bash
-export B2_REAPER_KEY_ID=... B2_REAPER_APPLICATION_KEY=...
-export B2_BUCKET_ID=... B2_BUCKET_NAME=...
-
+# nothing to export: every value resolves from project:tkr-cloud-video
 scripts/provision_lifecycle_rules.sh check     # expect drift on a new bucket
 scripts/provision_lifecycle_rules.sh apply     # rules become enforced here
 scripts/provision_lifecycle_rules.sh check     # expect: match policy 3
@@ -132,20 +252,32 @@ scripts/provision_lifecycle_rules.sh sweep     # reports only
 RETENTION_DRY_RUN=false scripts/provision_lifecycle_rules.sh sweep
 ```
 
-## First run on this bucket
+The script execs `${PYTHON:-python3}`, which is not this project's virtualenv.
+Run it with `PYTHON=.venv/bin/python` or with the environment activated.
 
-No rules have ever been in force and no sweep has ever run, so two things are
-true only once:
+## First sweep on this bucket
 
-- The first `apply` is the moment the `input`, `hidden-version`, and `multipart`
-  periods become real. Objects already older than their period are acted on by
-  the provider on its own schedule after that, without further operator action.
-- The first real sweep faces a backlog. Every uncommitted attempt older than 14
-  days and every committed attempt older than 365 days is deleted in one pass,
-  including the `generation.bin` carrying the prompt text. Deletion is
-  unrecoverable. The dry-run output from step 5 is the only review this gets, so
-  do not skip it and do not run step 6 in the same sitting if the counts are
-  larger than expected.
+The first `apply` landed on 2026-08-23 against an inventory that gave its rules
+nothing to act on: `inputs/` held zero objects, there were no unfinished large
+files, and the bucket was twelve days old so no version could have been hidden
+for thirty. That is why provisioning deleted nothing, and it is not a property
+to assume on the next bucket — establish the inventory before `apply`, because
+objects already older than their period are acted on by the provider on its own
+schedule afterwards, without further operator action.
+
+The first real sweep has not run. It faces whatever backlog exists: every
+uncommitted attempt older than 14 days and every committed attempt older than
+365 days is deleted in one pass, including the `generation.bin` carrying the
+prompt text. Deletion is unrecoverable. The dry-run output from step 5 is the
+only review this gets, so do not skip it and do not run step 6 in the same
+sitting if the counts are larger than expected.
+
+On this bucket, as of the provisioning date, that backlog is bounded by the
+bucket's own age. It was created 2026-08-11, so nothing in it can be older than
+the `failed-attempt` period of 14 days, let alone the 365-day `deliverable` and
+`prompt-evidence` periods. Only `scratch` (2 days) can have aged out. A dry run
+reporting deliverable or failed-attempt candidates on this bucket is reporting
+clock skew or the wrong bucket, not a policy decision.
 
 The sweep fails closed toward retention: an attempt whose commit marker cannot
 be read is classified as a deliverable and kept. A first run that reports
@@ -161,9 +293,11 @@ policy decision.
   delete was refused. A sweep with unresolved failures is never a clean sweep;
   re-run it after fixing the refusal rather than assuming the remainder went.
 - `2` — the mode argument was not `check`, `apply`, or `sweep`; a required
-  variable was empty (`retention_environment_incomplete`, which names every
-  missing variable); or `config/lifecycle.json` could not be read or validated.
-  Nothing was contacted and nothing changed.
+  value resolved from neither the environment nor the vault (the script names
+  every unresolved variable, and the typed layer behind it raises
+  `retention_environment_incomplete` for the same condition); or
+  `config/lifecycle.json` could not be read or validated. Nothing was contacted
+  and nothing changed.
 
 ## When check reports drift
 
@@ -190,14 +324,37 @@ declared document and re-project, never the bucket by hand. Resolve drift with
 
 Expected observables: `check` is read-only and leaves rule state untouched; a
 sweep with `RETENTION_DRY_RUN` unset deletes nothing and says `would delete`;
-the reaper variables appear in no process-role allowlist and no worker image;
+every run names its bucket and the source of each resolved value while printing
+no credential; a sweep runs without the lifecycle credential and a check without
+the reaper; neither credential pair appears in a process-role allowlist or a
+worker image;
 committed attempts survive the failed-attempt period while uncommitted ones do
 not; an attempt whose marker cannot be read is retained; the commit marker is
 the last object removed from any attempt; classes matching no objects are
 stated rather than silently absent.
 
-rehearsal: none — no `B2_REAPER_*` credential exists in any environment, so no
-mode of this procedure has been run against a live bucket. The three modes,
-their exit statuses, and the drift codes are exercised only against fakes in
-`tests/durable_delivery/test_retention_adapters.py`. Until a first run is
-rehearsed and dated here, treat this document as a hypothesis.
+rehearsal: 2026-08-23 — `check`, `apply`, a confirming `check`, and a dry-run
+`sweep` were run against `tkr-cloud-video-aba33dd61d3e` on the credentials this
+document describes. `check` on an unprovisioned bucket returned
+`lifecycle_rule_missing` naming `<bucket>,inputs/` at exit 1; `apply` reported
+`applied 2 rules from policy 3`; the confirming `check` reported `rules in force
+match policy 3` at exit 0. The dry-run sweep reported `evaluated 11 attempts,
+would delete 0 objects, 0 unresolved`, with `failed-attempt`, `prompt-evidence`
+and `scratch` matching no objects — consistent with a bucket twelve days old
+whose shortest reconciler period is two days. A non-zero attempt count is the
+evidence that the base prefix addresses the namespace the workers write to.
+
+The run found three defects this document had asserted away. The drift codes
+carry the offending prefix in their error context and the operator entrypoint
+printed only the code and message, so the refusal was correct and anonymous. The
+sweep resolved rclone at the absolute path the worker image pins, which does not
+exist off-image, so the first sweep failed on a machine the procedure is written
+for. And that failure surfaced as a raw `OSError` traceback rather than the
+coded exit the status contract promises, because the executor classified
+timeouts, oversized output and non-zero returns but not a missing binary. All
+three are fixed and pinned in `tests/durable_delivery/test_retention_adapters.py`.
+
+Step 6 has still never run. On this bucket the dry run says it would delete
+nothing, so running it would prove the deleting path only in the sense that it
+completes — it would not prove that a delete is issued. Treat the deleting path
+as unrehearsed until a sweep with something to remove is recorded here.
