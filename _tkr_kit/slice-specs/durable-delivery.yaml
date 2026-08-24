@@ -2297,7 +2297,7 @@ slice_specs:
         S11-T04.
   - name: enforced-retention-12-spec
     title: Retention reconciler and bucket lifecycle rules Specification
-    status: planned
+    status: approved
     format: full
     capability: durable-delivery
     feature: enforced-retention
@@ -2596,7 +2596,7 @@ slice_specs:
         faked so expiry is exercised without waiting.
   - name: enforced-retention-14-spec
     title: Principal access and erasure API Specification
-    status: planned
+    status: approved
     format: full
     capability: durable-delivery
     feature: enforced-retention

@@ -2,16 +2,19 @@ id: work-2SDfyzsa
 title: Slice 10 claims acceptance coverage for a story with no implementation
 kind: debt
 severity: medium
-status: open
+status: closed
 capabilityId: durable-delivery
 anchors:
   - tests/durable_delivery/test_private_result_access_and_retention.py
 createdAt: 2026-08-15T03:02:31.020Z
-updatedAt: 2026-08-15T03:02:31.020Z
+updatedAt: 2026-08-24T00:42:58.878Z
 provenance:
   source: compliance-triage
   ref: _tkr_kit/slices/durable-delivery.yaml
   fingerprint: false-done-lifecycle-acceptance-coverage
+evidence:
+  kind: commit
+  ref: 3e8820f
 remedy: Slice 15 replaces this coverage with assertions on observable storage
   state after expiry. Until then, treat enforce-object-lifecycle-policy as
   untested rather than passing.

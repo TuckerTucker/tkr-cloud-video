@@ -457,4 +457,7 @@ slices:
         close.
     title: Wire and test Enforced Retention and Erasure
     layer: integration
-    status: in_progress
+    status: done
+    evidence:
+      kind: commit
+      ref: 3e8820f

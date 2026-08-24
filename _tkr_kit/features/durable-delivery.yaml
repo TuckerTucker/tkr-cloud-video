@@ -53,7 +53,7 @@ features:
       - Deleting retained deliverables because an unrelated scratch policy
         matched.
   - name: enforced-retention
-    status: planned
+    status: done
     display_name: Enforced Retention and Erasure
     user_story: As a data subject and as the operator accountable for their
       information, I want prompts, uploaded reference images and generated video
@@ -106,3 +106,6 @@ features:
       - Deleting immutable release evidence (digests, manifest bindings,
         provenance), which is a separate retention obligation from personal
         information.
+    evidence:
+      kind: commit
+      ref: 3e8820f
