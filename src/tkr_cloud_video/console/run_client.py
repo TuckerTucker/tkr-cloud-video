@@ -54,6 +54,19 @@ class RunStatus:
         return self.status in TERMINAL_STATUSES
 
 
+@dataclass(frozen=True, slots=True)
+class EndpointHealth:
+    """Bounded aggregate health exposed by the RunPod endpoint."""
+
+    jobs_completed: int
+    jobs_failed: int
+    jobs_in_progress: int
+    jobs_in_queue: int
+    jobs_retried: int
+    workers_idle: int
+    workers_running: int
+
+
 class EndpointPausedError(AppError):
     """The endpoint has not resumed, so it is refusing work for now.
 
@@ -76,6 +89,10 @@ class RunClient(Protocol):
 
     async def cancel(self, run_id: str) -> str:
         """Cancel one submitted run and return the status it reports after."""
+        ...
+
+    async def health(self) -> EndpointHealth:
+        """Return aggregate endpoint queue and worker counts."""
         ...
 
 
@@ -193,6 +210,35 @@ class RunPodRunClient:
         status = response.get("status")
         return status if isinstance(status, str) else "CANCELLED"
 
+    async def health(self) -> EndpointHealth:
+        """Return validated aggregate queue and worker counts."""
+        response = await asyncio.to_thread(self._call, "/health", None)
+        jobs = response.get("jobs")
+        workers = response.get("workers")
+        if not isinstance(jobs, dict) or not isinstance(workers, dict):
+            raise AppError(
+                "provider_response_invalid",
+                "The RunPod health API returned an incomplete document.",
+                context={"operation": "observe_endpoint_health"},
+            )
+        try:
+            return EndpointHealth(
+                jobs_completed=_count(jobs, "completed"),
+                jobs_failed=_count(jobs, "failed"),
+                jobs_in_progress=_count(jobs, "inProgress"),
+                jobs_in_queue=_count(jobs, "inQueue"),
+                jobs_retried=_count(jobs, "retried"),
+                workers_idle=_count(workers, "idle"),
+                workers_running=_count(workers, "running"),
+            )
+        except ValueError as error:
+            raise AppError(
+                "provider_response_invalid",
+                "The RunPod health API returned an invalid count.",
+                context={"operation": "observe_endpoint_health"},
+                cause=error,
+            ) from error
+
 
 def _optional_int(value: object) -> int | None:
     """Return an integer timing, or None when absent or unusable.
@@ -202,4 +248,12 @@ def _optional_int(value: object) -> int | None:
     """
     if isinstance(value, bool) or not isinstance(value, int):
         return None
+    return value
+
+
+def _count(group: dict[str, Any], name: str) -> int:
+    """Read one required non-negative provider count."""
+    value = group.get(name)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(name)
     return value

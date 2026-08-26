@@ -58,6 +58,26 @@ main {
 
 #vocabularies-panel { grid-column: 1 / -1; }
 
+.panel-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.panel-heading h2 { margin-bottom: 8px; }
+.worker-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 0 0 16px; }
+.worker-summary .hint { margin: 0; }
+
+.telemetry {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.telemetry div { padding: 10px 12px; border: 1px solid var(--edge); border-radius: 6px; background: #0b0f15; }
+.telemetry dt { color: var(--muted); font-size: 11px; }
+.telemetry dd { margin: 2px 0 0; font: 600 17px var(--mono); }
+@media (max-width: 620px) { .telemetry { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.warmup-control { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--edge); }
+.warmup-control .primary { display: block; }
+.warmup-observation { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--edge); border-radius: 8px; }
+
 h2 { margin: 0 0 16px; font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); }
 h3 { margin: 0 0 8px; font-size: 13px; }
 

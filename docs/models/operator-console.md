@@ -45,6 +45,30 @@ newly registered model set reaches the page by being registered.
 the page shows back the exact text that would reach the workflow. Without it a
 caller composing a structured prompt has no way to see what it composed to.
 
+**It reports endpoint capacity and can warm one worker.** The console polls
+RunPod's endpoint health route for aggregate idle/running worker and job counts.
+It renders `Warm` only when the provider reports an idle worker; otherwise it
+distinguishes `Busy`, `Starting`, `Cold`, and `Unknown` without treating a
+failed telemetry call as evidence that the endpoint is cold.
+
+`Warm one worker` submits a reserved versioned control envelope. The worker
+runs the same configuration, disk/connectivity preflight, verified hydration,
+ComfyUI startup, and inventory validation that precede generation, then returns
+a bounded snapshot. It creates no generation identity and writes no delivery
+object. A warm-up may allocate billable GPU capacity, and it does not override
+RunPod's configured idle timeout; the page therefore prevents concurrent
+warm-ups and applies a short cooldown after each terminal control run.
+
+The snapshot allowlists worker, release, and model-set identities; lifecycle
+state and readiness; whether the observation paid a cold start; startup and
+uptime durations; and the observation time. Normal accepted generation runs
+return the same snapshot. It contains no environment values, secrets, paths,
+prompts, or signed links. GPU, cache, and hydration detail remain visibly
+unavailable until a production metrics adapter supplies them rather than being
+guessed from provider state.
+
+> verify: `uv run pytest tests/console tests/operations_and_scale/test_serverless_release.py -k 'health or warmup'`
+
 ## Configuration
 
 | Variable | Meaning |
@@ -119,6 +143,11 @@ output is pinned against a vector verified byte for byte against `botocore`.
 
 | What is shown | What it means |
 |---|---|
+| `Warm` | RunPod reports at least one idle worker |
+| `Busy` | workers are active, but none is idle |
+| `Starting` | work is queued and no active worker is yet reported |
+| `Cold` | a successful health response reports no workers and no queue |
+| `Unknown` | endpoint telemetry failed or was malformed; no worker state is inferred |
 | "The endpoint has not resumed yet" | the config plane accepted a change the run plane has not; resubmit shortly |
 | A refusal before submission | the request is invalid; the defect names the field and the rule |
 | `COMPLETED` with a refusal beneath it | the worker answered but rejected the request; nothing was generated |

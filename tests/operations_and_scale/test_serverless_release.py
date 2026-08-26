@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -31,6 +33,8 @@ from tkr_cloud_video.release.runpod_handler import (
     JobApplication,
     RunPodHandler,
 )
+from tkr_cloud_video.release.serverless import ServerlessDeployment
+from tkr_cloud_video.runtime.lifecycle import WorkerLifecycle, WorkerState
 
 
 def request_payload() -> dict[str, object]:
@@ -99,6 +103,118 @@ class Application:
         if self.error is not None:
             raise self.error
         return "job-1", "outputs/job-1/attempt-1/result.json"
+
+
+def warmup_deployment() -> tuple[ServerlessDeployment, list[dict[str, str]]]:
+    """Build the narrow worker surface used by control-envelope tests."""
+    lifecycle = WorkerLifecycle()
+    starts: list[dict[str, str]] = []
+
+    class Supervisor:
+        async def start(self, environment: dict[str, str]) -> None:
+            starts.append(environment)
+            lifecycle.state = WorkerState.READY
+
+    class RejectingHandler:
+        def validate(self, event: object) -> HandlerResponse:
+            return HandlerResponse(False, error_code="invalid_envelope")
+
+    worker = SimpleNamespace(
+        settings=SimpleNamespace(
+            worker_id="worker-1",
+            release_id="release-1",
+            model_set_id="models-1",
+        ),
+        services=SimpleNamespace(
+            lifecycle=lifecycle,
+            supervisor=Supervisor(),
+        ),
+        comfy_environment={"SAFE_SETTING": "value"},
+    )
+    return ServerlessDeployment(worker, RejectingHandler()), starts  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_warmup_control_starts_worker_and_returns_safe_snapshot() -> None:
+    """The exact control envelope readies a worker without generation intake."""
+    deployment, starts = warmup_deployment()
+
+    response = await deployment.handle(
+        {"input": {"operation": "warmup", "schema_version": "1"}}
+    )
+    worker = cast(dict[str, Any], response["worker"])
+
+    assert response["ok"] is True
+    assert response["operation"] == "warmup"
+    assert worker.keys() == {
+        "worker_id",
+        "release_id",
+        "model_set_id",
+        "state",
+        "ready",
+        "cold_start",
+        "startup_seconds",
+        "uptime_seconds",
+        "observed_at",
+    }
+    assert worker | {
+        "startup_seconds": None,
+        "uptime_seconds": None,
+        "observed_at": None,
+    } == {
+        "worker_id": "worker-1",
+        "release_id": "release-1",
+        "model_set_id": "models-1",
+        "state": "ready",
+        "ready": True,
+        "cold_start": True,
+        "startup_seconds": None,
+        "uptime_seconds": None,
+        "observed_at": None,
+    }
+    assert isinstance(worker["startup_seconds"], float)
+    assert isinstance(worker["uptime_seconds"], float)
+    assert isinstance(worker["observed_at"], str)
+    assert starts == [{"SAFE_SETTING": "value"}]
+
+    warm_response = await deployment.handle(
+        {"input": {"schema_version": "1", "operation": "warmup"}}
+    )
+    warm_worker = cast(dict[str, Any], warm_response["worker"])
+    assert warm_worker["cold_start"] is False
+    assert starts == [{"SAFE_SETTING": "value"}]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "event",
+    [
+        {"input": {"operation": "warmup"}},
+        {"input": {"operation": "warmup", "schema_version": "2"}},
+        {
+            "input": {
+                "operation": "warmup",
+                "schema_version": "1",
+                "extra": True,
+            }
+        },
+        {
+            "input": {"operation": "warmup", "schema_version": "1"},
+            "extra": True,
+        },
+    ],
+)
+async def test_near_warmup_envelopes_follow_normal_validation(
+    event: object,
+) -> None:
+    """Malformed or extended controls cannot bypass the request contract."""
+    deployment, starts = warmup_deployment()
+
+    response = await deployment.handle(event)
+
+    assert response["ok"] is False
+    assert response["error_code"] == "invalid_envelope"
+    assert starts == []
 
 
 def evidence(

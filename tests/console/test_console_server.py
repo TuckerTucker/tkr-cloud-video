@@ -158,6 +158,26 @@ async def test_the_generate_observe_and_deliver_routes_carry_one_run_through() -
 
 
 @pytest.mark.asyncio
+async def test_health_and_warmup_routes_carry_a_control_run_through() -> None:
+    """Worker controls remain separate from generation and delivery routes."""
+    service, runs, _, registry = build()
+
+    _, health = await call(service, "GET", "/api/endpoint-health")
+    _, submitted = await call(service, "POST", "/api/warmup")
+    run_id = submitted["run"]["run_id"]
+    runs.statuses[run_id] = RunStatus(
+        run_id=run_id,
+        status="COMPLETED",
+        output={"ok": True, "operation": "warmup", "worker": {"ready": True}},
+    )
+    _, observed = await call(service, "GET", f"/api/warmups/{run_id}")
+
+    assert health["workers"] == {"idle": 1, "running": 0}
+    assert observed["handler"]["worker"] == {"ready": True}
+    assert list(registry) == []
+
+
+@pytest.mark.asyncio
 async def test_a_result_route_answers_for_a_registered_job() -> None:
     """Metadata without a link is its own route."""
     reader = FakeObjectReader()

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from tkr_cloud_video.console.run_client import RunStatus
+from tkr_cloud_video.console.run_client import EndpointHealth, RunStatus
 from tkr_cloud_video.console.settings import ConsoleCredentials, ConsoleSettings
 
 # The instant the frozen presigning vector in test_signed_delivery.py was
@@ -56,6 +56,9 @@ class FakeRunClient:
     cancelled: list[str] = field(default_factory=list)
     submit_error: Exception | None = None
     fail_with: Exception | None = None
+    endpoint_health: EndpointHealth = field(
+        default_factory=lambda: EndpointHealth(1, 0, 0, 0, 0, 1, 0)
+    )
 
     async def submit(self, payload: dict[str, Any]) -> str:
         """Record one submission, or raise the configured failure."""
@@ -76,6 +79,12 @@ class FakeRunClient:
             raise self.fail_with
         self.cancelled.append(run_id)
         return "CANCELLED"
+
+    async def health(self) -> EndpointHealth:
+        """Return aggregate health, or the configured failure."""
+        if self.fail_with is not None:
+            raise self.fail_with
+        return self.endpoint_health
 
 
 @dataclass

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 
 from tkr_cloud_video.adapters.media import (
     FfprobeInputInspector,
@@ -54,25 +56,69 @@ class ServerlessDeployment:
     def __post_init__(self) -> None:
         """Create a concurrency-safe one-time startup gate."""
         self._startup_lock = asyncio.Lock()
+        self._created_at = time.monotonic()
+        self._startup_seconds: float | None = None
 
     async def ensure_started(self) -> bool:
         """Hydrate and validate once on the long-lived SDK job event loop."""
         async with self._startup_lock:
             if not self.worker.services.lifecycle.ready:
+                started_at = time.monotonic()
                 await self.worker.services.supervisor.start(
                     self.worker.comfy_environment
                 )
+                self._startup_seconds = time.monotonic() - started_at
         return self.worker.services.lifecycle.ready
 
     async def handle(self, event: object) -> dict[str, object]:
         """Reject invalid input before startup, then run the canonical handler."""
         if self.runtime_diagnostic is not None:
             await self.runtime_diagnostic.publish()
+        if _is_warmup_event(event):
+            cold_start = not self.worker.services.lifecycle.ready
+            await self.ensure_started()
+            return {
+                "ok": True,
+                "operation": "warmup",
+                "worker": self._worker_snapshot(cold_start=cold_start),
+            }
         validated = self.handler.validate(event)
         if isinstance(validated, HandlerResponse):
             return asdict(validated)
+        cold_start = not self.worker.services.lifecycle.ready
         await self.ensure_started()
-        return asdict(await self.handler.handle_request(validated))
+        response = asdict(await self.handler.handle_request(validated))
+        response["worker"] = self._worker_snapshot(cold_start=cold_start)
+        return response
+
+    def _worker_snapshot(self, *, cold_start: bool) -> dict[str, object]:
+        """Return a small allowlisted snapshot without secrets or local paths."""
+        settings = self.worker.settings
+        lifecycle = self.worker.services.lifecycle
+        return {
+            "worker_id": settings.worker_id,
+            "release_id": settings.release_id,
+            "model_set_id": settings.model_set_id,
+            "state": lifecycle.state.value,
+            "ready": lifecycle.ready,
+            "cold_start": cold_start,
+            "startup_seconds": self._startup_seconds,
+            "uptime_seconds": max(0.0, time.monotonic() - self._created_at),
+            "observed_at": datetime.now(UTC).isoformat(),
+        }
+
+
+def _is_warmup_event(event: object) -> bool:
+    """Recognize only the versioned control envelope reserved for warm-up."""
+    if not isinstance(event, Mapping) or set(event) != {"input"}:
+        return False
+    payload = event["input"]
+    return (
+        isinstance(payload, Mapping)
+        and set(payload) == {"operation", "schema_version"}
+        and payload["operation"] == "warmup"
+        and payload["schema_version"] == "1"
+    )
 
 
 def compose_serverless_deployment(

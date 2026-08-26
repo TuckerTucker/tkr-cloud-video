@@ -36,6 +36,9 @@ RUN_STATUS_PATH: Final[re.Pattern[str]] = re.compile(
 RUN_CANCEL_PATH: Final[re.Pattern[str]] = re.compile(
     rf"^/api/runs/({IDENTIFIER_PATTERN})/cancel$"
 )
+WARMUP_STATUS_PATH: Final[re.Pattern[str]] = re.compile(
+    rf"^/api/warmups/({IDENTIFIER_PATTERN})$"
+)
 JOB_RESULT_PATH: Final[re.Pattern[str]] = re.compile(
     rf"^/api/jobs/({IDENTIFIER_PATTERN})/result$"
 )
@@ -200,10 +203,18 @@ async def _dispatch_api(
         return _json(service.scope())
     if path == "/api/history" and method == "GET":
         return _json(service.history())
+    if path == "/api/endpoint-health" and method == "GET":
+        return _json(await service.endpoint_health())
+    if path == "/api/warmup" and method == "POST":
+        return _json(await service.warmup())
     if path == "/api/preflight" and method == "POST":
         return _json(service.preflight(_decode(body)))
     if path == "/api/generate" and method == "POST":
         return _json(await service.generate(_decode(body)))
+
+    matched = WARMUP_STATUS_PATH.match(path)
+    if matched and method == "GET":
+        return _json(await service.observe_warmup(matched.group(1)))
 
     matched = RUN_STATUS_PATH.match(path)
     if matched and method == "GET":

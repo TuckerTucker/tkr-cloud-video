@@ -90,6 +90,57 @@
     </div>
   </section>
 
+  <section class="panel" id="workers-panel" aria-labelledby="workers-heading">
+    <div class="panel-heading">
+      <div>
+        <h2 id="workers-heading">Worker status</h2>
+        <p class="worker-summary">
+          <span class="status" id="endpoint-state" data-tone="idle">Unknown</span>
+          <span class="hint" id="endpoint-state-detail">Checking endpoint telemetry…</span>
+        </p>
+      </div>
+      <button type="button" id="refresh-health" class="ghost">Refresh</button>
+    </div>
+
+    <dl class="telemetry" aria-label="Endpoint telemetry">
+      <div><dt>Ready / idle</dt><dd id="workers-idle">—</dd></div>
+      <div><dt>Busy</dt><dd id="workers-running">—</dd></div>
+      <div><dt>Queued jobs</dt><dd id="jobs-in-queue">—</dd></div>
+      <div><dt>In progress</dt><dd id="jobs-in-progress">—</dd></div>
+      <div><dt>Completed</dt><dd id="jobs-completed">—</dd></div>
+      <div><dt>Failed / retried</dt><dd id="jobs-failed-retried">—</dd></div>
+    </dl>
+    <p class="hint">Last observed <span id="health-observed-at">—</span>. Refreshes every 10 seconds.</p>
+
+    <div class="warmup-control">
+      <button type="button" id="warmup" class="primary">Warm one worker</button>
+      <p class="hint">
+        Starts a real serverless job and may incur compute charges. It makes one worker
+        model-ready, but RunPod may recycle it after the endpoint idle timeout.
+      </p>
+      <p class="run-note hidden" id="warmup-error" role="alert"></p>
+    </div>
+
+    <div class="warmup-observation hidden" id="warmup-observation" aria-live="polite">
+      <div class="run-head">
+        <span class="status" id="warmup-status" data-tone="idle">submitted</span>
+        <code class="run-id" id="warmup-run-id"></code>
+      </div>
+      <dl class="run-facts">
+        <dt>Queued</dt><dd id="warmup-delay">—</dd>
+        <dt>Executing</dt><dd id="warmup-execution">—</dd>
+        <dt>Worker</dt><dd id="warmup-worker">—</dd>
+        <dt>Release</dt><dd id="warmup-release">—</dd>
+        <dt>Readiness</dt><dd id="warmup-readiness">—</dd>
+        <dt>Cold start</dt><dd id="warmup-cold-start">—</dd>
+        <dt>Hydration</dt><dd id="warmup-hydration">—</dd>
+        <dt>GPU / VRAM</dt><dd id="warmup-gpu">—</dd>
+        <dt>Cache hits / misses</dt><dd id="warmup-cache">—</dd>
+        <dt>Snapshot observed</dt><dd id="warmup-observed-at">—</dd>
+      </dl>
+    </div>
+  </section>
+
   <section class="panel" id="runs-panel">
     <h2>Runs</h2>
     <p class="hint" id="runs-empty">Nothing submitted in this session.</p>

@@ -12,6 +12,7 @@ import pytest
 
 from tests.console.conftest import CREDENTIALS, settings
 from tkr_cloud_video.console.run_client import (
+    EndpointHealth,
     EndpointPausedError,
     RunPodRunClient,
 )
@@ -169,6 +170,62 @@ async def test_a_cancellation_reports_the_status_that_followed_it(
 
     assert await client().cancel("run-9") == "CANCELLED"
     assert calls[0][1].endswith("/cancel/run-9")
+
+
+@pytest.mark.asyncio
+async def test_endpoint_health_carries_only_validated_aggregate_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fleet telemetry uses the provider's bounded health document."""
+    calls = _answer(
+        monkeypatch,
+        {
+            "jobs": {
+                "completed": 9,
+                "failed": 1,
+                "inProgress": 2,
+                "inQueue": 3,
+                "retried": 4,
+            },
+            "workers": {"idle": 1, "running": 2},
+        },
+    )
+
+    health = await client().health()
+
+    assert health == EndpointHealth(9, 1, 2, 3, 4, 1, 2)
+    assert calls[0][:2] == (
+        "GET",
+        "https://api.runpod.ai/v2/176tpna3ogl94t/health",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"jobs": {}, "workers": {}},
+        {
+            "jobs": {
+                "completed": True,
+                "failed": 0,
+                "inProgress": 0,
+                "inQueue": 0,
+                "retried": 0,
+            },
+            "workers": {"idle": 0, "running": 0},
+        },
+    ],
+)
+async def test_invalid_endpoint_health_is_refused(
+    monkeypatch: pytest.MonkeyPatch, payload: object
+) -> None:
+    """Missing and non-numeric counts never become misleading zeroes."""
+    _answer(monkeypatch, payload)
+
+    with pytest.raises(AppError, match="health API"):
+        await client().health()
 
 
 @pytest.mark.asyncio

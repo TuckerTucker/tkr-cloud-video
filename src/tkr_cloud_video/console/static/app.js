@@ -8,6 +8,7 @@ const FIXED_OVERHEAD_MS = 414196;
 
 const POLL_INTERVAL_MS = 10000;
 const PREFLIGHT_DEBOUNCE_MS = 350;
+const WARMUP_COOLDOWN_MS = 30000;
 
 const state = {
   constraints: null,
@@ -15,6 +16,9 @@ const state = {
   form: "freeform",
   preflight: null,
   runs: new Map(),
+  healthTimer: null,
+  warmup: null,
+  warmupCooldownUntil: 0,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -57,6 +61,169 @@ function duration(ms) {
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
   return minutes ? `${minutes}m ${String(seconds).padStart(2, "0")}s` : `${seconds}s`;
+}
+
+function observedTime(value) {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleTimeString();
+}
+
+// ---------------------------------------------------------- worker telemetry
+
+function endpointState(payload) {
+  const workers = payload && payload.workers;
+  const jobs = payload && payload.jobs;
+  if (
+    !payload || payload.ok !== true || !workers || !jobs ||
+    !Number.isFinite(workers.idle) || !Number.isFinite(workers.running) ||
+    !Number.isFinite(jobs.in_queue)
+  ) return { label: "Unknown", tone: "idle", detail: "Endpoint telemetry is unavailable." };
+  if (workers.idle > 0) {
+    return { label: "Warm", tone: "done", detail: "At least one worker is ready for work." };
+  }
+  if (workers.running > 0) {
+    return { label: "Busy", tone: "running", detail: "All active workers are currently busy." };
+  }
+  if (jobs.in_queue > 0) {
+    return { label: "Starting", tone: "running", detail: "Work is queued while capacity starts." };
+  }
+  return { label: "Cold", tone: "idle", detail: "No active workers or queued work were reported." };
+}
+
+function renderEndpointHealth(payload) {
+  const endpoint = endpointState(payload);
+  const badge = $("endpoint-state");
+  text(badge, endpoint.label);
+  badge.dataset.tone = endpoint.tone;
+  text($("endpoint-state-detail"), payload && payload.ok === false ? payload.message || endpoint.detail : endpoint.detail);
+  const valid = payload && payload.ok === true;
+  const workers = valid ? payload.workers || {} : {};
+  const jobs = valid ? payload.jobs || {} : {};
+  text($("workers-idle"), workers.idle ?? "—");
+  text($("workers-running"), workers.running ?? "—");
+  text($("jobs-in-queue"), jobs.in_queue ?? "—");
+  text($("jobs-in-progress"), jobs.in_progress ?? "—");
+  text($("jobs-completed"), jobs.completed ?? "—");
+  text(
+    $("jobs-failed-retried"),
+    jobs.failed == null && jobs.retried == null ? "—" : `${jobs.failed ?? 0} / ${jobs.retried ?? 0}`
+  );
+  text($("health-observed-at"), valid ? observedTime(payload.observed_at) : "unavailable");
+}
+
+async function pollEndpointHealth() {
+  renderEndpointHealth(await api("/api/endpoint-health"));
+}
+
+function warmupSnapshot(payload) {
+  return payload.worker || (payload.handler && payload.handler.worker) || {};
+}
+
+function metricMilliseconds(milliseconds, seconds) {
+  if (Number.isFinite(milliseconds)) return milliseconds;
+  return Number.isFinite(seconds) ? seconds * 1000 : null;
+}
+
+function renderWarmup(payload) {
+  const status = payload.status || "unknown";
+  const handler = payload.handler || {};
+  const worker = warmupSnapshot(payload);
+  const badge = $("warmup-status");
+  text(badge, status.toLowerCase().replaceAll("_", " "));
+  badge.dataset.tone = toneFor(status, handler.ok === true && payload.terminal ? "completed" : null);
+  text($("warmup-delay"), duration(payload.delay_time_ms));
+  text($("warmup-execution"), duration(payload.execution_time_ms));
+  text($("warmup-worker"), worker.worker_id || "—");
+  text($("warmup-release"), worker.release_id || "—");
+  text($("warmup-readiness"), worker.state || (worker.comfyui_ready === true ? "ready" : "—"));
+  const startup = duration(
+    metricMilliseconds(
+      worker.cold_start_ms,
+      worker.cold_start_seconds ?? worker.startup_seconds
+    )
+  );
+  text(
+    $("warmup-cold-start"),
+    worker.cold_start === true
+      ? `Yes · ${startup}`
+      : worker.cold_start === false
+        ? `No · ${startup}`
+        : startup
+  );
+  text($("warmup-hydration"), duration(metricMilliseconds(worker.hydration_ms, worker.hydration_seconds)));
+  const gpu = worker.gpu || {};
+  const used = gpu.memory_used_bytes;
+  const total = gpu.memory_total_bytes;
+  const memory = Number.isFinite(used) && Number.isFinite(total)
+    ? `${(used / 2 ** 30).toFixed(1)} / ${(total / 2 ** 30).toFixed(1)} GiB`
+    : "—";
+  text($("warmup-gpu"), gpu.model ? `${gpu.model} · ${memory}` : memory);
+  text(
+    $("warmup-cache"),
+    Number.isFinite(worker.cache_hits) || Number.isFinite(worker.cache_misses)
+      ? `${worker.cache_hits ?? 0} / ${worker.cache_misses ?? 0}`
+      : "—"
+  );
+  text($("warmup-observed-at"), observedTime(worker.observed_at));
+
+  const failed = handler.ok === false || ["FAILED", "CANCELLED", "TIMED_OUT"].includes(status);
+  text($("warmup-error"), failed ? handler.message || payload.provider_error || "The warm-up did not complete." : "");
+  show($("warmup-error"), failed);
+}
+
+function updateWarmupButton() {
+  const active = state.warmup && !state.warmup.terminal;
+  const coolingDown = Date.now() < state.warmupCooldownUntil;
+  $("warmup").disabled = Boolean(active || coolingDown);
+  if (active) text($("warmup"), "Warming…");
+  else if (coolingDown) text($("warmup"), "Warm-up cooling down…");
+  else text($("warmup"), "Warm one worker");
+}
+
+async function pollWarmup() {
+  if (!state.warmup || state.warmup.terminal) return;
+  const payload = await api(`/api/warmups/${encodeURIComponent(state.warmup.run_id)}`);
+  if (!payload.ok) {
+    text($("warmup-error"), `This console could not observe the warm-up (${payload.error_code}). ${payload.message}`);
+    show($("warmup-error"), true);
+    return;
+  }
+  state.warmup.terminal = Boolean(payload.terminal);
+  renderWarmup(payload);
+  updateWarmupButton();
+  if (payload.terminal) {
+    window.clearInterval(state.warmup.timer);
+    state.warmup.timer = null;
+    state.warmupCooldownUntil = Date.now() + WARMUP_COOLDOWN_MS;
+    updateWarmupButton();
+    window.setTimeout(updateWarmupButton, WARMUP_COOLDOWN_MS);
+    pollEndpointHealth();
+  }
+}
+
+async function warmOneWorker() {
+  if ((state.warmup && !state.warmup.terminal) || Date.now() < state.warmupCooldownUntil) return;
+  $("warmup").disabled = true;
+  text($("warmup"), "Submitting…");
+  show($("warmup-error"), false);
+  const payload = await api("/api/warmup", { method: "POST", body: JSON.stringify({}) });
+  if (!payload.ok) {
+    text($("warmup-error"), payload.message || "The warm-up could not be submitted.");
+    show($("warmup-error"), true);
+    updateWarmupButton();
+    return;
+  }
+  const record = payload.run;
+  state.warmup = { run_id: record.run_id, terminal: false, timer: null };
+  text($("warmup-run-id"), record.run_id);
+  show($("warmup-observation"), true);
+  text($("warmup-status"), "submitted");
+  $("warmup-status").dataset.tone = "running";
+  updateWarmupButton();
+  state.warmup.timer = window.setInterval(pollWarmup, POLL_INTERVAL_MS);
+  pollWarmup();
+  pollEndpointHealth();
 }
 
 // ---------------------------------------------------------------- constraints
@@ -411,6 +578,8 @@ function bindForm() {
   $("tab-freeform").addEventListener("click", () => selectForm("freeform"));
   $("tab-structured").addEventListener("click", () => selectForm("structured"));
   $("generate").addEventListener("click", generate);
+  $("warmup").addEventListener("click", warmOneWorker);
+  $("refresh-health").addEventListener("click", pollEndpointHealth);
 }
 
 function selectForm(form) {
@@ -467,6 +636,8 @@ async function boot() {
   select.value = state.modelSet;
   applyModelSet();
   bindForm();
+  pollEndpointHealth();
+  state.healthTimer = window.setInterval(pollEndpointHealth, POLL_INTERVAL_MS);
   schedulePreflight();
 }
 

@@ -22,7 +22,11 @@ from tkr_cloud_video.console.results import (
     RegisteredJobAuthorizer,
     derive_identity,
 )
-from tkr_cloud_video.console.run_client import EndpointPausedError, RunStatus
+from tkr_cloud_video.console.run_client import (
+    EndpointHealth,
+    EndpointPausedError,
+    RunStatus,
+)
 from tkr_cloud_video.console.service import ConsoleService, compose_console
 from tkr_cloud_video.core.errors import AppError
 from tkr_cloud_video.delivery.access_policy import ResultAccessPolicy
@@ -118,6 +122,70 @@ async def test_a_paused_endpoint_is_reported_as_something_to_retry() -> None:
     assert payload["ok"] is False
     assert payload["endpoint_paused"] is True
     assert payload["retryable"] is True
+
+
+@pytest.mark.asyncio
+async def test_warmup_is_a_separate_control_run_with_safe_telemetry() -> None:
+    """Warm-up never enters generation identity or delivery state."""
+    service, runs, _, registry = build()
+
+    submitted = await service.warmup()
+    runs.statuses["run-1"] = RunStatus(
+        run_id="run-1",
+        status="COMPLETED",
+        output={
+            "ok": True,
+            "operation": "warmup",
+            "worker": {"worker_id": "worker-1", "ready": True},
+            "ignored": "not exposed",
+        },
+        delay_time_ms=12_000,
+        execution_time_ms=400_000,
+    )
+    observed = await service.observe_warmup("run-1")
+
+    assert runs.submitted == [{"input": {"operation": "warmup", "schema_version": "1"}}]
+    assert submitted["run"]["kind"] == "warmup"  # type: ignore[index]
+    assert observed["handler"] == {
+        "ok": True,
+        "operation": "warmup",
+        "error_code": None,
+        "retryable": None,
+        "worker": {"worker_id": "worker-1", "ready": True},
+    }
+    assert list(registry) == []
+
+
+@pytest.mark.asyncio
+async def test_unregistered_warmup_cannot_be_observed() -> None:
+    """The console only reports control runs it submitted this session."""
+    service, _, _, _ = build()
+
+    payload = await service.observe_warmup("run-elsewhere")
+
+    assert payload["error_code"] == "warmup_not_registered"
+
+
+@pytest.mark.asyncio
+async def test_endpoint_health_is_shaped_for_the_browser() -> None:
+    """Provider spellings and credentials remain behind the console."""
+    runs = FakeRunClient(endpoint_health=EndpointHealth(8, 1, 2, 3, 4, 1, 2))
+    service, _, _, _ = build(runs=runs)
+
+    payload = await service.endpoint_health()
+
+    assert payload == {
+        "ok": True,
+        "jobs": {
+            "completed": 8,
+            "failed": 1,
+            "in_progress": 2,
+            "in_queue": 3,
+            "retried": 4,
+        },
+        "workers": {"idle": 1, "running": 2},
+        "observed_at": "2026-08-23T12:34:56+00:00",
+    }
 
 
 @pytest.mark.asyncio

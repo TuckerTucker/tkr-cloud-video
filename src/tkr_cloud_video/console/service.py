@@ -60,6 +60,7 @@ class ConsoleService:
         self._registry = registry
         self._prompts = prompts
         self._clock = clock
+        self._warmups: dict[str, str] = {}
 
     @property
     def settings(self) -> ConsoleSettings:
@@ -102,6 +103,80 @@ class ConsoleService:
             below_trained_envelope=checked.below_trained_envelope,
         )
         return {"ok": True, "run": _record_payload(record), **_accepted_extras(checked)}
+
+    async def warmup(self) -> dict[str, object]:
+        """Submit one control run that makes a worker fully ready."""
+        try:
+            run_id = await self._runs.submit(
+                {"input": {"operation": "warmup", "schema_version": "1"}}
+            )
+        except EndpointPausedError as error:
+            return _error_payload(error, endpoint_paused=True)
+        except AppError as error:
+            return _error_payload(error)
+        submitted_at = self._clock.now().isoformat()
+        self._warmups[run_id] = submitted_at
+        return {
+            "ok": True,
+            "run": {
+                "run_id": run_id,
+                "submitted_at": submitted_at,
+                "kind": "warmup",
+            },
+        }
+
+    async def observe_warmup(self, run_id: str) -> dict[str, object]:
+        """Observe a warm-up submitted by this console session."""
+        submitted_at = self._warmups.get(run_id)
+        if submitted_at is None:
+            return {
+                "ok": False,
+                "error_code": "warmup_not_registered",
+                "message": "This console session did not submit that warm-up.",
+                "defects": [],
+                "error_context": {"run_id": run_id},
+            }
+        try:
+            status = await self._runs.status(run_id)
+        except AppError as error:
+            return _error_payload(error)
+        return {
+            "ok": True,
+            "run_id": run_id,
+            "status": status.status,
+            "terminal": status.terminal,
+            "delay_time_ms": status.delay_time_ms,
+            "execution_time_ms": status.execution_time_ms,
+            "provider_error": status.error,
+            "run": {
+                "run_id": run_id,
+                "submitted_at": submitted_at,
+                "kind": "warmup",
+            },
+            "handler": _warmup_handler_payload(status),
+        }
+
+    async def endpoint_health(self) -> dict[str, object]:
+        """Return aggregate provider health without exposing credentials."""
+        try:
+            health = await self._runs.health()
+        except AppError as error:
+            return _error_payload(error)
+        return {
+            "ok": True,
+            "jobs": {
+                "completed": health.jobs_completed,
+                "failed": health.jobs_failed,
+                "in_progress": health.jobs_in_progress,
+                "in_queue": health.jobs_in_queue,
+                "retried": health.jobs_retried,
+            },
+            "workers": {
+                "idle": health.workers_idle,
+                "running": health.workers_running,
+            },
+            "observed_at": self._clock.now().isoformat(),
+        }
 
     async def observe(self, run_id: str) -> dict[str, object]:
         """Report where one submitted run stands, and what it committed.
@@ -254,6 +329,7 @@ def _handler_payload(status: RunStatus) -> dict[str, object] | None:
     """
     if status.output is None:
         return None
+    worker = status.output.get("worker")
     return {
         "ok": status.output.get("ok") is True,
         "job_id": status.output.get("job_id"),
@@ -262,6 +338,21 @@ def _handler_payload(status: RunStatus) -> dict[str, object] | None:
         "retryable": status.output.get("retryable"),
         "error_context": status.output.get("error_context"),
         "defects": status.output.get("defects") or [],
+        "worker": worker if isinstance(worker, dict) else None,
+    }
+
+
+def _warmup_handler_payload(status: RunStatus) -> dict[str, object] | None:
+    """Return only the allowlisted control response fields."""
+    if status.output is None:
+        return None
+    worker = status.output.get("worker")
+    return {
+        "ok": status.output.get("ok") is True,
+        "operation": status.output.get("operation"),
+        "error_code": status.output.get("error_code"),
+        "retryable": status.output.get("retryable"),
+        "worker": worker if isinstance(worker, dict) else None,
     }
 
 
