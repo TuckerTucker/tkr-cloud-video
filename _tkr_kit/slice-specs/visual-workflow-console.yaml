@@ -1,0 +1,1962 @@
+capability: visual-workflow-console
+slice_specs:
+  - name: approved-graph-execution-1-spec
+    title: Endpoint profile contract and release projection Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: approved-graph-execution
+    slice: 1
+    source_story_ids:
+      - visual-workflow-console/story/discover-the-endpoints-approved-profile
+      - visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+    purpose: >-
+      Replace the page's hard-coded workflow identity with one immutable account
+      of what the configured endpoint can execute. The profile is derived from
+      reviewed release facts, verified before the visual surface becomes ready,
+      and safe to give to the browser because it describes bindings without
+      carrying the executable workflow or any credential.
+    layer_assignment:
+      - component: EndpointProfile
+        layer: data
+        responsibility: Canonical browser-safe identity and capability contract
+      - component: EndpointProfileProjector
+        layer: domain
+        responsibility: Derive the profile from reviewed release and registry facts
+      - component: EndpointProfileResolver
+        layer: integration
+        responsibility: Supply exact profile bytes without coupling policy to storage
+    interfaces:
+      - name: EndpointProfileProjector
+        kind: domain_service
+        signature: 'def project(self, source: EndpointProfileSource) -> EndpointProfile'
+        async: false
+        ownership: Receives already-validated release facts and never reads ambient
+          files, environment variables or credentials.
+      - name: EndpointProfileResolver
+        kind: port
+        signature: 'async def resolve(self, expected_digest: Sha256Digest) -> EndpointProfile'
+        async: true
+        ownership: Implementations return exact bytes and the domain verifies their
+          canonical digest before exposing capabilities.
+      - name: EndpointProfile.canonical_bytes
+        kind: value_method
+        signature: 'def canonical_bytes(self) -> bytes'
+        async: false
+        ownership: Sorts and encodes deterministically so the profile identity does
+          not depend on serializer or file formatting.
+    data_models:
+      - name: EndpointProfile
+        shape: immutable Pydantic model
+        fields: schema_version; profile_id; endpoint_id; release_id;
+          manifest_digest; workflow_id; workflow_digest; model_set_id;
+          supported_modes; exposed_ports; trained_envelope; grammar_revision
+        validation: extra fields forbidden; identifiers and digests use existing
+          value objects; each required request source occurs at most once; every
+          exposed port is backed by a release binding
+      - name: EndpointProfileSource
+        shape: frozen dataclass
+        fields: prepared model set; trained range entry; grammar revision;
+          endpoint identity; release identity; supported modes
+        validation: workflow and model-set identities agree across every source;
+          disagreement is a projection error, never precedence
+      - name: ExposedPort
+        shape: immutable Pydantic model
+        fields: port_id; source; value_type; required; constraints; label
+        validation: source belongs to WorkflowBindingSource; constraints narrow
+          the request contract and cannot widen it
+    behavior:
+      - story_id: visual-workflow-console/story/discover-the-endpoints-approved-profile
+        given: reviewed catalog, manifest, trained envelope and grammar facts that agree
+        when: the profile is projected twice
+        then: canonical bytes and SHA-256 identity are identical
+      - story_id: visual-workflow-console/story/discover-the-endpoints-approved-profile
+        given: a configured endpoint and a profile naming another endpoint
+        when: the resolver validates it
+        then: visual capabilities remain unavailable and the mismatch is named
+      - story_id: visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+        given: a workflow binding absent from the release manifest
+        when: a port is projected for it
+        then: projection fails rather than advertising a request input the worker cannot bind
+    error_handling:
+      - condition: endpoint_profile_digest_mismatch
+        error: EndpointProfileError
+        recovery: Refuse the profile and leave visual readiness false
+        retryable: false
+      - condition: endpoint_profile_scope_mismatch
+        error: EndpointProfileError
+        recovery: Name the mismatched identity without serving either profile
+        retryable: false
+      - condition: endpoint_profile_source_inconsistent
+        error: EndpointProfileProjectionError
+        recovery: Block release projection; no source silently wins
+        retryable: false
+    dependencies:
+      required_slice_ids: []
+      external:
+        - Python standard library
+        - pydantic
+      inversion_of_control: Profile bytes and release facts enter through injected
+        ports or immutable values; tests use deterministic in-memory sources.
+    integration_points:
+      consumes:
+        - the reviewed release catalog and rendered model-set manifest
+        - the trained-envelope and prompt-grammar registries
+        - the configured RunPod endpoint identity
+      provides:
+        - a digest-pinned browser-safe endpoint profile
+        - the authoritative node and port catalog for subsequent slices
+      documented_routes: []
+      reference_documentation:
+        - release-assets/minimax-h3-t2v/catalog.json
+        - schemas/model-set-manifest.schema.json
+    configuration:
+      - name: TKR_CONSOLE_ENDPOINT_PROFILE_PATH
+        type: absolute_path
+        default: null
+        secret: false
+        validation: required for the visual surface; regular readable file only
+      - name: TKR_CONSOLE_ENDPOINT_PROFILE_DIGEST
+        type: sha256
+        default: null
+        secret: false
+        validation: required lowercase SHA-256 digest
+    observability:
+      events:
+        - visual-workflow-console.approved-graph-execution.1.started
+        - visual-workflow-console.approved-graph-execution.1.succeeded
+        - visual-workflow-console.approved-graph-execution.1.failed
+      required_fields:
+        - event
+        - outcome
+        - profile_id?
+        - error_code?
+      forbidden_fields:
+        - profile bytes
+        - workflow bytes
+        - credentials
+        - prompts
+        - signed URL tokens
+    security_constraints:
+      - Verify the profile digest before trusting any advertised capability.
+      - Never include executable workflow JSON, local paths or credential material
+        in the browser projection.
+      - Profile constraints may narrow but never widen the generation request contract.
+      - A profile is scoped to one configured endpoint and cannot be selected by a request.
+    test_scenarios:
+      - id: S1-T01
+        level: unit
+        given: identical reviewed sources
+        when: profiles are projected independently
+        then: their canonical bytes and digests match
+      - id: S1-T02
+        level: unit
+        given: a changed workflow, manifest or grammar identity
+        when: the profile is projected
+        then: its digest changes
+      - id: S1-T03
+        level: integration
+        given: a profile naming a different endpoint
+        when: console composition resolves it
+        then: visual readiness remains false
+      - id: S1-T04
+        level: security
+        given: a browser-safe profile payload
+        when: forbidden fields are scanned
+        then: it contains no workflow bytes, paths, credentials, prompts or links
+      - id: S1-TF
+        level: failure_injection
+        given: each source identity disagrees in turn
+        when: projection runs
+        then: projection fails closed with the disagreeing identity class
+    definition_of_done:
+      - The JSON Schema and Pydantic model agree on every required and forbidden field.
+      - Canonical identity and all mismatch conditions have discriminating tests.
+      - The current release produces a checked-in endpoint profile without manual field copying.
+      - Public interfaces have explicit return types and Google-style docstrings.
+      - No placeholder, TODO, mutable release reference or hard-coded browser workflow remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Endpoint profiles are immutable non-personal release metadata and
+        contain no request, run, result or secret values.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, frozen boundary models and
+        explicit error wrapping with safe context.
+      logging: structlog JSON events with allowlisted release identities only.
+      bash: n/a
+      testing: pytest parametrization with injected resolvers and canonical byte fixtures.
+  - name: approved-graph-execution-2-spec
+    title: Versioned visual graph contract Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: approved-graph-execution
+    slice: 2
+    source_story_ids:
+      - visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+      - visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+    purpose: >-
+      Give the visual workspace a strict authoring document that can express only
+      the request-level choices the product already permits. Execution values and
+      visual layout are separated so moving a node has no semantic effect, and the
+      schema has no escape hatch for raw ComfyUI graph content.
+    layer_assignment:
+      - component: GraphDocument
+        layer: domain
+        responsibility: Versioned bounded graph aggregate
+      - component: GraphNode discriminated union
+        layer: domain
+        responsibility: Exact allowed authoring node vocabulary
+      - component: GraphLayout
+        layer: presentation
+        responsibility: Non-executable positions and viewport state
+    interfaces:
+      - name: parse_graph_document
+        kind: domain_function
+        signature: 'def parse_graph_document(payload: object) -> GraphDocument'
+        async: false
+        ownership: Applies body, node, edge and value limits before a compiler or
+          prompt service receives the document.
+      - name: GraphDocument.execution_projection
+        kind: value_method
+        signature: 'def execution_projection(self) -> GraphExecutionDocument'
+        async: false
+        ownership: Drops positions, viewport, selection and labels before canonical
+          compilation or hashing.
+      - name: GraphDocument.canonical_execution_bytes
+        kind: value_method
+        signature: 'def canonical_execution_bytes(self) -> bytes'
+        async: false
+        ownership: Encodes only execution-significant fields in deterministic order.
+    data_models:
+      - name: GraphDocument
+        shape: immutable Pydantic aggregate
+        fields: schema_version; profile_digest; nodes; edges; layout
+        validation: extra fields forbidden; bounded node and edge collections;
+          unique local identifiers; every edge endpoint names an existing node
+      - name: GraphNode
+        shape: discriminated union
+        fields: id; kind; configuration appropriate to freeform_prompt,
+          structured_prompt, canvas, timing, seed, approved_workflow, preflight,
+          run or result
+        validation: each kind forbids unrelated configuration; no generic mapping,
+          class_type, workflow body, path or arbitrary input-name field exists
+      - name: GraphEdge
+        shape: immutable Pydantic model
+        fields: id; source_node_id; source_port_id; target_node_id; target_port_id
+        validation: identifiers are contained graph-local values; self-edge is
+          structurally valid but later reported as a cycle
+      - name: GraphLayout
+        shape: immutable presentation model
+        fields: node positions; viewport; optional collapsed state
+        validation: finite bounded numeric values; cannot name execution values
+    behavior:
+      - story_id: visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+        given: two documents differing only in layout
+        when: execution projections are serialized
+        then: their canonical bytes are identical
+      - story_id: visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+        given: a node containing class_type, workflow JSON or an unknown field
+        when: the document is parsed
+        then: parsing fails before compilation and names the structural location
+      - story_id: visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+        given: a graph beyond any declared collection or body limit
+        when: parsing begins
+        then: it is refused without allocating an unbounded aggregate
+    error_handling:
+      - condition: graph_document_invalid
+        error: GraphContractError
+        recovery: Return all safe structural defects and compile nothing
+        retryable: false
+      - condition: graph_document_too_large
+        error: GraphContractError
+        recovery: Refuse at the body or collection boundary without echoing values
+        retryable: false
+      - condition: graph_schema_unsupported
+        error: GraphContractError
+        recovery: Preserve the local draft and report that a supported migration is required
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 1
+      external:
+        - Python standard library
+        - pydantic
+      inversion_of_control: The graph aggregate performs no I/O; profile and storage
+        collaborators remain outside this slice.
+    integration_points:
+      consumes:
+        - EndpointProfile identity and exposed node vocabulary
+      provides:
+        - a strict authoring graph for the compiler and browser
+        - canonical execution bytes independent of visual layout
+      documented_routes: []
+      reference_documentation:
+        - schemas/generation-request.schema.json
+    configuration:
+      - name: GRAPH_MAX_NODES
+        type: positive_integer
+        default: 64
+        secret: false
+        validation: fixed product ceiling; caller cannot override
+      - name: GRAPH_MAX_EDGES
+        type: positive_integer
+        default: 128
+        secret: false
+        validation: fixed product ceiling; caller cannot override
+    observability:
+      events:
+        - visual-workflow-console.approved-graph-execution.2.started
+        - visual-workflow-console.approved-graph-execution.2.succeeded
+        - visual-workflow-console.approved-graph-execution.2.failed
+      required_fields:
+        - event
+        - outcome
+        - node_count?
+        - edge_count?
+        - error_code?
+      forbidden_fields:
+        - graph document
+        - node configuration values
+        - prompts
+        - credentials
+        - signed URL tokens
+    security_constraints:
+      - Forbid unknown fields at every graph model level.
+      - No graph field can carry a raw workflow, class type, local path or arbitrary binding name.
+      - Enforce collection and request-size bounds before expensive graph traversal.
+      - Errors identify locations and rules without returning the value that failed.
+    test_scenarios:
+      - id: S2-T01
+        level: unit
+        given: identical values with different positions and viewport
+        when: execution bytes are compared
+        then: they match
+      - id: S2-T02
+        level: unit
+        given: each supported node kind with valid configuration
+        when: round-tripped through canonical JSON
+        then: it preserves execution meaning
+      - id: S2-T03
+        level: security
+        given: class_type, workflow JSON, a model path and an output path
+        when: each is injected into a node
+        then: every payload is refused as an unknown or unavailable field
+      - id: S2-T04
+        level: boundary
+        given: one value above every graph limit
+        when: parsing runs
+        then: it fails at that boundary without constructing an executable projection
+      - id: S2-TF
+        level: failure_injection
+        given: malformed identifiers and dangling edge endpoints
+        when: parsing runs
+        then: every structural defect is safe and deterministic
+    definition_of_done:
+      - Python and published JSON schemas agree and reject unknown fields.
+      - Every supported node kind has positive, negative and round-trip tests.
+      - Layout invariance is proven at canonical-byte and request-hash boundaries.
+      - Graph size and identifier bounds are explicit and tested.
+      - No placeholder, generic escape-hatch node or executable workflow field remains.
+    data_lifecycle:
+      kind: transient
+      detail: Parsing holds a prompt-bearing graph only for the current call and
+        introduces no persistent repository or log field.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings and frozen strict Pydantic models.
+      logging: structlog receives counts and safe codes only, never graph values.
+      bash: n/a
+      testing: pytest table-driven model, size, injection and canonicalization tests.
+  - name: approved-graph-execution-3-spec
+    title: Deterministic graph compiler Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: approved-graph-execution
+    slice: 3
+    source_story_ids:
+      - visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+      - visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+    purpose: >-
+      Prove a visual authoring graph is complete and authorized before reducing it
+      to the product's existing request contract. The compiler is pure domain
+      policy behind a port, reports every independent defect together, and emits
+      no partial request on failure.
+    layer_assignment:
+      - component: GraphCompiler
+        layer: domain
+        responsibility: Provider-neutral compilation port
+      - component: GenerationGraphCompiler
+        layer: domain
+        responsibility: Topology, type, cardinality and profile validation
+      - component: GraphDefect
+        layer: domain
+        responsibility: Safe node- and port-scoped correction contract
+    interfaces:
+      - name: GraphCompiler
+        kind: port
+        signature: 'def compile(self, graph: GraphDocument, profile: EndpointProfile) -> GraphCompilation'
+        async: false
+        ownership: Callers depend on the port; the composition root injects the
+          approved generation compiler.
+      - name: GenerationGraphCompiler
+        kind: domain_service
+        signature: 'def compile(self, graph: GraphDocument, profile: EndpointProfile) -> GraphCompilation'
+        async: false
+        ownership: Traverses only typed graph values and never imports console,
+          RunPod, storage or ComfyUI adapters.
+      - name: GraphCompilation
+        kind: result_union
+        signature: 'CompiledGeneration | RejectedGraph'
+        async: false
+        ownership: A rejection cannot carry a request; an acceptance cannot carry defects.
+    data_models:
+      - name: CompiledGeneration
+        shape: frozen dataclass
+        fields: request; canonical_request_bytes; source_profile_digest;
+          node_field_map
+        validation: request is an existing GenerationRequest; bytes equal its
+          canonical form; field map contains identifiers, never values
+      - name: RejectedGraph
+        shape: frozen dataclass
+        fields: defects
+        validation: at least one defect; no request or prompt-bearing context
+      - name: GraphDefect
+        shape: frozen dataclass
+        fields: node_id; port_id?; rule; message
+        validation: identifiers and fixed messages only; no node configuration value
+    behavior:
+      - story_id: visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+        given: one connected source for every required published binding
+        when: compilation runs
+        then: one request using the profile's workflow/model pair is produced deterministically
+      - story_id: visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+        given: a cycle, incompatible edge and missing port in one graph
+        when: compilation runs
+        then: all three defects are returned and no request exists
+      - story_id: visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+        given: a graph profile digest or workflow/model selection not matching the profile
+        when: compilation runs
+        then: it is refused before request construction
+    error_handling:
+      - condition: graph_cycle
+        error: RejectedGraph
+        recovery: Return every node participating in the cycle; submit nothing
+        retryable: false
+      - condition: graph_port_incompatible
+        error: RejectedGraph
+        recovery: Name source and target ports and the required type
+        retryable: false
+      - condition: graph_required_input_missing
+        error: RejectedGraph
+        recovery: Name every unbound required port together
+        retryable: false
+      - condition: graph_profile_mismatch
+        error: RejectedGraph
+        recovery: Require reload of verified capabilities; never reinterpret against another profile
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 2
+      external:
+        - Python standard library
+        - pydantic
+      inversion_of_control: The compiler is injected behind GraphCompiler and is
+        a pure function of graph and profile; all tests use immutable values.
+    integration_points:
+      consumes:
+        - strict GraphDocument values
+        - verified EndpointProfile values
+        - existing GenerationRequest constructors
+      provides:
+        - one normalized generation request or complete safe defects
+        - a node-to-request-field map for contextual preflight errors
+      documented_routes: []
+      reference_documentation:
+        - schemas/generation-request.schema.json
+        - schemas/model-set-manifest.schema.json
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - visual-workflow-console.approved-graph-execution.3.started
+        - visual-workflow-console.approved-graph-execution.3.succeeded
+        - visual-workflow-console.approved-graph-execution.3.failed
+      required_fields:
+        - event
+        - outcome
+        - profile_id
+        - defect_count?
+        - error_code?
+      forbidden_fields:
+        - graph document
+        - compiled request
+        - prompts
+        - node values
+        - credentials
+    security_constraints:
+      - Profile identity and workflow/model pairing are compiler inputs, never caller precedence rules.
+      - Only published exposed ports can contribute request values.
+      - Any defect makes the compilation atomic failure with no partial request.
+      - Defects carry graph locations and fixed rules, never caller content.
+    test_scenarios:
+      - id: S3-T01
+        level: unit
+        given: a complete valid graph
+        when: compiled twice
+        then: canonical request bytes match
+      - id: S3-T02
+        level: unit
+        given: layout-only mutations
+        when: each graph compiles
+        then: request and request hash remain unchanged
+      - id: S3-T03
+        level: unit
+        given: independent topology, type and cardinality defects
+        when: compilation runs
+        then: every independent defect is returned in stable order
+      - id: S3-T04
+        level: security
+        given: a value routed to a port absent from the endpoint profile
+        when: compilation runs
+        then: it is refused and cannot appear in the request
+      - id: S3-TF
+        level: failure_injection
+        given: every required source is removed or duplicated in turn
+        when: compilation runs
+        then: no case yields a partial GenerationRequest
+    definition_of_done:
+      - The compiler imports no provider, storage, console or ComfyUI adapter.
+      - Every graph invariant has a discriminating table-driven test.
+      - Layout invariance and deterministic defect ordering are pinned.
+      - Existing GenerationRequest validation remains the only output constructor.
+      - No placeholder, fallback workflow or arbitrary node-input mapping remains.
+    data_lifecycle:
+      kind: transient
+      detail: Compilation retains no graph or request after returning and emits only
+        safe identifiers and counts to structured events.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings and deterministic pure-domain traversal.
+      logging: structlog JSON with safe profile identifiers and defect counts only.
+      bash: n/a
+      testing: pytest table-driven graph matrices with no network or filesystem.
+  - name: approved-graph-execution-4-spec
+    title: Graph preflight and generation API Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: approved-graph-execution
+    slice: 4
+    source_story_ids:
+      - visual-workflow-console/story/discover-the-endpoints-approved-profile
+      - visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+      - visual-workflow-console/story/run-a-graph-to-a-committed-video
+    purpose: >-
+      Add the visual graph as a loopback authoring adapter around the existing
+      ConsoleService. Compilation happens first; accepted requests then use the
+      same preflight, asynchronous RunPod client, session registry, commit lookup
+      and signed delivery path as the form console.
+    layer_assignment:
+      - component: VisualWorkflowService
+        layer: service
+        responsibility: Compile then delegate to existing console use cases
+      - component: visual workflow routes
+        layer: api
+        responsibility: Bounded same-origin HTTP translation
+      - component: visual workflow composition
+        layer: integration
+        responsibility: Inject profile resolver, compiler and ConsoleService
+    interfaces:
+      - name: VisualWorkflowService.capabilities
+        kind: service_method
+        signature: 'def capabilities(self) -> dict[str, object]'
+        async: false
+        ownership: Returns the verified browser projection and no executable workflow body.
+      - name: VisualWorkflowService.preflight
+        kind: service_method
+        signature: 'def preflight(self, payload: object) -> dict[str, object]'
+        async: false
+        ownership: Parses and compiles, then calls ConsoleService.preflight only on acceptance.
+      - name: VisualWorkflowService.generate
+        kind: service_method
+        signature: 'async def generate(self, payload: object) -> dict[str, object]'
+        async: true
+        ownership: Calls ConsoleService.generate with only the compiled request document;
+          it never calls RunPod directly.
+      - name: compose_visual_workflow
+        kind: composition_root
+        signature: 'def compose_visual_workflow(console: ComposedConsole, profile: EndpointProfile, compiler: GraphCompiler | None = None) -> ComposedVisualWorkflow'
+        async: false
+        ownership: Makes the existing console a required dependency and adds no
+          uploader, committer or storage writer.
+    data_models:
+      - name: GraphApiResponse
+        shape: JSON response union
+        fields: ok; request?; request_hash?; wire_text?; run?; defects?;
+          error_code?; message?; error_context?
+        validation: extends existing response vocabulary with graph locations;
+          no credential or raw workflow field
+      - name: GraphFieldMap
+        shape: immutable mapping
+        fields: request field to node_id and port_id
+        validation: identifiers only; used to relocate existing preflight defects
+          without changing their rules or messages
+    behavior:
+      - story_id: visual-workflow-console/story/discover-the-endpoints-approved-profile
+        given: a verified profile
+        when: GET /api/visual-workflow/capabilities is called from the served origin
+        then: the browser-safe profile is returned under no-store headers
+      - story_id: visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+        given: a rejected graph
+        when: preflight or generation is called
+        then: graph defects are returned and ConsoleService.generate is not invoked
+      - story_id: visual-workflow-console/story/run-a-graph-to-a-committed-video
+        given: an accepted compiled graph
+        when: generation is called
+        then: the current asynchronous console path registers and returns the run
+    error_handling:
+      - condition: graph_request_invalid
+        error: graph rejection response
+        recovery: Return all safe graph defects with HTTP success semantics matching
+          current preflight; submit nothing
+        retryable: false
+      - condition: endpoint_profile_unavailable
+        error: AppError
+        recovery: Keep visual routes unavailable while the existing form console
+          remains truthful about its own capability
+        retryable: false
+      - condition: provider_or_delivery_failure
+        error: existing ConsoleService error payload
+        recovery: Preserve current retryability, paused-endpoint and partial-observation semantics
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - 3
+      external:
+        - Python standard library
+        - pydantic
+        - structlog
+      inversion_of_control: VisualWorkflowService receives GraphCompiler,
+        EndpointProfile and ConsoleService at construction; tests use fakes for all I/O.
+    integration_points:
+      consumes:
+        - ConsoleService preflight, generate, observe, cancel, result and delivery-link behavior
+        - the console's body ceiling, CSP, Host validation and no-store response policy
+      provides:
+        - GET /api/visual-workflow/capabilities
+        - POST /api/visual-workflow/preflight
+        - POST /api/visual-workflow/generate
+      documented_routes:
+        - GET /api/visual-workflow/capabilities
+        - POST /api/visual-workflow/preflight
+        - POST /api/visual-workflow/generate
+      reference_documentation:
+        - docs/models/operator-console.md
+    configuration:
+      - name: TKR_CONSOLE_ENDPOINT_PROFILE_PATH
+        type: absolute_path
+        default: null
+        secret: false
+        validation: exact profile file configured at launch
+      - name: TKR_CONSOLE_ENDPOINT_PROFILE_DIGEST
+        type: sha256
+        default: null
+        secret: false
+        validation: verified before route readiness
+    observability:
+      events:
+        - visual-workflow-console.approved-graph-execution.4.started
+        - visual-workflow-console.approved-graph-execution.4.succeeded
+        - visual-workflow-console.approved-graph-execution.4.failed
+      required_fields:
+        - event
+        - outcome
+        - profile_id
+        - operation
+        - defect_count?
+        - error_code?
+      forbidden_fields:
+        - request bodies
+        - graph documents
+        - prompts
+        - credentials
+        - authorization headers
+        - signed URL tokens
+    security_constraints:
+      - Keep every visual route same-origin and behind the existing loopback Host check.
+      - The browser never calls RunPod or object storage directly.
+      - Compile and preflight before any provider call; no failure path may fall through to submission.
+      - Preserve the console object's structural absence of delivery write/delete services.
+      - Reuse existing no-store and CSP headers for every new response and asset.
+    test_scenarios:
+      - id: S4-T01
+        level: integration
+        given: a valid graph
+        when: preflight is dispatched through the socket-independent router
+        then: the normalized request and wire text match direct console preflight
+      - id: S4-T02
+        level: integration
+        given: a graph compiler rejection
+        when: generation is dispatched
+        then: the fake run client records zero submissions
+      - id: S4-T03
+        level: integration
+        given: an accepted graph and paused endpoint
+        when: generation is dispatched
+        then: the existing paused retryable state is returned unchanged
+      - id: S4-T04
+        level: security
+        given: every new route and asset
+        when: responses are scanned
+        then: CSP, no-store and credential non-disclosure properties hold
+      - id: S4-TF
+        level: failure_injection
+        given: compiler, profile, provider and delivery failures in turn
+        when: the route is called
+        then: each becomes the correct safe response and no raw exception crosses
+    definition_of_done:
+      - Visual routes are exercised entirely through socket-independent dispatch tests.
+      - Existing form-console route contracts and tests remain unchanged and passing.
+      - Rejected graphs provably cannot call the run client.
+      - The composed object graph contains no new delivery writer or erasure capability.
+      - No placeholder route, direct provider call or duplicate run-state implementation remains.
+    data_lifecycle:
+      kind: transient
+      detail: Graph bodies and compiled prompts are held for one bounded local call;
+        current session registry and signed-link lifetimes remain unchanged.
+    implementation_constraints:
+      python: PEP 8, PEP 484, Google-style docstrings, async/await for I/O and injected ports.
+      logging: structlog only with allowlisted identifiers, operations, counts and codes.
+      bash: n/a
+      testing: pytest with fake compiler, profile resolver, run client, result reader and clock.
+  - name: approved-graph-execution-5-spec
+    title: Test approved graph execution Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: approved-graph-execution
+    slice: 5
+    source_story_ids:
+      - visual-workflow-console/story/discover-the-endpoints-approved-profile
+      - visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+      - visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+      - visual-workflow-console/story/run-a-graph-to-a-committed-video
+    purpose: >-
+      Pin the whole safe graph boundary against drift: release facts become one
+      verified profile, graph semantics become one existing request, graph defects
+      never submit, and visual routing cannot weaken the console or worker contract.
+    layer_assignment:
+      - component: profile contract test suite
+        layer: integration
+        responsibility: Pin release projection and scope verification
+      - component: graph compiler contract suite
+        layer: domain
+        responsibility: Exhaust topology, type, cardinality and determinism rules
+      - component: visual route security suite
+        layer: integration
+        responsibility: Pin delegation and non-disclosure properties
+    interfaces:
+      - name: profile_fixture
+        kind: test_factory
+        signature: 'def profile_fixture(**overrides: object) -> EndpointProfile'
+        async: false
+        ownership: Produces canonical synthetic profiles without reading a release or environment.
+      - name: graph_fixture
+        kind: test_factory
+        signature: 'def graph_fixture(**overrides: object) -> dict[str, object]'
+        async: false
+        ownership: Produces minimal graph documents whose one changed invariant is visible.
+      - name: build_visual_console
+        kind: test_composition
+        signature: 'def build_visual_console(...) -> ComposedVisualWorkflow'
+        async: false
+        ownership: Injects deterministic run, result, profile, compiler and clock collaborators.
+    data_models:
+      - name: GraphContractMatrixCase
+        shape: pytest parameter record
+        fields: case_id; graph mutation; expected defects; expected request?;
+          expected submission count
+        validation: each case changes one named invariant unless explicitly testing aggregation
+      - name: SecurityScanFixture
+        shape: frozen test value
+        fields: synthetic credential markers; prompt marker; workflow marker; signed-link marker
+        validation: every marker is unique and absent from safe payloads and events
+    behavior:
+      - story_id: visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+        given: the accepted graph matrix
+        when: requests are compared with direct existing-model construction
+        then: every normalized field and canonical request hash agrees
+      - story_id: visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+        given: every graph defect case
+        when: preflight and generation are exercised
+        then: defects agree and the fake run client records zero submissions
+      - story_id: visual-workflow-console/story/run-a-graph-to-a-committed-video
+        given: one routed accepted graph
+        when: provider and commit states are advanced independently
+        then: visual responses preserve the console's distinct state meanings
+    error_handling:
+      - condition: test_contract_drift
+        error: assertion failure
+        recovery: Block completion until profile, graph and current console behavior agree
+        retryable: false
+      - condition: forbidden_marker_exposed
+        error: assertion failure
+        recovery: Treat as a security regression and block completion
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 4
+      external:
+        - pytest
+        - pytest-asyncio
+      inversion_of_control: Every I/O boundary is a deterministic fake; the suite
+        makes no provider, object-storage or network call.
+    integration_points:
+      consumes:
+        - all profile, graph, compiler and visual route interfaces from slices 1 to 4
+        - existing console intake agreement fixtures
+      provides:
+        - regression evidence for approved graph execution
+      documented_routes:
+        - GET /api/visual-workflow/capabilities
+        - POST /api/visual-workflow/preflight
+        - POST /api/visual-workflow/generate
+      reference_documentation: []
+    configuration:
+      - name: LOG_LEVEL
+        type: enum
+        default: INFO
+        secret: false
+        validation: DEBUG|INFO|WARNING|ERROR
+    observability:
+      events:
+        - visual-workflow-console.approved-graph-execution.5.started
+        - visual-workflow-console.approved-graph-execution.5.succeeded
+        - visual-workflow-console.approved-graph-execution.5.failed
+      required_fields:
+        - event
+        - outcome
+        - test_count?
+        - error_code?
+      forbidden_fields:
+        - fixture credentials
+        - fixture prompts
+        - graph documents
+        - signed URL tokens
+    security_constraints:
+      - Tests must prove absence of forbidden content, not merely avoid asserting it.
+      - Provider non-submission is asserted for every rejection path.
+      - Profile mismatch and raw-workflow injection are first-class security cases.
+      - Test fixtures use unmistakably synthetic values and never ambient credentials.
+    test_scenarios:
+      - id: S5-T01
+        level: contract
+        given: the current release inputs
+        when: endpoint-profile generation runs
+        then: schema, digest and browser projection tests pass
+      - id: S5-T02
+        level: property
+        given: valid execution values and varied layout metadata
+        when: graphs compile
+        then: requests and hashes are invariant
+      - id: S5-T03
+        level: contract
+        given: compiled request and direct request paths
+        when: console preflight runs
+        then: decisions, normalized requests and wire text agree
+      - id: S5-T04
+        level: security
+        given: every graph and route response plus captured events
+        when: forbidden markers are scanned
+        then: no credential, prompt, workflow body or signed token is exposed
+      - id: S5-TF
+        level: failure_injection
+        given: every declared profile, parser, compiler and route error
+        when: exercised through generation
+        then: recovery holds and submission count remains zero where required
+    definition_of_done:
+      - All new domain and route branches meet the repository coverage threshold.
+      - Compiler/preflight agreement covers freeform and structured prompts.
+      - Security scans cover payloads, errors, reprs and structured events.
+      - The complete project check command remains green.
+      - No skipped, xfailed, placeholder or nondeterministic provider-dependent test remains.
+    data_lifecycle:
+      kind: exempt
+      detail: The suite uses synthetic values, in-memory stores and teardown-cleared
+        fixtures only.
+    implementation_constraints:
+      python: Test helpers are typed and follow the production port boundaries.
+      logging: Captured structlog events are scanned for every forbidden marker.
+      bash: The existing Bash 3.2-compatible project check command remains the entrypoint.
+      testing: pytest parametrization, deterministic clocks and failure injection.
+  - name: local-node-workspace-6-spec
+    title: Local draft data-handling and retention decision Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: local-node-workspace
+    slice: 6
+    source_story_ids:
+      - visual-workflow-console/story/recover-and-undo-a-local-draft
+    purpose: >-
+      Decide the storage boundary before enabling autosave. A graph draft can
+      contain the full prompt and structured prompt fields that the current console
+      deliberately keeps only in memory, so the local repository needs a recorded
+      purpose, exact retention mechanics and recovery semantics rather than an
+      indefinite browser-cache assumption.
+    layer_assignment:
+      - component: local draft surface assessment
+        layer: data
+        responsibility: Record fields, purpose, sensitivity and access boundary
+      - component: draft lifecycle decision
+        layer: domain
+        responsibility: Fix inactivity expiry, cleanup, quota, recovery and migration
+      - component: governance gate
+        layer: integration
+        responsibility: Prevent persistent-store implementation when the decision is incomplete
+    interfaces:
+      - name: visual workflow local draft record
+        kind: document
+        signature: fields; purpose; location; access boundary; inactivity lifetime;
+          cleanup trigger; deletion recovery; quota; migration; residual risk; owner
+        async: false
+        ownership: Dated and append-only when the facts materially change; a later
+          decision supersedes rather than silently edits the old basis.
+      - name: DraftLifecyclePolicy
+        kind: policy_contract
+        signature: 'retention_seconds: int; recovery_seconds: int; max_bytes: int; cleanup_triggers: tuple[str, ...]'
+        async: false
+        ownership: The implementation in slice 9 consumes the recorded values and
+          cannot widen them from browser defaults.
+    data_models:
+      - name: DraftDataInventory
+        shape: documented table
+        fields: graph identifier; profile digest; nodes; edges; layout; prompt and
+          structured-prompt values; created/updated/accessed timestamps; schema version
+        validation: explicitly excludes credentials, run/job records, signed links,
+          media bytes and provider errors
+      - name: DraftLifecycleDecision
+        shape: reviewed decision record
+        fields: exact durations; byte quota; cleanup triggers; deletion recovery;
+          migration failure behavior; renewal conditions; accountable owner
+        validation: every value required before the persistence feature may start;
+          no indefinite or implementation-defined retention
+    behavior:
+      - story_id: visual-workflow-console/story/recover-and-undo-a-local-draft
+        given: a graph containing a full prompt
+        when: the data inventory is recorded
+        then: the prompt is treated as persisted local content rather than omitted as layout metadata
+      - story_id: visual-workflow-console/story/recover-and-undo-a-local-draft
+        given: no exact inactivity lifetime or cleanup trigger
+        when: slice 9 startability is evaluated
+        then: it remains blocked because the browser store would otherwise be unbounded
+      - story_id: visual-workflow-console/story/recover-and-undo-a-local-draft
+        given: a complete approved decision
+        when: implementation begins
+        then: the store receives its lifecycle as injected policy rather than constants scattered through UI code
+    error_handling:
+      - condition: draft_lifecycle_undeclared
+        error: execution gate
+        recovery: Keep persistent autosave disabled and continue with in-memory editing only
+        retryable: false
+      - condition: draft_scope_expands
+        error: governance renewal required
+        recovery: Record a new dated assessment before syncing, sharing or storing new fields
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 2
+      external:
+        - the project governance and retention records
+      inversion_of_control: The future repository consumes a typed policy; storage
+        technology does not define retention behavior.
+    integration_points:
+      consumes:
+        - the GraphDocument field inventory
+        - current compliance, security and retention triage records
+      provides:
+        - an approved DraftLifecyclePolicy for slice 9
+        - a recorded boundary for future governance audits
+      documented_routes: []
+      reference_documentation:
+        - docs/models/operator-console.md
+        - .claude/rules/compliance-triage.md
+    configuration:
+      - name: DRAFT_RETENTION_SECONDS
+        type: positive_integer
+        default: decision_record
+        secret: false
+        validation: exact approved value from the decision; cannot be widened client-side
+      - name: DRAFT_MAX_BYTES
+        type: positive_integer
+        default: decision_record
+        secret: false
+        validation: exact approved local quota
+    observability:
+      events:
+        - visual-workflow-console.local-node-workspace.6.assessed
+        - visual-workflow-console.local-node-workspace.6.approved
+        - visual-workflow-console.local-node-workspace.6.blocked
+      required_fields:
+        - event
+        - outcome
+        - decision_id?
+      forbidden_fields:
+        - graph documents
+        - prompts
+        - local browser paths
+        - credentials
+    security_constraints:
+      - Persist no graph until the policy is complete and approved.
+      - The record describes values by field and category, never by copying a real prompt.
+      - Cloud sync, multi-user access and server-side history require a new assessment.
+      - Signed links, credentials and provider errors are forbidden draft fields.
+    test_scenarios:
+      - id: S6-T01
+        level: governance
+        given: the proposed draft fields
+        when: compared with the current graph contract
+        then: every persistent field is inventoried and every forbidden field is absent
+      - id: S6-T02
+        level: governance
+        given: a decision missing a duration, quota or cleanup trigger
+        when: completeness is checked
+        then: approval fails naming every absent lifecycle control
+      - id: S6-T03
+        level: contract
+        given: an approved decision
+        when: DraftLifecyclePolicy is constructed
+        then: every exact value is represented without browser-defined defaults
+      - id: S6-TF
+        level: failure_injection
+        given: a proposed cloud-sync or collaboration field
+        when: scope is compared
+        then: renewal is required and existing approval is not stretched to cover it
+    definition_of_done:
+      - The record is dated, scoped, reviewed and names an accountable owner.
+      - Exact retention, recovery, quota, cleanup and migration behavior is present.
+      - The data inventory agrees with GraphDocument and explicitly lists forbidden fields.
+      - Slice 9 can construct a complete policy without making a product decision.
+      - No placeholder duration, implicit browser default or indefinite retention remains.
+    data_lifecycle:
+      kind: bounded
+      detail: This slice records lifecycle policy and stores no user graph. The
+        resulting decision is durable governance evidence; its own retention follows
+        the documentation record class.
+    implementation_constraints:
+      python: Any policy value object follows PEP 8, PEP 484 and Google-style docstrings.
+      logging: Governance events carry decision identifiers and outcomes only.
+      bash: n/a
+      testing: Deterministic completeness and scope-delta checks; no real prompt fixture.
+  - name: local-node-workspace-7-spec
+    title: Strict TypeScript workspace foundation Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: local-node-workspace
+    slice: 7
+    source_story_ids:
+      - visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+      - visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+    purpose: >-
+      Establish a reproducible browser application whose domain state, canvas,
+      storage, API and event effects are injected behind narrow interfaces. The
+      built output remains fixed same-origin static assets, so adding a rich node
+      surface does not add a Python runtime dependency or place credentials in the browser.
+    layer_assignment:
+      - component: visual workflow frontend contracts
+        layer: domain
+        responsibility: Typed ports for canvas, API, drafts, clock and safe events
+      - component: workspace composition root
+        layer: integration
+        responsibility: Select concrete browser adapters and construct state machines
+      - component: static build pipeline
+        layer: integration
+        responsibility: Produce deterministic packaged assets from locked dependencies
+    interfaces:
+      - name: NodeCanvas
+        kind: frontend_port
+        signature: 'render(state: WorkspaceState, dispatch: WorkspaceDispatch): CanvasHandle'
+        async: false
+        ownership: Domain/workspace code does not import the selected canvas library directly.
+      - name: VisualWorkflowClient
+        kind: frontend_port
+        signature: 'capabilities(): Promise<EndpointProfile>; preflight(graph): Promise<PreflightResponse>; generate(graph): Promise<GenerateResponse>'
+        async: true
+        ownership: Implementations use same-origin relative paths and handle every rejection.
+      - name: DraftRepository
+        kind: frontend_port
+        signature: 'load(id): Promise<Draft | null>; save(draft): Promise<void>; delete(id): Promise<void>; cleanup(policy): Promise<number>'
+        async: true
+        ownership: No storage global is accessed outside the injected adapter.
+      - name: SafeEventSink
+        kind: frontend_port
+        signature: 'emit(event: SafeWorkspaceEvent): void'
+        async: false
+        ownership: Accepts a closed event union without prompt or arbitrary context fields.
+    data_models:
+      - name: WorkspaceState
+        shape: readonly TypeScript discriminated state
+        fields: profile; graph; validation; selection; viewport; save state; execution state
+        validation: impossible execution transitions are excluded by discriminated unions
+      - name: WorkspaceCommand
+        shape: readonly command union
+        fields: add, remove, move, connect, disconnect, configure, select, change viewport
+        validation: every mutation is explicit and carries inverse data where undoable
+      - name: SafeWorkspaceEvent
+        shape: closed readonly event union
+        fields: event name; outcome; profile id?; node kind?; safe error code?; duration?
+        validation: no index signature or arbitrary context; never prompt, graph, link or credential data
+    behavior:
+      - story_id: visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+        given: the frontend dependency graph
+        when: domain modules are inspected
+        then: canvas, storage, network, clock and logging enter only through injected interfaces
+      - story_id: visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+        given: a packaged production build
+        when: its assets are served
+        then: scripts, styles and API calls remain on the console origin under the existing CSP
+      - story_id: visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+        given: an async API or repository rejection
+        when: the workspace receives it
+        then: the rejection enters typed visible state and is never left unhandled
+    error_handling:
+      - condition: frontend_build_not_reproducible
+        error: build failure
+        recovery: Refuse asset publication until lock and generated output agree
+        retryable: false
+      - condition: adapter_rejection
+        error: typed workspace failure state
+        recovery: Render the contextual failure and a valid recovery action
+        retryable: true
+      - condition: unsafe_event_field
+        error: TypeScript or runtime validation failure
+        recovery: Drop and report the event code without serializing its value
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 1
+      external:
+        - TypeScript in strict mode
+        - ESLint recommended rules
+        - pino browser adapter
+        - a reviewed version-pinned node-canvas adapter
+      inversion_of_control: Browser effects are interfaces supplied by one composition
+        root; domain state and reducers use deterministic fakes in tests.
+    integration_points:
+      consumes:
+        - the endpoint profile JSON contract
+        - fixed static-asset routes and current CSP
+      provides:
+        - a typed browser workspace foundation
+        - reproducibly built static JS and CSS assets
+      documented_routes: []
+      reference_documentation:
+        - docs/models/operator-console.md
+    configuration:
+      - name: NODE_ENV
+        type: enum
+        default: production
+        secret: false
+        validation: development|test|production
+    observability:
+      events:
+        - visual-workflow-console.local-node-workspace.7.started
+        - visual-workflow-console.local-node-workspace.7.succeeded
+        - visual-workflow-console.local-node-workspace.7.failed
+      required_fields:
+        - event
+        - outcome
+        - profile_id?
+        - error_code?
+      forbidden_fields:
+        - graph document
+        - prompt or structured prompt
+        - credentials
+        - authorization headers
+        - signed URL tokens
+        - user filenames
+    security_constraints:
+      - Build artifacts contain no environment-derived credential or endpoint token.
+      - Every fetch uses a relative same-origin route; the browser cannot select a provider base URL.
+      - Safe event models are closed unions with no arbitrary metadata map.
+      - Selected external packages are version-locked, license-reviewed and recorded in release evidence.
+      - Runtime failures must have visible UI state; browser console output is never the only report.
+    test_scenarios:
+      - id: S7-T01
+        level: build
+        given: the same source and lock
+        when: production assets are built twice
+        then: output identities match
+      - id: S7-T02
+        level: architecture
+        given: frontend domain modules
+        when: imports are scanned
+        then: they import ports and not concrete canvas, storage or fetch adapters
+      - id: S7-T03
+        level: security
+        given: the production asset bundle
+        when: credential and forbidden-field markers are scanned
+        then: none is present
+      - id: S7-T04
+        level: unit
+        given: each rejected async adapter call
+        when: the workspace handles it
+        then: a typed visible state results with no unhandled rejection
+      - id: S7-TF
+        level: failure_injection
+        given: a malformed API response or unsafe event
+        when: validation runs
+        then: it is refused without rendering arbitrary content or logging values
+    definition_of_done:
+      - TypeScript strict mode and ESLint recommended rules pass with no suppression hiding unsafe types.
+      - Every exported function has an explicit return type and every module uses named ES exports.
+      - Dependency versions and integrity data are locked and the production build is reproducible.
+      - Static assets run under the existing self-only CSP and same-origin API boundary.
+      - No placeholder adapter, unhandled promise, default export or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: This slice emits immutable application assets only and introduces no user-data store.
+    implementation_constraints:
+      python: Packaged-asset serving remains typed Python with the current security headers.
+      typescript: ES modules, strict mode, ESLint recommended, TSDoc, explicit exported return types,
+        async/await with handled rejections and named exports only.
+      logging: pino with a closed safe-event model; visible UI remains the error surface.
+      bash: Build orchestration is Bash 3.2-compatible when a shell wrapper is required.
+      testing: Deterministic reducers and adapter fakes plus reproducible build checks.
+  - name: local-node-workspace-8-spec
+    title: Accessible typed node editor Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: local-node-workspace
+    slice: 8
+    source_story_ids:
+      - visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+      - visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+    purpose: >-
+      Present approved request composition as a node workspace that prevents known
+      invalid actions and makes every remaining correction local to the responsible
+      node or port. The workflow capsule looks familiar to a ComfyUI operator while
+      remaining visibly locked to the release-approved binding surface.
+    layer_assignment:
+      - component: WorkspaceController
+        layer: presentation
+        responsibility: Translate accessible commands into typed workspace mutations
+      - component: typed node views
+        layer: presentation
+        responsibility: Render profile-derived controls, ports, defects and states
+      - component: canvas adapter
+        layer: integration
+        responsibility: Map NodeCanvas port onto the selected version-pinned library
+    interfaces:
+      - name: WorkspaceController.dispatch
+        kind: presentation_controller
+        signature: 'dispatch(command: WorkspaceCommand): WorkspaceTransition'
+        async: false
+        ownership: Validates action availability before mutating state and returns
+          announcements beside the new state.
+      - name: NodeView
+        kind: presentation_contract
+        signature: 'renderNode(node: GraphNode, context: NodeViewContext): NodeViewModel'
+        async: false
+        ownership: Node kinds use named renderers; no generic HTML injection path exists.
+      - name: ConnectionPolicy
+        kind: domain_function
+        signature: 'connectionAvailability(source: PortRef, target: PortRef, profile: EndpointProfile): Available | Unavailable'
+        async: false
+        ownership: Disables deterministically known invalid targets before an edge is created.
+    data_models:
+      - name: NodeViewModel
+        shape: readonly TypeScript view model
+        fields: title; kind; controls; input ports; output ports; defects; status; actions
+        validation: every interactive element has accessible name, description and availability reason
+      - name: FocusLocation
+        shape: discriminated union
+        fields: workspace, node, port, control or action identifier
+        validation: always refers to a rendered or restorable location after a mutation
+      - name: WorkspaceAnnouncement
+        shape: readonly presentation value
+        fields: priority; concise message; related node and port identifiers
+        validation: no caller value; announced in a persistent live region rather than a toast
+    behavior:
+      - story_id: visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+        given: keyboard-only input
+        when: a complete graph is inserted, connected, configured and run-ready
+        then: every operation succeeds with visible focus and announced port types
+      - story_id: visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+        given: source and target ports whose types cannot connect
+        when: the target is encountered
+        then: it stays visible, is unavailable, and names the incompatibility before an edge exists
+      - story_id: visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+        given: an approved-workflow node
+        when: it renders
+        then: published ports are connectable while internal release identity is read-only and low-level editing routes to documentation
+    error_handling:
+      - condition: connection_unavailable
+        error: unavailable action state
+        recovery: Keep both ports visible and name the required type or cardinality
+        retryable: false
+      - condition: graph_defect
+        error: contextual NodeDefect view
+        recovery: Focus the first defect on request while preserving all other defects in place
+        retryable: false
+      - condition: focus_target_removed
+        error: focus restoration rule
+        recovery: Move focus to the nearest surviving logical node or workspace control
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 3
+        - 7
+      external:
+        - browser DOM, SVG and accessibility APIs
+        - the selected version-pinned node-canvas adapter
+      inversion_of_control: WorkspaceController and views consume NodeCanvas and
+        ConnectionPolicy ports; tests use a semantic fake canvas without pixels.
+    integration_points:
+      consumes:
+        - EndpointProfile node/port capabilities
+        - GraphDocument and GraphDefect contracts
+        - strict frontend composition from slice 7
+      provides:
+        - a complete accessible text-to-video graph editor
+        - node/port locations for compiler and preflight defects
+      documented_routes: []
+      reference_documentation:
+        - docs/models/visual-workflow-console.md
+    configuration:
+      - name: prefers-reduced-motion
+        type: browser_preference
+        default: system
+        secret: false
+        validation: honored without a page-specific opt-in
+      - name: prefers-contrast
+        type: browser_preference
+        default: system
+        secret: false
+        validation: controls remain distinguishable in increased-contrast mode
+    observability:
+      events:
+        - visual-workflow-console.local-node-workspace.8.started
+        - visual-workflow-console.local-node-workspace.8.succeeded
+        - visual-workflow-console.local-node-workspace.8.failed
+      required_fields:
+        - event
+        - outcome
+        - node_kind?
+        - action?
+        - error_code?
+      forbidden_fields:
+        - node values
+        - graph document
+        - prompts
+        - credentials
+        - signed URL tokens
+    security_constraints:
+      - Render text through DOM text APIs and never caller-provided HTML.
+      - A locked workflow capsule exposes only profile-declared ports.
+      - Unknown node kinds fail closed and do not receive a generic renderer.
+      - Inaccessible actions remain visible with reasons rather than being silently hidden.
+      - No error is reported only through pino or the browser console.
+    test_scenarios:
+      - id: S8-T01
+        level: accessibility
+        given: keyboard-only interaction
+        when: the canonical text-to-video graph is built
+        then: all operations through run readiness complete with a visible focus path
+      - id: S8-T02
+        level: accessibility
+        given: every node and port
+        when: the accessibility tree is inspected
+        then: name, role, state, type and defects are exposed
+      - id: S8-T03
+        level: unit
+        given: every incompatible port pair
+        when: connection availability is queried
+        then: the target is unavailable with a stable reason
+      - id: S8-T04
+        level: presentation
+        given: reduced motion and increased contrast
+        when: state transitions render
+        then: motion is suppressed and meaning does not depend on color alone
+      - id: S8-TF
+        level: failure_injection
+        given: a removed focus target or unknown node kind
+        when: rendering updates
+        then: focus recovers safely or rendering refuses with contextual state
+    definition_of_done:
+      - The complete graph can be built and corrected without drag gestures or a pointer.
+      - Every node, port, defect and unavailable action has a semantic accessible representation.
+      - Visual layout responds across supported viewport sizes without losing graph context.
+      - The workflow capsule cannot mutate any non-published workflow input.
+      - No toast, modal confirmation, unsafe HTML path or color-only status remains.
+    data_lifecycle:
+      kind: transient
+      detail: The editor holds the graph in memory only in this slice; persistent autosave is delivered later.
+    implementation_constraints:
+      python: n/a beyond existing static asset serving.
+      typescript: Strict ES modules, named exports, explicit return types, TSDoc and handled async boundaries.
+      logging: pino safe events are supplemental; contextual UI is authoritative.
+      bash: n/a
+      testing: Semantic DOM and state tests plus keyboard, touch, focus, contrast and motion cases.
+  - name: local-node-workspace-9-spec
+    title: Bounded draft autosave and undo Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: local-node-workspace
+    slice: 9
+    source_story_ids:
+      - visual-workflow-console/story/recover-and-undo-a-local-draft
+    purpose: >-
+      Preserve operator work locally without turning browser persistence into an
+      indefinite prompt archive. Autosave, migration, quota, expiry, cleanup and
+      deletion recovery are explicit repository behavior driven by the policy
+      approved in slice 6; undo groups each visible edit into one reversible command.
+    layer_assignment:
+      - component: DraftRepository
+        layer: data
+        responsibility: Versioned local draft persistence and cleanup port
+      - component: IndexedDbDraftRepository
+        layer: integration
+        responsibility: Browser-local transactional adapter
+      - component: CommandHistory
+        layer: domain
+        responsibility: Bounded logical undo and redo
+      - component: AutosaveCoordinator
+        layer: service
+        responsibility: Debounce saves and expose truthful save state
+    interfaces:
+      - name: DraftRepository
+        kind: frontend_port
+        signature: 'load(id): Promise<Draft | null>; save(draft): Promise<void>; delete(id): Promise<DeletionReceipt>; restore(receipt): Promise<void>; cleanup(policy, now): Promise<CleanupResult>'
+        async: true
+        ownership: Lifecycle comes from DraftLifecyclePolicy and cannot be widened by the adapter.
+      - name: CommandHistory
+        kind: domain_service
+        signature: 'apply(command): WorkspaceState; undo(): WorkspaceState; redo(): WorkspaceState'
+        async: false
+        ownership: Bounded in memory; commands contain required inverse state and no external effects.
+      - name: AutosaveCoordinator
+        kind: service
+        signature: 'schedule(state): void; flush(): Promise<SaveState>; cancel(): void'
+        async: true
+        ownership: Every rejection becomes visible SaveState and remains retryable without blocking edits.
+    data_models:
+      - name: Draft
+        shape: readonly versioned TypeScript model
+        fields: draft_id; schema_version; graph; created_at; updated_at; last_accessed_at
+        validation: graph satisfies current or migratable schema; no run, job, link, credential or provider-error fields
+      - name: DraftLifecyclePolicy
+        shape: readonly TypeScript policy value
+        fields: retention milliseconds; recovery milliseconds; maximum bytes; cleanup triggers
+        validation: values exactly project the approved slice 6 decision and are positive bounded integers
+      - name: SaveState
+        shape: discriminated union
+        fields: clean, scheduled, saving, saved, failed or quota_exceeded with safe timestamps/codes
+        validation: failures contain no serialized graph or storage exception text
+    behavior:
+      - story_id: visual-workflow-console/story/recover-and-undo-a-local-draft
+        given: a graph edit
+        when: the debounce boundary passes
+        then: one transactional save occurs and visible state progresses through saving to saved
+      - story_id: visual-workflow-console/story/recover-and-undo-a-local-draft
+        given: one command deleting a node with connected edges
+        when: Undo is invoked
+        then: node, edges, values, selection and focus restore as one operation
+      - story_id: visual-workflow-console/story/recover-and-undo-a-local-draft
+        given: expired, unexpired and recoverably deleted drafts
+        when: policy cleanup runs at an injected instant
+        then: each reaches exactly the state the approved lifecycle defines
+    error_handling:
+      - condition: draft_quota_exceeded
+        error: quota_exceeded SaveState
+        recovery: Preserve in-memory work, show local corrective action and write nothing partial
+        retryable: true
+      - condition: draft_migration_unsupported
+        error: migration_required SaveState
+        recovery: Keep prior bytes readable and offer export; never overwrite with a partial migration
+        retryable: false
+      - condition: draft_store_unavailable
+        error: failed SaveState
+        recovery: Continue in memory, retain unsaved marker and permit explicit retry
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - 6
+        - 8
+      external:
+        - browser IndexedDB API
+      inversion_of_control: Repository, clock, scheduler and lifecycle policy are
+        injected; tests use in-memory transactional adapters and deterministic clocks.
+    integration_points:
+      consumes:
+        - GraphDocument schema and migrations
+        - the exact approved DraftLifecyclePolicy from slice 6
+        - WorkspaceCommand mutations from slice 8
+      provides:
+        - bounded local draft recovery
+        - truthful save state and logical undo/redo
+      documented_routes: []
+      reference_documentation:
+        - docs/assurance/visual-workflow-local-drafts.md
+    configuration:
+      - name: draft lifecycle policy
+        type: generated_readonly_config
+        default: approved decision from slice 6
+        secret: false
+        validation: exact digest or version of the approved policy projection
+    observability:
+      events:
+        - visual-workflow-console.local-node-workspace.9.save_succeeded
+        - visual-workflow-console.local-node-workspace.9.save_failed
+        - visual-workflow-console.local-node-workspace.9.cleanup_succeeded
+      required_fields:
+        - event
+        - outcome
+        - draft_schema_version?
+        - safe_error_code?
+      forbidden_fields:
+        - draft identifiers derived from user values
+        - graph documents
+        - prompts
+        - IndexedDB keys or values
+        - signed URL tokens
+        - credentials
+    security_constraints:
+      - Store drafts only in the current loopback origin and never transmit them for persistence.
+      - Enforce expiry and quota from injected approved policy, including on startup.
+      - Use transactional replacement so failed saves or migrations preserve the last readable draft.
+      - Never persist signed URLs, credentials, run/job records or raw provider errors.
+      - Deletion is recoverable only inside the approved recovery bound and expires automatically.
+    test_scenarios:
+      - id: S9-T01
+        level: unit
+        given: repeated edits inside one debounce window
+        when: the scheduler advances
+        then: one save commits the latest complete state
+      - id: S9-T02
+        level: unit
+        given: node deletion with three connected edges
+        when: undo and redo run
+        then: the whole logical edit reverses and reapplies atomically
+      - id: S9-T03
+        level: lifecycle
+        given: drafts around every expiry and recovery boundary
+        when: deterministic cleanup runs
+        then: retained and removed sets exactly match policy
+      - id: S9-T04
+        level: failure_injection
+        given: quota, transaction and migration failures
+        when: save runs
+        then: prior durable state survives and current work remains visible in memory
+      - id: S9-TF
+        level: security
+        given: a draft candidate containing each forbidden field
+        when: repository validation runs
+        then: save is refused before opening a write transaction
+    definition_of_done:
+      - Autosave, explicit save state and reload recovery are deterministic and tested.
+      - Undo/redo bounds memory and groups user-visible edits correctly.
+      - Expiry, cleanup, quota, migration and recoverable deletion exactly match the approved decision.
+      - Transaction failures never corrupt or replace the last readable draft.
+      - No cloud sync, server draft route, indefinite record or forbidden persisted field remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Versioned prompt-bearing graph drafts remain only in browser IndexedDB
+        for the exact approved inactivity and recovery bounds; startup and scheduled
+        cleanup enforce expiry and quota.
+    implementation_constraints:
+      python: n/a
+      typescript: Strict readonly models, ES modules, named exports, explicit return types and handled transactions.
+      logging: pino receives schema versions, outcomes and safe codes only.
+      bash: n/a
+      testing: Deterministic fake clocks, transactional repositories and policy-boundary tables.
+  - name: local-node-workspace-10-spec
+    title: Wire execution and committed result nodes Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: local-node-workspace
+    slice: 10
+    source_story_ids:
+      - visual-workflow-console/story/run-a-graph-to-a-committed-video
+    purpose: >-
+      Carry one valid graph through the existing asynchronous endpoint and durable
+      delivery state machines without flattening their meanings. Run and result
+      nodes show local compilation, provider response, worker acceptance, identity
+      agreement and durable commit as distinct contextual states.
+    layer_assignment:
+      - component: SameOriginVisualWorkflowClient
+        layer: integration
+        responsibility: Typed bounded client for local visual graph routes
+      - component: RunNodeMachine
+        layer: service
+        responsibility: Local, provider and handler execution states
+      - component: ResultNodeMachine
+        layer: service
+        responsibility: Commit, authorization, link and playback states
+      - component: run and result node views
+        layer: presentation
+        responsibility: Contextual status, recovery, cancellation and media controls
+    interfaces:
+      - name: SameOriginVisualWorkflowClient
+        kind: frontend_adapter
+        signature: 'capabilities, preflight, generate, observe, cancel, result and deliveryLink async methods returning validated response unions'
+        async: true
+        ownership: Uses relative routes, bounded response reads and AbortSignal; every fetch and parse rejection is handled.
+      - name: RunNodeMachine.transition
+        kind: state_machine
+        signature: 'transition(state: RunNodeState, event: RunNodeEvent): RunNodeState'
+        async: false
+        ownership: Impossible transitions remain unrepresentable; provider COMPLETED is not durable success.
+      - name: ResultNodeMachine.transition
+        kind: state_machine
+        signature: 'transition(state: ResultNodeState, event: ResultNodeEvent): ResultNodeState'
+        async: false
+        ownership: A playback-ready state requires committed result evidence and a live reauthorized link.
+    data_models:
+      - name: RunNodeState
+        shape: readonly discriminated union
+        fields: idle, compile_rejected, preflight_rejected, ready, submitting,
+          queued, running, provider_terminal, handler_refused, cancelled or failed
+        validation: provider status, handler response and retryability remain distinct
+      - name: ResultNodeState
+        shape: readonly discriminated union
+        fields: unavailable, awaiting_commit, identity_mismatch, committed,
+          link_loading, playable, link_expired or delivery_failed
+        validation: URL exists only in playable state and is never serializable into Draft
+      - name: ApiFailure
+        shape: readonly safe failure value
+        fields: error_code; message; retryable; endpoint_paused; safe context; defects
+        validation: response shape is runtime-validated; unexpected provider text is not rendered as HTML
+    behavior:
+      - story_id: visual-workflow-console/story/run-a-graph-to-a-committed-video
+        given: a graph accepted by compiler and preflight
+        when: Run is invoked
+        then: one asynchronous submission occurs and the returned run enters observation without a long-lived request
+      - story_id: visual-workflow-console/story/run-a-graph-to-a-committed-video
+        given: provider COMPLETED carrying a handler refusal
+        when: status is observed
+        then: the run node shows refusal defects and the result node remains unavailable
+      - story_id: visual-workflow-console/story/run-a-graph-to-a-committed-video
+        given: handler acceptance before the commit marker is readable
+        when: status is observed
+        then: run completion and awaiting commit are both visible rather than collapsed into success
+      - story_id: visual-workflow-console/story/run-a-graph-to-a-committed-video
+        given: a committed result
+        when: playback is requested
+        then: a newly authorized bounded link enters only the result node and playback begins there
+    error_handling:
+      - condition: endpoint_paused
+        error: paused RunNodeState
+        recovery: Keep the valid graph intact and offer contextual retry unchanged
+        retryable: true
+      - condition: handler_refused
+        error: handler_refused RunNodeState
+        recovery: Map defects back to graph nodes and keep the result unavailable
+        retryable: false
+      - condition: identity_mismatch
+        error: identity_mismatch ResultNodeState
+        recovery: Name console/endpoint principal misconfiguration and do not poll the wrong key indefinitely
+        retryable: false
+      - condition: signed_link_expired
+        error: link_expired ResultNodeState
+        recovery: Reauthorize and request a fresh link without rerunning generation
+        retryable: true
+    dependencies:
+      required_slice_ids:
+        - 4
+        - 8
+        - 9
+      external:
+        - browser Fetch, AbortController and media APIs
+      inversion_of_control: Client, polling scheduler, clock and media player are
+        injected; state machines are pure reducers with deterministic tests.
+    integration_points:
+      consumes:
+        - visual graph capability, preflight and generation routes
+        - existing run status, cancel, result and delivery-link routes
+        - GraphFieldMap for contextual defects
+      provides:
+        - inline asynchronous run control and truthful durable-result playback
+      documented_routes:
+        - POST /api/visual-workflow/preflight
+        - POST /api/visual-workflow/generate
+        - GET /api/runs/{run_id}
+        - POST /api/runs/{run_id}/cancel
+        - GET /api/jobs/{job_id}/result
+        - POST /api/jobs/{job_id}/link
+      reference_documentation:
+        - docs/models/operator-console.md
+        - docs/published/result-contract.md
+    configuration:
+      - name: RUN_STATUS_POLL_INTERVAL_MS
+        type: positive_integer
+        default: 2000
+        secret: false
+        validation: fixed client default with one active poll per run node
+    observability:
+      events:
+        - visual-workflow-console.local-node-workspace.10.run_submitted
+        - visual-workflow-console.local-node-workspace.10.run_state_changed
+        - visual-workflow-console.local-node-workspace.10.result_state_changed
+        - visual-workflow-console.local-node-workspace.10.failed
+      required_fields:
+        - event
+        - outcome
+        - provider_state?
+        - result_state?
+        - safe_error_code?
+      forbidden_fields:
+        - graph documents
+        - prompts
+        - run and job identifiers
+        - provider error text
+        - signed URLs
+        - credentials
+    security_constraints:
+      - All network calls are relative same-origin requests to the loopback console.
+      - Runtime-validate API responses before state transitions or rendering.
+      - Signed links live only in ephemeral result-node state and never in drafts, events or errors.
+      - Render messages as text and never provider-supplied HTML.
+      - Cancellation is scoped to the exact run created by the node and needs no confirmation modal.
+    test_scenarios:
+      - id: S10-T01
+        level: state_machine
+        given: every valid run transition from ready to each terminal outcome
+        when: events are reduced
+        then: states and available actions match the transition contract
+      - id: S10-T02
+        level: integration
+        given: provider COMPLETED with handler refusal
+        when: observed
+        then: no result success or playback state is reachable
+      - id: S10-T03
+        level: integration
+        given: handler success followed later by durable commit
+        when: observations arrive
+        then: awaiting-commit precedes committed and playable
+      - id: S10-T04
+        level: security
+        given: a signed playback link
+        when: drafts, events, errors and serialized state are scanned
+        then: the URL exists only in ephemeral playable state
+      - id: S10-TF
+        level: failure_injection
+        given: network, abort, malformed response, provider, identity and delivery failures
+        when: each occurs
+        then: a contextual recoverable or terminal state appears with no unhandled rejection
+    definition_of_done:
+      - Every provider, handler and result state has a distinct tested node presentation.
+      - Provider completion cannot reach playable state without commit evidence.
+      - Cancellation, retry and link renewal preserve the graph and use existing server paths.
+      - All fetches, polls and media actions handle rejection and teardown.
+      - No toast, modal confirmation, signed-link persistence or console-only error remains.
+    data_lifecycle:
+      kind: bounded
+      detail: Run records remain session-only in the console; signed links remain
+        ephemeral in the result node until their bounded expiry or page closure and
+        are excluded from drafts and events.
+    implementation_constraints:
+      python: Existing console API contracts remain PEP 8/484 typed and provider-neutral.
+      typescript: Strict readonly state machines, named exports, explicit return types and handled async effects.
+      logging: pino safe transitions only; identifiers, provider text and signed links are forbidden.
+      bash: n/a
+      testing: Pure reducer tables plus injected client, scheduler, clock and media fakes.
+  - name: local-node-workspace-11-spec
+    title: Test and document the visual workflow console Specification
+    status: planned
+    format: full
+    capability: visual-workflow-console
+    feature: local-node-workspace
+    slice: 11
+    source_story_ids:
+      - visual-workflow-console/story/run-a-graph-to-a-committed-video
+      - visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+      - visual-workflow-console/story/recover-and-undo-a-local-draft
+      - visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+    purpose: >-
+      Verify the complete local workspace as an operator experiences it and publish
+      the boundary it enforces. Browser tests exercise semantic interaction and real
+      packaged routes; security tests prove credentials and executable workflow
+      graphs do not cross; lifecycle tests prove autosave remains bounded.
+    layer_assignment:
+      - component: browser functionality suite
+        layer: integration
+        responsibility: Exercise packaged assets against deterministic local API state
+      - component: accessibility and interaction suite
+        layer: presentation
+        responsibility: Prove keyboard, pointer, touch, focus and preference behavior
+      - component: security and lifecycle suite
+        layer: integration
+        responsibility: Prove origin, CSP, non-disclosure, expiry and cleanup properties
+      - component: operator documentation
+        layer: presentation
+        responsibility: Explain graph authoring, execution states and release boundary
+    interfaces:
+      - name: VisualWorkflowBrowserHarness
+        kind: test_harness
+        signature: 'start(fixture: ConsoleFixture): Promise<BrowserSession>; stop(): Promise<void>'
+        async: true
+        ownership: Owns setup and teardown, uses loopback only and exposes semantic page queries.
+      - name: WorkspaceFixtureApi
+        kind: test_adapter
+        signature: 'setRunState, setHandlerResponse, setResultState and advanceClock operations'
+        async: true
+        ownership: Drives deterministic state without provider or object-storage calls.
+      - name: packaged_workspace_contract
+        kind: python_contract_test
+        signature: verify assets, CSP, Host checks and absence of runtime dependency changes
+        async: false
+        ownership: Pins the built artifacts as part of the installed package rather than the checkout.
+    data_models:
+      - name: BrowserScenario
+        shape: table-driven test record
+        fields: id; input modality; initial graph; server states; actions; expected semantic states
+        validation: uses synthetic prompts and identifiers; cleanup is mandatory
+      - name: AccessibilitySnapshot
+        shape: test artifact
+        fields: roles; names; states; descriptions; focus sequence; live announcements
+        validation: contains semantic UI metadata only and is not retained with prompt values
+      - name: ForbiddenMarkerSet
+        shape: frozen test value
+        fields: provider key; storage keys; prompt; workflow body; signed link; provider error
+        validation: unique synthetic markers scanned across DOM, assets, events, drafts and responses
+    behavior:
+      - story_id: visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+        given: a fresh workspace and keyboard-only input
+        when: the canonical graph is built and validated
+        then: Run becomes available with visible focus and no pointer gesture
+      - story_id: visual-workflow-console/story/recover-and-undo-a-local-draft
+        given: an autosaved draft and deterministic reload
+        when: the browser session restarts before expiry
+        then: the graph restores; after expiry cleanup removes it according to policy
+      - story_id: visual-workflow-console/story/run-a-graph-to-a-committed-video
+        given: one generation scenario
+        when: queue, handler and commit states advance independently
+        then: the run and result nodes present every distinction and play only committed media
+      - story_id: visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+        given: an attempt to submit raw ComfyUI workflow JSON
+        when: exercised through the browser and route
+        then: direct submission is absent or refused and documentation names the release path
+    error_handling:
+      - condition: browser_scenario_failure
+        error: test failure with semantic state
+        recovery: Report roles, states and safe error codes without screenshotting or retaining prompt values
+        retryable: false
+      - condition: forbidden_marker_exposed
+        error: security test failure
+        recovery: Block completion and identify the surface class, never print the marker value
+        retryable: false
+      - condition: lifecycle_cleanup_failed
+        error: lifecycle test failure
+        recovery: Block completion because autosave may not ship without enforced cleanup
+        retryable: false
+    dependencies:
+      required_slice_ids:
+        - 5
+        - 10
+      external:
+        - a version-pinned browser automation runner
+        - an accessibility rule engine with pinned ruleset
+      inversion_of_control: The harness drives local fakes and deterministic clocks;
+        no cloud provider, real credential, object store or production endpoint participates.
+    integration_points:
+      consumes:
+        - every backend and frontend contract from slices 1 to 10
+        - the installed-package static asset path and loopback server
+      provides:
+        - browser, accessibility, security and lifecycle evidence
+        - docs/models/visual-workflow-console.md
+      documented_routes:
+        - GET /api/visual-workflow/capabilities
+        - POST /api/visual-workflow/preflight
+        - POST /api/visual-workflow/generate
+        - existing run, cancel, result and link routes
+      reference_documentation:
+        - docs/models/operator-console.md
+        - docs/runbooks/release-publication.md
+    configuration:
+      - name: browser test port
+        type: ephemeral_loopback_port
+        default: 0
+        secret: false
+        validation: operating-system assigned loopback port only
+    observability:
+      events:
+        - visual-workflow-console.local-node-workspace.11.started
+        - visual-workflow-console.local-node-workspace.11.succeeded
+        - visual-workflow-console.local-node-workspace.11.failed
+      required_fields:
+        - event
+        - outcome
+        - scenario_id?
+        - safe_error_code?
+      forbidden_fields:
+        - credentials
+        - prompts
+        - graph documents
+        - run and job identifiers
+        - workflow bodies
+        - signed URLs
+        - screenshots containing user content
+    security_constraints:
+      - Use synthetic credentials and content markers only; never read ambient secrets.
+      - Bind the harness to loopback and preserve the production Host and CSP checks.
+      - Scan DOM, responses, assets, drafts and captured events for forbidden markers.
+      - Clear browser storage and terminate servers in teardown even after failure.
+      - Documentation never suggests exposing port 8188 or bypassing release publication.
+    test_scenarios:
+      - id: S11-T01
+        level: browser
+        given: a fresh packaged workspace
+        when: a graph is assembled with keyboard, pointer and touch in separate runs
+        then: all produce the same GraphDocument execution projection
+      - id: S11-T02
+        level: accessibility
+        given: every node, port, state and inline defect
+        when: semantic rules and focus traversal run
+        then: no critical violation or unreachable action remains
+      - id: S11-T03
+        level: browser
+        given: deterministic queued, running, refused, failed, committed and expired-link states
+        when: the page observes each
+        then: its contextual node state and recovery action match the contract
+      - id: S11-T04
+        level: lifecycle
+        given: drafts at quota, migration, recovery and expiry boundaries
+        when: reload and cleanup scenarios run
+        then: work recovery and deletion exactly match policy
+      - id: S11-T05
+        level: security
+        given: every forbidden synthetic marker
+        when: the whole browser session is scanned
+        then: each is confined to its explicitly ephemeral authorized surface or absent
+      - id: S11-TF
+        level: failure_injection
+        given: API, browser storage, media and teardown failures
+        when: each occurs
+        then: visible recovery holds, no work is silently lost and cleanup still runs
+    definition_of_done:
+      - Backend pytest, frontend unit, browser functionality and accessibility suites pass together.
+      - The installed package serves the verified production assets under unchanged security headers.
+      - Keyboard, pointer and touch produce equivalent executable graphs.
+      - Draft expiry and cleanup, credential absence and raw-workflow refusal are proven end to end.
+      - Documentation clearly separates request graph authoring from pinned workflow publication.
+      - No placeholder, skipped critical accessibility rule, toast, modal confirmation or console-only error remains.
+    data_lifecycle:
+      kind: exempt
+      detail: Tests use synthetic values and teardown-cleared local stores. Semantic
+        failure artifacts exclude prompt content, screenshots with user data and signed links.
+    implementation_constraints:
+      python: Harness adapters follow PEP 8/484 and Google-style docstrings with explicit cleanup.
+      typescript: Strict ES modules, named exports, explicit return types and handled browser promises.
+      logging: pino and structlog captures are scanned for forbidden fields and never serve as sole error UI.
+      bash: Test orchestration is Bash 3.2-compatible when shell wrapping is needed.
+      testing: Deterministic browser/server fakes, semantic accessibility assertions and failure-safe teardown.

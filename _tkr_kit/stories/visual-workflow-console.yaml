@@ -1,0 +1,278 @@
+capability: visual-workflow-console
+stories:
+  - name: discover-the-endpoints-approved-profile
+    status: planned
+    display_name: Discover the endpoint's approved profile
+    feature: approved-graph-execution
+    actor: Operator
+    intent: >-
+      see the exact workflow, model set, modes and input ports the configured
+      endpoint exposes, rather than rely on a workflow identifier embedded in the
+      page
+    preconditions:
+      - A reviewed release catalog and model-set manifest exist for the endpoint.
+      - The console is configured for that endpoint and an expected profile digest.
+    trigger_action: The operator opens the visual workflow console
+    steps:
+      - actor: Console
+        action: loads the endpoint profile through an injected resolver
+        system_response: its canonical digest, endpoint identity and release facts
+          are verified before a page is served as ready
+      - actor: Browser
+        action: requests visual capabilities
+        system_response: approved workflow capsules and their typed ports are
+          returned without a credential or executable workflow body
+      - actor: Operator
+        action: selects an approved workflow capsule
+        system_response: model, canvas, timing and prompt constraints update from
+          the profile rather than from hard-coded page values
+    acceptance_criteria:
+      - given: a profile whose digest differs from the configured digest
+        when: the console starts
+        then: the visual capability remains unavailable and the mismatch is named
+      - given: a profile naming another endpoint
+        when: capabilities are requested
+        then: it is refused rather than presenting controls for a release this
+          console does not submit to
+      - given: a valid profile
+        when: it is returned to the browser
+        then: it contains no provider credential, storage credential, signed URL,
+          prompt body or raw ComfyUI graph
+    slice_ids:
+      - visual-workflow-console/slice/1
+      - visual-workflow-console/slice/4
+      - visual-workflow-console/slice/5
+  - name: compose-a-generation-as-a-typed-graph
+    status: planned
+    display_name: Compose a generation as a typed graph
+    feature: approved-graph-execution
+    actor: Operator
+    intent: >-
+      connect prompt and generation settings to an approved workflow and know the
+      same composition always becomes the same generation request
+    preconditions:
+      - A verified endpoint profile is available.
+    trigger_action: The operator connects all required inputs to an approved workflow
+    steps:
+      - actor: Graph editor
+        action: records typed nodes, ports and edges in a versioned document
+        system_response: graph identity and execution values remain separate from
+          visual position, selection and viewport metadata
+      - actor: Graph compiler
+        action: validates topology and resolves each required input
+        system_response: exactly one normalized GenerationRequest is constructed
+          from the endpoint profile and connected values
+      - actor: Console preflight
+        action: validates the compiled request
+        system_response: the worker-equivalent request and prompt checks run in
+          their existing order and return the wire text or all defects
+    acceptance_criteria:
+      - given: two graphs with identical execution values and different layout
+        when: they compile
+        then: their requests and request hashes are identical
+      - given: a structured-prompt node
+        when: it compiles and preflight runs
+        then: the graph carries the structured fields and the existing prompt
+          boundary derives the wire text
+      - given: every required port is connected once
+        when: compilation runs twice
+        then: both runs produce byte-equivalent canonical requests
+    slice_ids:
+      - visual-workflow-console/slice/2
+      - visual-workflow-console/slice/3
+      - visual-workflow-console/slice/5
+  - name: refuse-an-unexecutable-or-unapproved-graph
+    status: planned
+    display_name: Refuse an unexecutable or unapproved graph
+    feature: approved-graph-execution
+    actor: Operator
+    intent: >-
+      receive every actionable graph defect locally before a worker cold start,
+      without being able to smuggle a ComfyUI graph or undeclared input through
+      the visual document
+    preconditions:
+      - A graph document has been supplied to the local console.
+    trigger_action: The graph changes or the operator attempts preflight
+    steps:
+      - actor: Graph contract
+        action: rejects unknown node kinds, ports, fields and oversized documents
+        system_response: invalid structure is named without echoing prompt values
+      - actor: Graph compiler
+        action: checks cycles, reachability, cardinality, port types and profile
+          compatibility
+        system_response: every node- and port-scoped defect is returned together
+      - actor: Graph service
+        action: withholds delegation when any defect exists
+        system_response: neither the RunPod run client nor the worker is called
+    acceptance_criteria:
+      - given: raw API workflow JSON or a node carrying class_type
+        when: the graph is parsed
+        then: it is refused as an unknown field and no executable graph bytes
+          cross the request boundary
+      - given: a cycle, incompatible connection and missing required port together
+        when: compilation runs
+        then: all defects are returned with node and port locations in one response
+      - given: a workflow/model pair absent from the verified endpoint profile
+        when: compilation runs
+        then: it is refused locally and the run client records no submission
+    slice_ids:
+      - visual-workflow-console/slice/2
+      - visual-workflow-console/slice/3
+      - visual-workflow-console/slice/4
+      - visual-workflow-console/slice/5
+  - name: run-a-graph-to-a-committed-video
+    status: planned
+    display_name: Run a graph to a committed video
+    feature: approved-graph-execution
+    actor: Operator
+    intent: >-
+      submit a valid graph and watch it progress from queue to a committed,
+      playable result without confusing provider completion with generation success
+    preconditions:
+      - The graph compiles and preflight accepts its request.
+      - The console holds the existing RunPod and delivery-read credentials.
+    trigger_action: The operator runs the graph
+    steps:
+      - actor: Graph service
+        action: delegates the compiled request to ConsoleService.generate
+        system_response: an asynchronous provider run and the derived job identity
+          are returned through the existing session registry
+      - actor: Run node
+        action: observes and optionally cancels the run
+        system_response: queue, execution, handler response and identity agreement
+          remain separate visible states
+      - actor: Result node
+        action: observes durable completion and requests playback
+        system_response: only a committed video receives a reauthorized bounded link
+    acceptance_criteria:
+      - given: a provider run reporting COMPLETED with a handler refusal
+        when: the graph observes it
+        then: the run node shows the refusal and the result node does not show success
+      - given: a successful handler response whose result marker is not yet readable
+        when: the graph observes it
+        then: provider completion is shown while the result remains in progress
+      - given: a committed result
+        when: playback is requested
+        then: the existing signed-link policy issues only the video link and the
+          result plays inside its node
+    slice_ids:
+      - visual-workflow-console/slice/4
+      - visual-workflow-console/slice/5
+      - visual-workflow-console/slice/10
+      - visual-workflow-console/slice/11
+  - name: edit-the-node-workspace-without-a-pointer
+    status: planned
+    display_name: Edit the node workspace without a pointer
+    feature: local-node-workspace
+    actor: Operator
+    intent: >-
+      create, connect, configure and run a graph with keyboard, pointer or touch
+      while keeping focus, validation and current context visible
+    preconditions:
+      - The frontend has loaded a verified endpoint profile.
+    trigger_action: The operator enters the graph workspace
+    steps:
+      - actor: Operator
+        action: inserts and moves through nodes and ports using the keyboard
+        system_response: focus order, port types and available actions are announced
+          without requiring drag gestures
+      - actor: Operator
+        action: attempts an incompatible connection
+        system_response: the target is disabled when incompatibility is already
+          known, otherwise an inline port defect explains the correction
+      - actor: Workspace
+        action: reflects validation, saving and execution state
+        system_response: state appears in the affected node and persistent status
+          region, never only in a toast or developer console
+    acceptance_criteria:
+      - given: no pointing device
+        when: a complete text-to-video graph is assembled
+        then: every operation through Run is reachable and focus remains visible
+      - given: reduced-motion or increased-contrast preferences
+        when: the graph renders and state changes
+        then: motion is suppressed and controls remain distinguishable
+      - given: an unavailable action
+        when: its control is encountered
+        then: it remains visible but disabled with the unmet condition exposed
+    slice_ids:
+      - visual-workflow-console/slice/7
+      - visual-workflow-console/slice/8
+      - visual-workflow-console/slice/11
+  - name: recover-and-undo-a-local-draft
+    status: planned
+    display_name: Recover and undo a local draft
+    feature: local-node-workspace
+    actor: Operator
+    intent: >-
+      keep my graph through reloads and reverse accidental edits without silently
+      retaining prompt-bearing drafts forever
+    preconditions:
+      - The data-handling decision has fixed the local store, inactivity lifetime,
+        cleanup trigger and migration policy.
+    trigger_action: The operator changes a graph
+    steps:
+      - actor: Workspace
+        action: records an undoable command and schedules an autosave
+        system_response: a visible local save state advances without blocking editing
+      - actor: Draft repository
+        action: stores the versioned graph locally
+        system_response: no draft, prompt or signed link is sent to a cloud or
+          server-side project store
+      - actor: Workspace
+        action: opens after reload or after an accidental edit
+        system_response: an unexpired draft restores and the edit can be undone;
+          expired drafts are removed according to the recorded policy
+    acceptance_criteria:
+      - given: a saved unexpired draft
+        when: the page reloads
+        then: topology, execution values and viewport restore without resubmission
+      - given: an accidental node deletion
+        when: Undo is invoked
+        then: the node, its edges and values are restored as one operation
+      - given: a draft beyond the approved inactivity lifetime
+        when: cleanup runs
+        then: it is removed and no prompt-bearing tombstone survives outside the
+          policy's recovery bound
+    slice_ids:
+      - visual-workflow-console/slice/6
+      - visual-workflow-console/slice/9
+      - visual-workflow-console/slice/11
+  - name: distinguish-request-authoring-from-workflow-publication
+    status: planned
+    display_name: Distinguish request authoring from workflow publication
+    feature: local-node-workspace
+    actor: Platform operator
+    intent: >-
+      understand which inputs I may change for a run and where a real ComfyUI
+      workflow change must be reviewed and published
+    preconditions:
+      - The selected endpoint profile names an approved workflow and its exposed bindings.
+    trigger_action: The operator inspects or attempts to edit the approved workflow capsule
+    steps:
+      - actor: Workspace
+        action: renders the workflow as a locked capsule with connectable published ports
+        system_response: internal loaders, samplers, schedulers and save nodes are
+          inspectable as release identity but not mutable request inputs
+      - actor: Operator
+        action: asks to change the low-level workflow
+        system_response: the workspace points to the pinned local ComfyUI authoring and
+          release publication path rather than opening an unsafe run-time editor
+      - actor: Release path
+        action: validates, digests, approves, publishes and deploys a new workflow
+        system_response: only a matching new endpoint profile makes the workflow
+          selectable for generation
+    acceptance_criteria:
+      - given: a published binding port
+        when: the capsule renders
+        then: it is connectable with its source type and constraints
+      - given: an internal ComfyUI node input
+        when: the operator inspects it
+        then: it cannot become part of the generation request
+      - given: a locally exported replacement API graph
+        when: the operator wants to run it remotely
+        then: the documented release path is required and direct submission is absent
+    slice_ids:
+      - visual-workflow-console/slice/1
+      - visual-workflow-console/slice/7
+      - visual-workflow-console/slice/8
+      - visual-workflow-console/slice/11

@@ -17,6 +17,7 @@ capabilities:
       - operations-and-scale
       - prompt-authoring
       - operator-console
+      - visual-workflow-console
       - reference-generation
       - stills-authoring
     scope_in:
@@ -76,6 +77,7 @@ capabilities:
     provides_to:
       - worker-runtime
       - operations-and-scale
+      - visual-workflow-console
       - reference-generation
       - stills-authoring
     scope_in:
@@ -192,6 +194,7 @@ capabilities:
       - operations-and-scale
       - prompt-authoring
       - operator-console
+      - visual-workflow-console
       - reference-generation
       - stills-authoring
     scope_in:
@@ -252,6 +255,7 @@ capabilities:
     provides_to:
       - operations-and-scale
       - operator-console
+      - visual-workflow-console
       - reference-generation
       - stills-authoring
     scope_in:
@@ -312,6 +316,7 @@ capabilities:
     optional_depends_on: []
     provides_to:
       - operator-console
+      - visual-workflow-console
       - stills-authoring
     scope_in:
       - Structured JSON event model and correlation across boot, hydration,
@@ -378,6 +383,7 @@ capabilities:
       - operations-and-scale
       - prompt-authoring
       - operator-console
+      - visual-workflow-console
       - reference-generation
       - stills-authoring
     scope_in:
@@ -441,6 +447,7 @@ capabilities:
     optional_depends_on: []
     provides_to:
       - operator-console
+      - visual-workflow-console
       - reference-generation
     scope_in:
       - Typed models for the H3 base-mode prompt
@@ -517,6 +524,7 @@ capabilities:
       - operations-and-scale
     optional_depends_on: []
     provides_to:
+      - visual-workflow-console
       - reference-generation
       - stills-authoring
     scope_in:
@@ -585,6 +593,106 @@ capabilities:
     evidence:
       kind: commit
       ref: 954dd8c54e68900805b6ed78cf039bdca11e3632
+  - name: visual-workflow-console
+    layer: service
+    status: planned
+    display_name: Visual Workflow Console
+    description: 'A local, ComfyUI-style node workspace that composes the existing
+      generation request contract, validates it through the worker-equivalent preflight,
+      submits it through the loopback console, and follows it to a durably committed
+      result. The visual graph is an authoring document rather than executable ComfyUI
+      workflow JSON: a release-approved workflow remains digest-pinned on the worker,
+      and the graph can vary only the inputs its endpoint profile exposes.'
+    depends_on:
+      - engineering-foundation
+      - security-foundation
+      - artifact-foundation
+      - job-execution
+      - durable-delivery
+      - prompt-authoring
+      - operations-and-scale
+      - operator-console
+    optional_depends_on: []
+    provides_to:
+      - reference-generation
+      - stills-authoring
+    scope_in:
+      - A versioned endpoint profile generated from reviewed release facts and pinned
+        by digest, pairing the exact workflow, model set, supported modes, exposed
+        binding ports, trained envelope, grammar revision, and endpoint identity.
+      - A strict visual-graph contract with typed nodes, ports and edges, bounded graph
+        size, stable local identifiers, and no field capable of carrying raw ComfyUI
+        workflow JSON or selecting an undeclared node input.
+      - A provider-neutral graph compiler that proves connectivity, port compatibility,
+        required inputs, profile compatibility and acyclicity before producing exactly
+        one existing GenerationRequest.
+      - Loopback graph capability, preflight and generation routes that delegate to the
+        current console services, leaving submission, observation, cancellation,
+        committed-result lookup and signed delivery semantics unchanged.
+      - An accessible local node workspace with mouse, keyboard and touch parity,
+        contextual node/port defects, disabled invalid actions, inline run state,
+        playback in the result node, undo, and bounded local draft autosave.
+      - 'A separate, visible boundary for low-level ComfyUI workflow authoring: exported
+        API graphs enter the reviewed release catalog and manifest publication path
+        before they can appear as an approved workflow capsule.'
+    scope_out:
+      - Sending caller-authored ComfyUI API graphs, class types, model paths, sampler
+        settings, output paths, or arbitrary node inputs through a generation request.
+      - Exposing the worker's ComfyUI port, proxying its browser UI, or emulating its
+        prompt, history or WebSocket API over RunPod Serverless.
+      - Changing the generation request, result commit, authorization, signed-link,
+        worker hydration, or workflow-binding contracts.
+      - Image, reference, audio or still input nodes before their owning capabilities
+        approve the data-handling path and publish a compatible endpoint profile.
+      - A cloud-synchronized project store, multi-user collaboration, or publishing the
+        unauthenticated console beyond loopback.
+    acceptance_criteria:
+      - The browser receives an authoritative endpoint profile and contains no hard-coded
+        workflow/model pairing that can drift from the release the endpoint runs.
+      - Every accepted visual graph compiles deterministically to one request accepted
+        by the existing preflight, and changing only layout metadata does not change the
+        request hash.
+      - An unknown node, incompatible edge, cycle, missing required port, unapproved
+        workflow/model pair, or raw workflow payload is refused locally with node- and
+        port-scoped defects and reaches neither RunPod nor ComfyUI.
+      - Submission remains asynchronous and provider completion remains distinct from
+        a committed result; cancellation and video delivery reuse the console's existing
+        authorization and bounded-link paths.
+      - The page receives no provider or storage credential, and the worker ComfyUI
+        process remains loopback-only and secret-free.
+      - The graph is operable without a pointer, never reports errors only in the browser
+        console, and preserves work through undo and an explicitly bounded local draft
+        lifecycle approved before persistence is enabled.
+      - Editing a low-level ComfyUI workflow cannot alter a running endpoint; the new
+        graph becomes selectable only after release validation, digest publication and
+        deployment of a matching endpoint profile.
+    paths:
+      - src/tkr_cloud_video/visual_workflow/**
+      - src/tkr_cloud_video/console/**
+      - tests/visual_workflow/**
+      - release-assets/**/endpoint-profile.json
+      - docs/models/visual-workflow-console.md
+    execution_gate:
+      kind: manual_cross_capability
+      prerequisite_capabilities:
+        - engineering-foundation
+        - security-foundation
+        - artifact-foundation
+        - worker-runtime
+        - job-execution
+        - durable-delivery
+        - prompt-authoring
+        - operations-and-scale
+        - operator-console
+      rule: Do not transition the capability's entry slice from blocked to planned
+        until every prerequisite capability test slice is done.
+    deferred_reason: The graph surface deliberately builds on the loopback console rather
+      than creating a second credential-bearing client. Its entry slice remains blocked
+      until the operator-console implementation has reached the default branch and the
+      current capability is marked done.
+    resume_condition: Transition the entry slice from blocked to planned only after
+      operator-console is done. The local-draft store remains separately gated until its
+      data-handling and retention decision is recorded by slice 6.
   - name: reference-generation
     layer: service
     status: planned
@@ -608,6 +716,7 @@ capabilities:
       - durable-delivery
       - prompt-authoring
       - operator-console
+      - visual-workflow-console
     optional_depends_on: []
     provides_to:
       - stills-authoring
@@ -673,6 +782,7 @@ capabilities:
         - prompt-authoring
         - operations-and-scale
         - operator-console
+        - visual-workflow-console
       rule: Do not transition the capability's entry slice from blocked to planned
         until every prerequisite capability test slice is done.
     deferred_reason: Reference images and supplied audio are the material the compliance
@@ -707,6 +817,7 @@ capabilities:
       - durable-delivery
       - operations-and-scale
       - operator-console
+      - visual-workflow-console
       - reference-generation
     optional_depends_on: []
     provides_to: []
@@ -778,6 +889,7 @@ capabilities:
         - prompt-authoring
         - operations-and-scale
         - operator-console
+        - visual-workflow-console
         - reference-generation
       rule: Do not transition the capability's entry slice from blocked to planned
         until every prerequisite capability test slice is done.

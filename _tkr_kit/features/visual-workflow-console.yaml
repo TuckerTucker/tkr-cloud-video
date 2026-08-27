@@ -1,0 +1,103 @@
+capability: visual-workflow-console
+features:
+  - name: approved-graph-execution
+    status: planned
+    display_name: Approved Graph Execution
+    user_story: >-
+      As an operator, I want a visual graph to compile into the exact request an
+      approved endpoint accepts, so I can compose generations without gaining a
+      path around the worker's pinned workflow and binding policy.
+    description: >-
+      The endpoint does not accept ComfyUI graphs. It accepts a strict generation
+      request, resolves one digest-verified workflow from the hydrated manifest,
+      and mutates only release-declared bindings. This feature makes that boundary
+      explicit: a digest-pinned endpoint profile describes the ports the visual
+      surface may connect, and a provider-neutral compiler turns a versioned
+      authoring graph into exactly one GenerationRequest before the existing
+      preflight and asynchronous run paths see it.
+    acceptance_criteria:
+      - The endpoint profile pairs one deployed endpoint with exact workflow,
+        model-set, manifest, trained-envelope and grammar identities, and the
+        console refuses a profile whose digest or configured endpoint differs.
+      - The graph contract is bounded, versioned and discriminated; it can carry
+        approved input values and layout metadata but no raw ComfyUI graph, class
+        type, model path, output path or arbitrary workflow input.
+      - Compilation is deterministic and layout-insensitive, producing one
+        existing GenerationRequest or a complete set of node- and port-scoped
+        defects without partial output.
+      - The compiled request passes the current console preflight before
+        submission, and the worker remains the final authority for workflow
+        approval and execution.
+      - Graph submission reuses asynchronous run observation, cancellation,
+        committed-result lookup and signed delivery rather than defining parallel
+        provider or storage semantics.
+    scope_in:
+      - Generate and validate an endpoint profile from reviewed release facts,
+        expose it through a loopback capability route, and verify its digest at
+        console startup.
+      - Define typed graph nodes, ports, edges, layout metadata, graph limits and
+        canonical serialization independently of the browser framework.
+      - Compile connected, acyclic, type-compatible graphs into the existing
+        request models through an injected GraphCompiler port.
+      - Add graph preflight and generation services that delegate to the existing
+        ConsoleService after compilation.
+      - Pin compiler/preflight agreement, profile drift, injection refusal and
+        provider non-submission with deterministic tests.
+    scope_out:
+      - Running or proxying caller-authored ComfyUI API-format JSON.
+      - Modifying sampler, scheduler, loader, model, save or output-directory
+        inputs that the published binding map does not expose.
+      - Replacing the release catalog, model-set manifest, WorkflowBinder,
+        GenerationRequest or RunPod handler.
+    depends_on: []
+  - name: local-node-workspace
+    status: planned
+    display_name: Local Node Workspace
+    user_story: >-
+      As an operator, I want to build, validate, run and revisit a generation in
+      a ComfyUI-style workspace on my own machine, so the composition remains
+      visible and correct while credentials and worker internals stay outside the
+      browser.
+    description: >-
+      The workspace is a local authoring client over approved-graph-execution. It
+      presents high-level prompt, canvas, timing, seed, approved-workflow, run and
+      result nodes; validates at the node and port where a correction is needed;
+      and shows provider state separately from durable completion. Work is
+      auto-saved only after a data-handling decision fixes a bounded local
+      lifecycle for graph documents that can contain prompts.
+    acceptance_criteria:
+      - Every graph operation is available by keyboard as well as pointer and
+        touch, focus remains visible, ports and errors have accessible names, and
+        reduced-motion and high-contrast preferences are respected.
+      - Invalid connections are prevented when possible; otherwise every defect
+        appears beside the responsible node or port and Run remains disabled.
+      - Edits are undoable and valid drafts recover after reload through a
+        local-only store with an enforced inactivity lifetime, visible save state
+        and a recorded data-handling decision.
+      - Running state, cancellation, handler acceptance, identity agreement,
+        durable commit and playback appear inline in the graph without toast or
+        console-only reporting.
+      - The browser receives neither provider nor storage credentials, and draft,
+        prompt, signed-link and error data are excluded from structured logs.
+      - A locked approved-workflow capsule distinguishes request authoring from
+        low-level ComfyUI workflow authoring and directs the latter to the release
+        publication path.
+    scope_in:
+      - A strict TypeScript ES-module frontend with an injected node-canvas adapter,
+        typed API client, state machine, local draft repository and generated
+        static assets served by the loopback console.
+      - Prompt, dimensions, timing, seed, approved workflow, preflight, run and
+        committed-video nodes for the currently approved text-to-video profile.
+      - Contextual validation, progressive disclosure, undo, autosave, restore,
+        cancellation and result playback.
+      - Browser-level functional, accessibility, security-policy and credential
+        non-disclosure tests.
+    scope_out:
+      - Cloud synchronization, collaboration, accounts, sharing or a durable
+        server-side job-history database.
+      - Input upload nodes before reference-generation or stills-authoring has
+        approved and delivered those data paths.
+      - Using browser local storage without a versioned repository contract,
+        retention enforcement and migration behavior.
+    depends_on:
+      - approved-graph-execution
