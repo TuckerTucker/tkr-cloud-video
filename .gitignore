@@ -21,6 +21,12 @@ htmlcov/
 .pytest_cache/
 .ruff_cache/
 
+# Fetched job artifacts. scripts/fetch_result.sh takes its destination from the
+# caller, so this is a convention rather than a path the code writes; an output
+# video derived from a reference image is a likeness, and committing one would
+# put personal information in git history where no retention period reaches it.
+downloads/
+
 # Local editor and operating-system state
 .DS_Store
 .idea/
