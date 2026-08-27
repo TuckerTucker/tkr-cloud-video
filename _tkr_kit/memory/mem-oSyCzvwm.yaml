@@ -1,0 +1,12 @@
+canonicalId: mem-oSyCzvwm
+sourceId: find-9Id7JPV1
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 09a5785a-0011-4c9a-b575-4e3a1e25324d
+  sourceHash: a86bf8ce544cb0d4cd5e3c110202c3db22eae34596c2705478a645544d82635c
+  snapshotAt: 2026-08-23T23:36:52.813Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:52.813Z

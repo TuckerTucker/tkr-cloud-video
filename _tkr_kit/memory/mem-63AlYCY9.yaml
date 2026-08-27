@@ -1,0 +1,23 @@
+canonicalId: mem-63AlYCY9
+sourceId: find-xfjI7pbm
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: medium
+  title: "Request defaults sit outside the model's trained envelope: the schema
+    defaults to 73 frames at 864x480 while the node declares 1344x768 and a
+    trained range of roughly 124 to 362 frames"
+  status: open
+  file: src/tkr_cloud_video/jobs/contracts.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 04f2a3cb03c7f4d85f9d34fe2da6f26d4c2dc3e29ddda7a7f654b52d84a7ad81
+  snapshotAt: 2026-08-23T23:37:15.901Z
+rationale: Request defaults that sit outside the model's declared trained
+  envelope produce plausible output nobody can attribute. This is why defaults
+  resolve from the envelope registry by model-set identity rather than from the
+  schema, and why an unregistered model set is refused at intake.
+who: claude
+when: 2026-08-23T23:37:15.901Z

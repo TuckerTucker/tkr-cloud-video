@@ -1,0 +1,12 @@
+canonicalId: mem-o7oUcHOF
+sourceId: find-vVGM4wix
+kind: finding
+disposition: deferred
+body: null
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: c26f2be26fb48f8f0b65aac69e4c84c8f7cf8c50f89ba864b186798cb1950e89
+  snapshotAt: 2026-08-23T23:37:23.532Z
+rationale: null
+who: claude
+when: 2026-08-23T23:37:23.532Z

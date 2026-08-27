@@ -1,0 +1,24 @@
+canonicalId: mem-8FPrcuXu
+sourceId: find-J35d6sZf
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: medium
+  title: verify_evidence.sh selects the attempt to verify with
+    sorted(results)[-1], but job ids are SHA-256 digests, so lexicographic order
+    is unrelated to recency. After a successful run it verified a prior day
+    attempt and reported a request_hash mismatch that was really a comparison
+    against the wrong job. Select by uploadTimestamp, or accept the
+    result_reference the handler returns.
+  file: scripts/verify_evidence.sh
+  status: open
+provenance:
+  sourceSessionId: null
+  sourceHash: 29fd22fa65ece89e3ff464d6a01c3dfc3acc34353902e74e3c8ce7ee2414454a
+  snapshotAt: 2026-08-23T23:37:15.314Z
+rationale: Job ids are SHA-256 digests, so sorted(results)[-1] picks the
+  lexicographically largest, not the most recent. Any 'latest' selected by
+  sorting a digest is wrong, and it fails silently by returning a real attempt.
+who: claude
+when: 2026-08-23T23:37:15.314Z

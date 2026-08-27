@@ -1,0 +1,12 @@
+canonicalId: mem-iCrV9_i4
+sourceId: find-1-CAcqPl
+kind: finding
+disposition: deferred
+body: null
+provenance:
+  sourceSessionId: null
+  sourceHash: 5c2b4f115db0caad56dda0d0d65bc11b751755ff359311796a0142bb6a302d8a
+  snapshotAt: 2026-08-23T23:37:24.145Z
+rationale: null
+who: claude
+when: 2026-08-23T23:37:24.145Z

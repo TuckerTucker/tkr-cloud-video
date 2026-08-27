@@ -1,0 +1,12 @@
+canonicalId: mem-XI8jHX_E
+sourceId: find-myi5905Q
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 7472b27d-e98c-4c83-a7c1-444750da75f8
+  sourceHash: 0043180239d48c4d010829dabf564ca9bb4175f7769be228e6d617547255c880
+  snapshotAt: 2026-08-23T23:36:53.376Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:53.376Z

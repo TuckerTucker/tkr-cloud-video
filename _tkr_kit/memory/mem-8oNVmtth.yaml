@@ -1,0 +1,12 @@
+canonicalId: mem-8oNVmtth
+sourceId: find-EkGNZxyA
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: bd298381-829e-4336-bc21-673a6aa32dd0
+  sourceHash: 7a9c6547a1e73c848271ec8877908f53f3ffb36e8c0bc9907f79e5a4009338ee
+  snapshotAt: 2026-08-23T23:36:48.159Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:48.159Z

@@ -1,0 +1,12 @@
+canonicalId: mem-LPgCxSP_
+sourceId: find-8kgOzv3O
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 6a102ccc-cdf5-432e-a27b-b611574cd937
+  sourceHash: 2b82ec7cf3686ff93b4815f3e55ce97cc401c23469b3265fb809bd9442fad48f
+  snapshotAt: 2026-08-23T23:36:53.968Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:53.968Z

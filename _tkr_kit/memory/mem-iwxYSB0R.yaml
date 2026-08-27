@@ -1,0 +1,12 @@
+canonicalId: mem-iwxYSB0R
+sourceId: find-n1k3tB25
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 54393138-cdd0-446b-8f45-b92aa508bf35
+  sourceHash: 87859f295ee3b017d833486a753bc549871cc4df7dfa779ad84358e7a0025dde
+  snapshotAt: 2026-08-23T23:36:50.520Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:50.520Z
