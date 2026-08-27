@@ -1,0 +1,38 @@
+id: work-nCrRIZZM
+title: ParameterBinding cannot express a preset whose inputs must move together
+kind: follow-up
+severity: low
+status: open
+capabilityId: job-execution
+anchors:
+  - src/tkr_cloud_video/jobs/workflow_binder.py
+  - schemas/model-set-manifest.schema.json
+createdAt: 2026-08-27T15:30:36.912Z
+updatedAt: 2026-08-27T15:30:36.912Z
+provenance:
+  source: manual
+  ref: github.com/bitsofintelligence101-lab/workflows tools/iv2v_h3.py:88-113
+  fingerprint: binding-cannot-express-coupled-preset
+remedy: "Nothing to change while the published catalog binds only independent
+  scalars. Before the first coupled lever is exposed, add a preset as the
+  binding unit: one named request value that expands to a fixed set of node
+  inputs declared in the manifest, so the caller selects a profile rather than
+  four fields. Keep the binder's refusal semantics -- a preset naming an input
+  absent from the pinned graph must fail exactly as a single binding does. The
+  alternative, exposing the four fields and validating their combinations at
+  intake, moves graph knowledge into the request contract and should be rejected
+  for that reason."
+detail: "ParameterBinding is one request_field to one node_id/input_name, and
+  bind() walks them independently. That is correct for the seven bindings the
+  published t2v catalog declares -- prompt, seed, width, height, frames, fps,
+  output_prefix -- which are genuinely independent scalars. It cannot express a
+  lever whose inputs are only valid as a set. The reference implementation has
+  exactly such a lever: enabling the lightx2v turbo LoRA is not one flag but
+  four coupled inputs -- steps 8, sampler euler, scheduler beta, and the H3
+  shift switch ON -- against steps 30, res_multistep, simple, and shift OFF when
+  disabled. Bound as four independent fields, a caller can select steps 8 with
+  res_multistep and get a graph that runs, produces degraded output, and reports
+  success. This is latent rather than live: no such lever is published today. It
+  is recorded now because the shape of the fix is a manifest schema change, and
+  discovering that after a speed/quality knob is already in the request contract
+  is the expensive order."

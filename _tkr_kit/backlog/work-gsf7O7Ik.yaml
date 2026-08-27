@@ -1,0 +1,38 @@
+id: work-gsf7O7Ik
+title: A continuation mode would have no final frame to continue from
+kind: follow-up
+severity: low
+status: open
+capabilityId: job-execution
+anchors:
+  - src/tkr_cloud_video/jobs/results.py
+  - src/tkr_cloud_video/jobs/media_validation.py
+createdAt: 2026-08-27T15:31:37.175Z
+updatedAt: 2026-08-27T15:31:37.175Z
+provenance:
+  source: manual
+  ref: github.com/bitsofintelligence101-lab/workflows director.py SaveImage node
+    209/210
+  fingerprint: final-frame-not-emitted-as-workflow-output
+remedy: Only actionable alongside a continuation mode. When one is designed,
+  emit the final frame as a second SaveImage output of the generation graph
+  rather than extracting it afterward, and treat it as a committed artifact of
+  the job like the video is. This costs one node in the published graph and
+  removes a decode step, an ffmpeg dependency in the worker, and a second read
+  of a committed object from the continuation path. Deciding it at
+  graph-publication time is what makes it cheap -- adding an output node later
+  changes the manifest digest and needs a fresh reviewer approval.
+detail: "Nothing in src/ or release-assets references a final frame, last frame,
+  or SaveImage -- the published graph emits video and nothing else, which is
+  correct for the single-shot t2v mode that exists. Any continuation mode needs
+  the previous clip's last frame twice over: as the visual anchor the next
+  generation conditions on, and as the input to whatever describes the prior
+  clip's ending state for the next prompt. The obvious implementation is to pull
+  it back out of the finished video with ffmpeg, and that is the one worth
+  avoiding. The reference implementation instead wires a SaveImage node into the
+  generation graph so the final frame arrives as a first-class output of the
+  same run that produced the video, explicitly to avoid re-sampling the video.
+  Second-order benefit specific to this product: a frame emitted by the graph is
+  covered by the job's existing evidence and media validation on the way out,
+  whereas a frame extracted later from a committed object is a new read of
+  durable storage and a new artifact with no provenance attached."

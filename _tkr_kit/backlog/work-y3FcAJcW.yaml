@@ -1,0 +1,45 @@
+id: work-y3FcAJcW
+title: The reference binding allowlist stops at four; the H3 node accepts six
+kind: follow-up
+severity: medium
+status: open
+capabilityId: reference-generation
+anchors:
+  - schemas/model-set-manifest.schema.json
+  - src/tkr_cloud_video/artifacts/models.py
+  - src/tkr_cloud_video/jobs/contracts.py
+createdAt: 2026-08-27T15:31:08.614Z
+updatedAt: 2026-08-27T15:31:08.614Z
+provenance:
+  source: manual
+  ref: github.com/bitsofintelligence101-lab/workflows
+    comfy_workflows/minimax_h3_flex_cinematic.json node 169
+  fingerprint: reference-cap-four-versus-node-six
+remedy: "Establish which number is the model's before
+  reference-conditioned-release publishes its graph, by reading the
+  MiniMaxH3ReferenceToVideo signature from the pinned ComfyUI revision -- the
+  feature already commits to reading that signature, so this is one more
+  question asked of the same source. If six is the node's real capacity, decide
+  deliberately: raising the cap touches the manifest schema enum, the
+  BindingSource enum, the contracts max_length and the plan text in five places,
+  and doing it after publication also invalidates the reviewer approval bound to
+  the manifest digest. If four is chosen anyway, record why -- a cap that
+  survives because nobody rechecked it reads identically to one that was
+  chosen."
+detail: "Four is consistent and deliberate across the whole stack:
+  schemas/model-set-manifest.schema.json enumerates binding sources
+  input_0..input_3, artifacts/models.py mirrors it, contracts.py:248 bounds
+  references to max_length=4, and capabilities, features, stories, slices and
+  slice-specs all describe the input_0..input_3 allowlist. So this is not an
+  inconsistency to fix. The open question is whether four was measured against
+  the model. In the reference implementation the MiniMaxH3ReferenceToVideo node
+  (id 169 of minimax_h3_flex_cinematic.json) exposes ref_images.ref_image_0
+  through ref_image_5 -- six image slots -- plus a ref_videos.ref_video_0. Their
+  binding tool caps requests at six and rejects a seventh. If the node here has
+  the same signature, the product is leaving two conditioning slots unreachable,
+  and for reference-conditioned generation each slot is a distinct job --
+  identity sheet, face close-up, environment plate, pose -- so the count is a
+  capability limit, not a tuning parameter. Related and deliberately out of
+  scope for this item: that node also takes a video reference, which is the
+  input a continuation mode would bind, and the allowlist has no video source at
+  all."

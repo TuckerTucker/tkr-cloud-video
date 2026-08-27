@@ -1,0 +1,39 @@
+id: work-aTzNij1e
+title: Nothing frees VRAM when the worker switches between model sets
+kind: follow-up
+severity: medium
+status: open
+capabilityId: worker-runtime
+anchors:
+  - src/tkr_cloud_video/adapters/comfy.py
+  - src/tkr_cloud_video/runtime/lifecycle.py
+createdAt: 2026-08-27T15:31:37.845Z
+updatedAt: 2026-08-27T15:31:37.845Z
+provenance:
+  source: manual
+  ref: github.com/bitsofintelligence101-lab/workflows call_comfyui.py:186-230
+  fingerprint: no-vram-release-on-model-set-switch
+remedy: Add a single POST to ComfyUI's /free with unload_models and free_memory,
+  issued only when the model set identity of the incoming job differs from the
+  last one this process ran, and track that identity on the client. Take only
+  the unload. The reference implementation's cleanup routine also clears the
+  queue and issues /interrupt, which is safe on a single-user desktop and
+  destructive here -- both would terminate work the worker legitimately holds.
+  Sequence it before hydration rather than after completion, so a worker that
+  dies mid-job does not leave the next one to discover the leak, and so the cost
+  is paid only on an actual switch.
+detail: "Grepping src/ for /free, unload_models, unload or vram returns nothing:
+  ComfyApiClient exposes healthy, node_types, model_names, submit, status and
+  cancel, and no path releases a loaded model. ComfyUI keeps the previous
+  checkpoint resident after a run, so a worker that serves one model set for its
+  whole life is fine -- which is what the single published t2v catalog produces
+  today, and why this is not currently live. It stops being fine the moment a
+  second model set is published and one process serves both: the H3 diffusion
+  weights alone are 21GB in int8, the text encoder another 16GB, and hydrating a
+  second set on top of a resident first is the ordinary way a GPU worker OOMs.
+  The failure mode is worth naming precisely because it is not a clean refusal
+  -- it surfaces as an allocation failure inside the sampler on the first job
+  after a switch, attributed to that job rather than to the one that preceded
+  it. The reference implementation handles it by recording the last workflow
+  type on the client and running a cleanup whenever the incoming type differs,
+  which is the right trigger: on switch, not on completion."

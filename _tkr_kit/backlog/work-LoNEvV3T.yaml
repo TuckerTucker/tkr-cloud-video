@@ -1,0 +1,42 @@
+id: work-LoNEvV3T
+title: A reference graph with unfilled image slots will fail ComfyUI validation
+kind: follow-up
+severity: medium
+status: open
+capabilityId: reference-generation
+anchors:
+  - src/tkr_cloud_video/jobs/workflow_binder.py
+  - src/tkr_cloud_video/jobs/contracts.py
+createdAt: 2026-08-27T15:31:07.892Z
+updatedAt: 2026-08-27T15:31:07.892Z
+provenance:
+  source: manual
+  ref: github.com/bitsofintelligence101-lab/workflows tools/iv2v_h3.py:126-140
+  fingerprint: unfilled-reference-slots-fail-graph-validation
+remedy: Decide the unfilled-slot rule while reference-conditioned-release is
+  still planned, and state it in the feature's scope. Two options. Either the
+  published graph carries exactly four LoadImage nodes and the binder backfills
+  every unbound slot with the first supplied reference -- the reference
+  implementation's approach, one line, keeps every node valid -- or the catalog
+  publishes a graph variant per reference count, which multiplies the digests a
+  reviewer must approve and should probably be rejected on that ground alone.
+  Backfilling is the cheaper answer but it must be a declared behaviour in the
+  binding map, not an undocumented fixup, because it means node inputs are set
+  that no request field named.
+detail: "ComfyUI validates every node present in a submitted graph, not only the
+  nodes reachable from an output. A four-slot reference graph receiving a
+  one-reference request therefore leaves three LoadImage nodes holding whatever
+  the pinned graph shipped with, and if that is an empty or absent filename the
+  whole prompt is rejected at submission -- not the unused branch, the entire
+  submission. contracts.py:248 accepts references with min_length=1, so a
+  one-reference request is valid at intake and this is reachable on the first
+  real call. The binder cannot currently paper over it: bind() only writes
+  inputs named by a ParameterBinding whose request_field is present in the
+  request, so an unsupplied input_2 is simply never touched. Two adjacent
+  details from the reference implementation worth carrying into the graph work.
+  First, node ids are positional and collide silently -- their code carries a
+  comment recording that inventing a LoadImage at an unused-looking id overwrote
+  a sampler and produced an IMAGE to SAMPLER type mismatch at validation.
+  Second, the H3 node's reference inputs are dotted keys in API format
+  (ref_images.ref_image_0), so the binding map must carry the full dotted name
+  for the binder's `input_name not in inputs` check to resolve."

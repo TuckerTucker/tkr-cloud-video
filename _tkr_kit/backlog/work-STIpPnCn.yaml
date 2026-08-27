@@ -1,0 +1,38 @@
+id: work-STIpPnCn
+title: Multi-clip runs serialize prompt authoring against GPU execution
+kind: follow-up
+severity: low
+status: open
+capabilityId: job-execution
+anchors:
+  - src/tkr_cloud_video/jobs/executor.py
+  - src/tkr_cloud_video/job_execution/composition.py
+createdAt: 2026-08-27T15:27:38.964Z
+updatedAt: 2026-08-27T15:27:38.964Z
+provenance:
+  source: manual
+  ref: github.com/bitsofintelligence101-lab/workflows director.py:_run_parallel
+  fingerprint: multi-clip-llm-diffusion-pipelining
+remedy: "Only actionable once a continuation or multi-clip mode exists; nothing
+  to do while every request is one clip. When it does: draft clip N+1's
+  structured prompt on a worker thread while the GPU renders clip N, and let a
+  continuation draft against a predicted prior-clip ending rather than blocking
+  on the real one. Keep the reconcile pass -- re-checking the draft against the
+  actual rendered clip before binding -- opt-in rather than default, since it
+  costs a second vision call per clip and the prediction is usually right.
+  Persist the run manifest after every clip so a crashed multi-clip run stays
+  inspectable, which single-job evidence does not currently need to survive."
+detail: "Every request today is one clip, so authoring and execution are
+  strictly sequential by construction and there is no throughput cost. A
+  continuation mode changes that: clip N+1's prompt cannot be authored until
+  clip N's ending is known, so the GPU idles through each authoring call and the
+  LLM idles through each render. The reference implementation
+  (MovieDirector._run_parallel, director.py:964) overlaps them with a
+  single-slot lookahead buffer on one background thread -- the render thread
+  blocks only on the two things it genuinely needs, its own draft and its
+  referenced prior clip. Continuations are drafted against a *predicted* ending
+  derived from the referenced scene's brief, with an optional reconcile pass
+  that corrects the draft against the real video once it exists. Recorded here
+  as a design to reach for rather than a defect: the structure is worth having
+  in hand before the mode that needs it is designed, since retrofitting the
+  lookahead onto an already-serial executor is the expensive order."

@@ -1,0 +1,42 @@
+id: work-tOgUZ69k
+title: Nothing checks that a shot's described action fits its duration
+kind: follow-up
+severity: medium
+status: open
+capabilityId: prompt-authoring
+anchors:
+  - src/tkr_cloud_video/prompting/alignment.py
+  - src/tkr_cloud_video/prompting/models.py
+createdAt: 2026-08-27T15:30:36.224Z
+updatedAt: 2026-08-27T15:30:36.224Z
+provenance:
+  source: manual
+  ref: github.com/bitsofintelligence101-lab/workflows director_system_prompt.md
+    sec.5
+  fingerprint: beat-density-unvalidated-against-duration
+remedy: "Add a beat-density budget to the grammar and check the cheap half of it
+  at intake. The mechanically checkable rule is speech rate: a shot whose
+  DialogueLine words exceed roughly 3 words per second of its own window is
+  describing more speech than the clip can hold, and that is a refusal the
+  intake can make without a model. The reference table for the rest, to record
+  in the grammar rather than enforce: motion onset from rest 0.5s, pre-action
+  weight shift 0.5s, body turn 1-1.5s, walking traverse 3-4s, gesture with head
+  turn 1.5-2s, object interaction 1.5-2.5s, held look 0.5-1s. If the budget
+  lands in the grammar it belongs behind GRAMMAR_DIGEST like every other
+  vocabulary, so a changed rate cannot land without the revision that describes
+  it."
+detail: "prompting/alignment.py validates duration NOTATION -- two-decimal
+  expressibility, cut marks inside the duration, cuts strictly increasing -- and
+  models.py bounds duration_seconds to (0, 60]. Neither asks whether the action
+  described in a shot can physically occur in the seconds allotted to it. A
+  prompt can pass every current check while packing four seconds of dialogue
+  into a 2.00-second shot; the model resolves that by rushing or truncating, and
+  the defect surfaces as bad output rather than as a refusal. The reference
+  implementation carries an empirical seconds-per-action table in its
+  prompt-writer guide and instructs the writer to sum beats to the stated
+  duration, treating it as a density budget rather than arithmetic -- if the
+  brief has more beats than fit, drop one rather than compress all. It also pays
+  a mandatory motion-onset beat on every generation because the model always
+  starts from rest. Worth noting this is the one place the reference repo's
+  prompt contract is ahead of the typed grammar here: the grammar constrains
+  vocabulary and structure precisely and says nothing about time budget."
