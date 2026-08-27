@@ -1,0 +1,12 @@
+canonicalId: mem-tKP9qr56
+sourceId: find-KaC148BF
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 9e8fa4b4-eac6-4844-af37-a5c5b3b94943
+  sourceHash: 212723c236354443e7000ac474f16b663ea59aafa521c27e7d8586b58edc1969
+  snapshotAt: 2026-08-23T23:36:49.900Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:49.900Z

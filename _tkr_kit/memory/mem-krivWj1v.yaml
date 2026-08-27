@@ -1,0 +1,12 @@
+canonicalId: mem-krivWj1v
+sourceId: find-CKZoLaST
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 1985bfe6-0a02-4d7a-85e3-b98bbd6d1169
+  sourceHash: 2cda63d8c0a961173d610da2bd3cecc7877472ac53aad5e4b260d121ea54fab2
+  snapshotAt: 2026-08-23T23:36:56.428Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:56.428Z

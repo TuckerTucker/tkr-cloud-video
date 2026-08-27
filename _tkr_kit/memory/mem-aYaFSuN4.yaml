@@ -1,0 +1,26 @@
+canonicalId: mem-aYaFSuN4
+sourceId: find-aBEFhDfx
+kind: finding
+disposition: kept
+body:
+  type: correctness
+  severity: high
+  title: "No structured prompt can pass validation over Serverless:
+    _section_defects compares JSON object key order against the mode order, but
+    key order is not preserved across the RunPod boundary. Both live submissions
+    were rejected section_set_mismatch_for_mode with defects equal to the full
+    observed set, byte-identical to what sorting the keys reproduces locally.
+    JSON objects are unordered by RFC 8259, so the check tests a property the
+    transport does not carry."
+  file: src/tkr_cloud_video/prompting/models.py
+  status: open
+provenance:
+  sourceSessionId: null
+  sourceHash: 2b1d15f5df35da07a8f4172777433e1f4b1aa455a55992f71e9cfad6a6e0fd27
+  snapshotAt: 2026-08-23T23:37:14.720Z
+rationale: A structured prompt's section order is a property of the mode, never
+  of JSON object key order; comparing the two rejected every valid prompt over
+  Serverless while passing locally. Fixed in 82b5ba7, kept because the trap
+  recurs wherever wire order is inferred from a mapping.
+who: claude
+when: 2026-08-23T23:37:14.720Z

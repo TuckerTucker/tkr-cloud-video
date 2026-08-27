@@ -1,0 +1,12 @@
+canonicalId: mem--dxREUAn
+sourceId: find-o-e2n4iV
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 8c2810c3-d9cc-4f5f-8526-e5777aaf7b6d
+  sourceHash: f57e8f5f9561d381dbcb40a4c60d88fe22a403b3b6b61e4ea2c215b58fc831bd
+  snapshotAt: 2026-08-23T23:36:55.819Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:55.819Z

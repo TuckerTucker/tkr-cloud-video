@@ -1,0 +1,12 @@
+canonicalId: mem-xV4AJxZE
+sourceId: find-uv4fV-CD
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: afdb35f1-e580-44f8-bccc-26c0746ad01a
+  sourceHash: b102cdfa76ba4258b805627956b17016ca4cc6aef04eaa5c2405c1ae57394766
+  snapshotAt: 2026-08-23T23:36:38.105Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:38.105Z

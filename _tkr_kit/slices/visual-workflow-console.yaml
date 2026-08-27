@@ -1,0 +1,373 @@
+capability: visual-workflow-console
+slices:
+  - number: 1
+    feature: approved-graph-execution
+    title: Endpoint profile contract and release projection
+    layer: data
+    status: blocked
+    delivers:
+      - A strict EndpointProfile pairing endpoint, release, manifest, workflow,
+        model set, modes, bindings, trained envelope and grammar revision
+      - Canonical profile bytes and a SHA-256 identity verified against console
+        configuration before visual capabilities become available
+      - A release projection that creates the browser-safe profile from reviewed
+        catalog and registry facts without including executable workflow bytes
+      - A resolver port so tests and future release sources do not couple the
+        domain model to a filesystem or object store
+    depends_on: []
+    story_ids:
+      - visual-workflow-console/story/discover-the-endpoints-approved-profile
+      - visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+    files:
+      - schemas/endpoint-profile.schema.json
+      - src/tkr_cloud_video/visual_workflow/profiles.py
+      - src/tkr_cloud_video/visual_workflow/__init__.py
+      - src/tkr_cloud_video/release/catalog.py
+      - release-assets/minimax-h3-t2v/endpoint-profile.json
+    data_lifecycle:
+      kind: exempt
+      detail: The profile contains release facts and constraints only. It carries no
+        prompt, job identity, user filename, credential, signed URL or media, and is
+        immutable once addressed by digest.
+    paths:
+      - schemas/**
+      - src/tkr_cloud_video/**
+      - release-assets/**
+  - number: 2
+    feature: approved-graph-execution
+    title: Versioned visual graph contract
+    layer: domain
+    status: planned
+    delivers:
+      - A discriminated GraphDocument with typed node kinds, ports, edges and
+        layout metadata under strict unknown-field refusal
+      - Stable graph-local identifiers and bounds on nodes, edges, prompt size and
+        total request bytes
+      - Canonical separation of execution values from layout, selection and
+        viewport metadata so moving a node cannot change a request hash
+      - A node vocabulary incapable of carrying class_type, raw workflow JSON,
+        model paths, output paths or arbitrary input names
+    depends_on:
+      - 1
+    story_ids:
+      - visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+      - visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+    files:
+      - schemas/visual-graph.schema.json
+      - src/tkr_cloud_video/visual_workflow/contracts.py
+      - src/tkr_cloud_video/visual_workflow/errors.py
+    data_lifecycle:
+      kind: transient
+      detail: A graph document may contain a prompt. This slice defines and parses
+        the value in memory only; it adds no repository, log field or retention
+        mechanism. Persistent drafts remain gated by slice 6.
+    paths:
+      - schemas/**
+      - src/tkr_cloud_video/**
+  - number: 3
+    feature: approved-graph-execution
+    title: Deterministic graph compiler
+    layer: domain
+    status: planned
+    delivers:
+      - An injected GraphCompiler port and deterministic implementation producing
+        exactly one existing GenerationRequest
+      - Complete validation for connectivity, acyclicity, reachability, edge
+        cardinality, port compatibility and endpoint-profile compatibility
+      - Node- and port-scoped GraphDefect values carrying rules and safe messages
+        without caller values
+      - Canonical compilation that excludes graph layout and refuses partial
+        output whenever any defect exists
+    depends_on:
+      - 2
+    story_ids:
+      - visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+      - visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+    files:
+      - src/tkr_cloud_video/visual_workflow/compiler.py
+      - src/tkr_cloud_video/visual_workflow/contracts.py
+      - src/tkr_cloud_video/visual_workflow/errors.py
+    data_lifecycle:
+      kind: transient
+      detail: Compilation holds the graph and normalized request for one call and
+        returns them only to the caller that supplied them. Prompt-bearing values
+        are forbidden from logs and error contexts.
+    paths:
+      - src/tkr_cloud_video/**
+  - number: 4
+    feature: approved-graph-execution
+    title: Graph preflight and generation API
+    layer: integration
+    status: planned
+    delivers:
+      - A VisualWorkflowService composed from EndpointProfileResolver,
+        GraphCompiler and the existing ConsoleService
+      - Loopback capability, graph-preflight and graph-generation routes with the
+        existing body ceiling, no-store policy, Host check and response shape
+      - Delegation to current preflight and generate methods only after successful
+        compilation, preserving asynchronous provider behavior and session-derived
+        authorization
+      - A route integration seam that adds no credential to the browser and no
+        write-side delivery service to the console object graph
+    depends_on:
+      - 3
+    story_ids:
+      - visual-workflow-console/story/discover-the-endpoints-approved-profile
+      - visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+      - visual-workflow-console/story/run-a-graph-to-a-committed-video
+    files:
+      - src/tkr_cloud_video/visual_workflow/service.py
+      - src/tkr_cloud_video/visual_workflow/composition.py
+      - src/tkr_cloud_video/console/routes.py
+      - src/tkr_cloud_video/console/service.py
+      - src/tkr_cloud_video/console/settings.py
+    data_lifecycle:
+      kind: transient
+      detail: Graph request bodies and compiled prompts exist for one bounded local
+        call and are not logged, cached or written. Run and result state continues
+        to use the console's session registry and expiring delivery links.
+    paths:
+      - src/tkr_cloud_video/**
+  - number: 5
+    feature: approved-graph-execution
+    title: Test approved graph execution
+    layer: integration
+    status: planned
+    delivers:
+      - Contract tests for canonical profile generation, digest mismatch, endpoint
+        mismatch and browser-safe projection
+      - Table-driven graph parser and compiler tests covering valid topology,
+        cycles, cardinality, port types, unknown fields, limits and layout
+        invariance
+      - Agreement tests proving every compiled request passes the existing console
+        preflight and every graph defect withholds RunPod submission
+      - Route, composition, credential non-disclosure and worker-contract
+        regression tests
+    depends_on:
+      - 4
+    story_ids:
+      - visual-workflow-console/story/discover-the-endpoints-approved-profile
+      - visual-workflow-console/story/compose-a-generation-as-a-typed-graph
+      - visual-workflow-console/story/refuse-an-unexecutable-or-unapproved-graph
+      - visual-workflow-console/story/run-a-graph-to-a-committed-video
+    files:
+      - tests/visual_workflow/conftest.py
+      - tests/visual_workflow/test_endpoint_profiles.py
+      - tests/visual_workflow/test_graph_contracts.py
+      - tests/visual_workflow/test_graph_compiler.py
+      - tests/visual_workflow/test_graph_routes.py
+      - tests/visual_workflow/test_graph_security.py
+    data_lifecycle:
+      kind: exempt
+      detail: Tests use synthetic prompts, endpoint identifiers and credentials;
+        they create no retained production or user data.
+    paths:
+      - tests/**
+  - number: 6
+    feature: local-node-workspace
+    title: Local draft data-handling and retention decision
+    layer: data
+    status: planned
+    delivers:
+      - A dated surface assessment covering prompt-bearing graph drafts in a local
+        browser store, including purpose, fields, sensitivity and machine-user
+        boundary
+      - An explicit inactivity lifetime, cleanup trigger, recovery window,
+        migration rule and storage quota recorded before persistence is enabled
+      - A decision that separates local graph drafts from session run history,
+        signed links and cloud-synchronized storage
+      - Testable deletion and expiry outcomes rather than an indefinite browser
+        cache assertion
+    depends_on:
+      - 2
+    story_ids:
+      - visual-workflow-console/story/recover-and-undo-a-local-draft
+    files:
+      - docs/assurance/visual-workflow-local-drafts.md
+      - docs/adr/**
+    data_lifecycle:
+      kind: bounded
+      detail: This slice defines the lifecycle before the store exists. It must
+        name the exact inactivity lifetime, cleanup mechanism, quota and recovery
+        bound that slice 9 implements; an unbounded or undeclared outcome blocks
+        that slice.
+    paths:
+      - docs/assurance/**
+      - docs/adr/**
+  - number: 7
+    feature: local-node-workspace
+    title: Strict TypeScript workspace foundation
+    layer: integration
+    status: planned
+    delivers:
+      - A strict ES-module TypeScript project with recommended ESLint rules,
+        named exports, locked dependencies and a reproducible static build
+      - Provider-neutral NodeCanvas, DraftRepository, VisualWorkflowClient and
+        SafeEventSink interfaces injected into the workspace composition root
+      - A browser-safe pino event adapter with allowlisted metadata and no prompt,
+        graph document, credential, signed URL or filename fields
+      - Fixed packaged static assets served under the console's existing
+        self-only script/style and loopback connection policy
+    depends_on:
+      - 1
+    story_ids:
+      - visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+      - visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+    files:
+      - src/tkr_cloud_video/console/frontend/package.json
+      - src/tkr_cloud_video/console/frontend/bun.lock
+      - src/tkr_cloud_video/console/frontend/tsconfig.json
+      - src/tkr_cloud_video/console/frontend/eslint.config.js
+      - src/tkr_cloud_video/console/frontend/src/contracts.ts
+      - src/tkr_cloud_video/console/frontend/src/composition.ts
+      - src/tkr_cloud_video/console/frontend/src/logging.ts
+      - src/tkr_cloud_video/console/frontend/scripts/build.ts
+      - src/tkr_cloud_video/console/static/visual-workflow.js
+      - src/tkr_cloud_video/console/static/visual-workflow.css
+    data_lifecycle:
+      kind: exempt
+      detail: The build emits immutable code and styles only. No prompt, graph,
+        run, job, link or credential is embedded in the assets or build log.
+    paths:
+      - src/tkr_cloud_video/console/**
+  - number: 8
+    feature: local-node-workspace
+    title: Accessible typed node editor
+    layer: presentation
+    status: planned
+    delivers:
+      - Prompt, canvas, timing, seed, approved-workflow, preflight, run and result
+        node views generated from the verified endpoint profile
+      - Keyboard, pointer and touch-equivalent insertion, connection, movement,
+        configuration and deletion with visible focus and named ports
+      - Inline node/port defects, constrained connection targets and a disabled Run
+        action until compilation and preflight both accept
+      - A locked workflow capsule exposing only published binding ports and a
+        release-authoring explanation for low-level workflow changes
+    depends_on:
+      - 3
+      - 7
+    story_ids:
+      - visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+      - visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+    files:
+      - src/tkr_cloud_video/console/frontend/src/workspace/**
+      - src/tkr_cloud_video/console/frontend/src/nodes/**
+      - src/tkr_cloud_video/console/frontend/src/accessibility/**
+      - src/tkr_cloud_video/console/frontend/src/styles/**
+      - src/tkr_cloud_video/console/static/index.html
+    data_lifecycle:
+      kind: transient
+      detail: Node values live in browser memory while this slice is exercised.
+        Persistence remains absent until the bounded repository in slice 9 is
+        enabled after slice 6's decision.
+    paths:
+      - src/tkr_cloud_video/console/**
+  - number: 9
+    feature: local-node-workspace
+    title: Bounded draft autosave and undo
+    layer: data
+    status: planned
+    delivers:
+      - A versioned DraftRepository with a browser-local adapter, injected clock,
+        quota enforcement and migrations that fail without discarding readable
+        prior data
+      - Debounced autosave with visible saved/saving/failure state and recovery of
+        unexpired drafts after reload
+      - Command-based undo/redo that restores nodes, connected edges and values as
+        one logical edit
+      - Enforced expiry, cleanup and recoverable deletion matching the exact
+        lifecycle approved in slice 6, with no cloud or server-side draft store
+    depends_on:
+      - 6
+      - 8
+    story_ids:
+      - visual-workflow-console/story/recover-and-undo-a-local-draft
+    files:
+      - src/tkr_cloud_video/console/frontend/src/drafts/contracts.ts
+      - src/tkr_cloud_video/console/frontend/src/drafts/indexed-db-repository.ts
+      - src/tkr_cloud_video/console/frontend/src/drafts/migrations.ts
+      - src/tkr_cloud_video/console/frontend/src/history/command-history.ts
+      - src/tkr_cloud_video/console/frontend/src/workspace/autosave.ts
+    data_lifecycle:
+      kind: bounded
+      detail: Stores the versioned graph document, including any prompt fields,
+        only in the browser origin on the operator's machine. Expiry, cleanup,
+        quota, deletion recovery and migration exactly implement the approved
+        decision from slice 6; signed links and credentials are forbidden fields.
+    paths:
+      - src/tkr_cloud_video/console/**
+  - number: 10
+    feature: local-node-workspace
+    title: Wire execution and committed result nodes
+    layer: integration
+    status: planned
+    delivers:
+      - A typed visual-workflow API client using same-origin loopback routes only
+        and rejecting response shapes that do not satisfy its contracts
+      - A run-node state machine distinguishing local compilation, preflight,
+        queue, execution, handler acceptance, cancellation and terminal failure
+      - A result-node state machine separating provider completion, identity
+        agreement, durable commit, signed-link issuance and playback expiry
+      - Contextual retry and recovery controls with no toast, modal confirmation,
+        raw provider error or console-only failure
+    depends_on:
+      - 4
+      - 8
+      - 9
+    story_ids:
+      - visual-workflow-console/story/run-a-graph-to-a-committed-video
+    files:
+      - src/tkr_cloud_video/console/frontend/src/api/client.ts
+      - src/tkr_cloud_video/console/frontend/src/execution/run-machine.ts
+      - src/tkr_cloud_video/console/frontend/src/execution/result-machine.ts
+      - src/tkr_cloud_video/console/frontend/src/nodes/run-node.ts
+      - src/tkr_cloud_video/console/frontend/src/nodes/result-node.ts
+    data_lifecycle:
+      kind: bounded
+      detail: Run/job records remain in the existing in-memory console registry.
+        A signed playback URL lives only in the result node until expiry or page
+        closure and is never placed in the draft store, event sink or error state.
+    paths:
+      - src/tkr_cloud_video/console/**
+  - number: 11
+    feature: local-node-workspace
+    title: Test and document the visual workflow console
+    layer: integration
+    status: planned
+    delivers:
+      - Browser tests for keyboard-only graph construction, pointer and touch
+        parity, focus behavior, reduced motion, contrast, inline defects and
+        unavailable-action disclosure
+      - Functional tests carrying one valid graph through preflight, asynchronous
+        status, cancellation, handler refusal, commit and expiring playback
+      - Draft recovery, undo grouping, migration, quota, expiry and cleanup tests
+        driven by deterministic clocks and local repository fakes
+      - Security tests for CSP, Host checks, same-origin calls, credential absence,
+        forbidden log fields and rejection of direct workflow submission
+      - Operator documentation for request graph authoring and the separate pinned
+        ComfyUI workflow publication path
+    depends_on:
+      - 5
+      - 10
+    story_ids:
+      - visual-workflow-console/story/run-a-graph-to-a-committed-video
+      - visual-workflow-console/story/edit-the-node-workspace-without-a-pointer
+      - visual-workflow-console/story/recover-and-undo-a-local-draft
+      - visual-workflow-console/story/distinguish-request-authoring-from-workflow-publication
+    files:
+      - src/tkr_cloud_video/console/frontend/tests/**
+      - tests/visual_workflow/test_packaged_workspace.py
+      - tests/visual_workflow/test_browser_security.py
+      - docs/models/visual-workflow-console.md
+      - README.md
+    data_lifecycle:
+      kind: exempt
+      detail: Automated tests use synthetic prompt and run data and deterministic
+        browser stores that are cleared by teardown. Documentation contains no
+        credential, signed URL, prompt body or user-derived record.
+    paths:
+      - src/tkr_cloud_video/console/**
+      - tests/**
+      - docs/models/**
+      - README.md

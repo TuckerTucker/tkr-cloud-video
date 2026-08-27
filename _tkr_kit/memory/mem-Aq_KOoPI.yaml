@@ -1,0 +1,12 @@
+canonicalId: mem-Aq_KOoPI
+sourceId: find-zBxu_hpn
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: eca62e02-89a6-4650-8779-a8777ceac031
+  sourceHash: 097a00e58ca17b4d9cf40a860d29330fa3bf9e024e73f462b244845b38e91070
+  snapshotAt: 2026-08-23T23:36:49.318Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:49.318Z

@@ -1,0 +1,12 @@
+canonicalId: mem-f1_7nj02
+sourceId: find-EBoTeuA3
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: c18b3674-f1b8-4c65-83a6-8a15c5ccb637
+  sourceHash: 52de8cb76c03efebd76b7083590624e08a7664155826bce3ae70cea95ced40fd
+  snapshotAt: 2026-08-23T23:36:57.052Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:57.052Z

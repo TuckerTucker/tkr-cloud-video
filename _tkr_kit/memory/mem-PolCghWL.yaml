@@ -1,0 +1,23 @@
+canonicalId: mem-PolCghWL
+sourceId: find-YQkGbVF_
+kind: finding
+disposition: kept
+body:
+  type: observability
+  severity: medium
+  title: "A failure must name its subject: the failing node, exception class and
+    message existed at every layer and were dropped three times, costing a
+    build-and-deploy cycle each to recover"
+  status: resolved
+  file: src/tkr_cloud_video/adapters/comfy.py
+  session: first-validation
+provenance:
+  sourceSessionId: first-validation
+  sourceHash: 713fd5f937881b22a76434949eb48912268a86118a893f64ed113e808aa16e9b
+  snapshotAt: 2026-08-23T23:37:16.568Z
+rationale: A failure must name its subject. The failing node, exception class
+  and message existed at every layer and were dropped three times before
+  reaching the operator, leaving a generic error for a specific fault. Applies
+  to every seam that re-raises.
+who: claude
+when: 2026-08-23T23:37:16.568Z

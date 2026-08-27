@@ -1,0 +1,12 @@
+canonicalId: mem-7226Ocn0
+sourceId: find-yLUWkCkD
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 5d4e240d-6e58-45c6-ac09-c6949aff3604
+  sourceHash: ece78e34fe066138ab20c76e291a94faebed0de03259e2e6d5a07230ef67e5ec
+  snapshotAt: 2026-08-23T23:36:55.147Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:55.147Z

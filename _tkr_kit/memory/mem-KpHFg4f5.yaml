@@ -1,0 +1,12 @@
+canonicalId: mem-KpHFg4f5
+sourceId: find-2xzM8eXR
+kind: finding
+disposition: discarded
+body: null
+provenance:
+  sourceSessionId: 66c30619-b7dd-46c8-bc7b-34b3652147ff
+  sourceHash: f0e3383ec8150d1e83cb12947fb34b415c84afdff5ab7d879e904154dcc30bf3
+  snapshotAt: 2026-08-23T23:36:54.571Z
+rationale: null
+who: claude
+when: 2026-08-23T23:36:54.571Z
